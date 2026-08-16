@@ -49,12 +49,12 @@ Do not commit generated artifacts or local caches.
 
 ### Issue tracker
 
-Issues and PRDs are tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+Issues and PRDs are tracked as local Markdown entries in `docs/implementation/issue-tracker.md`; its conventions are documented in that file.
 
 ### Triage labels
 
-Use the default canonical triage labels. See `docs/agents/triage-labels.md`.
+Use the default canonical triage labels. See `docs/implementation/triage-labels.md`.
 
 ### Domain docs
 
-Use a single-context domain documentation layout and repository architecture files. See `docs/agents/domain.md`.
+Use a single-context domain documentation layout and repository architecture files. See `docs/implementation/domain.md`.

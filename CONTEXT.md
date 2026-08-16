@@ -7,35 +7,43 @@ Obiad helps people find nutritionally similar food substitutions.
 ### Food Objects
 
 **Food Object**:
-Any searchable nutritional object.
+A generic basic food or generic prepared dish with nutritional data.
+
+**Food Family**:
+An optional flat grouping of Food Objects that are variants of the same kind of food.
+_Avoid_: Category
 
 **Import**:
-The act of bringing food data into database.
+The act of bringing Food Objects into a database.
 
 **Substitute**:
-A Food Object proposed in place of Substitution Input because it is nutritionally similar and satisfies applicable Search constraints.
+A Food Object proposed in place of a Substitution Input because it is nutritionally similar and satisfies applicable Search constraints.
 
 ### Search
 
 **Search**:
-A request to retrieve Substitutes according to a query.
+A request to identify Food Objects or retrieve Substitutes according to a Search Query.
+
+**Search Query**:
+Text entered to identify a Food Object by its localized name.
+_Avoid_: Prompt
 
 **Substitution Input**:
-A Food Object supplied to a Substitution Search. When first selected, it uses one known Serving when available; otherwise it uses the Food Object's Nutrition Basis. The quantity may be edited post search.
+A Food Object and Food Quantity supplied to a Substitution Search.
 
 **Substitution Search**:
-A Search that accepts Substitution Input and returns Food Objects as Substitutes. Input Food Objects are excluded from results.
+A Search that accepts one Substitution Input and returns Food Objects as Substitutes.
 
 ### Nutrition
 
 **Macro Profile**:
-The protein, carbohydrate, and fat composition of a Food Object. Nutritional similarity compares Macro Profiles; calories are derived data and are not part of the comparison profile.
+The protein, carbohydrate, and fat composition of a Food Object. Calories are derived from this profile but are not part of it.
 
 **Nutritional Similarity**:
-How closely two Food Objects match in the proportions of protein, carbohydrates, and fat, independent of serving quantity. Culinary Role affects the ordering of suitable Substitutes, not Nutritional Similarity itself. The selected Matched Quantity target does not affect Nutritional Similarity.
+How closely two Macro Profiles match in their protein, carbohydrate, and fat proportions, independent of Food Quantity.
 
 **Matched Quantity**:
-The amount of a Substitute needed to match a selected nutritional target of the Substitution Inputs. The user selects calories, protein, carbohydrates, or fat; calories are the default. A Food Object is excluded when no finite Matched Quantity exists for the selected target.
+The amount of a Substitute that has the same derived calorie value as the Substitution Input.
 
 **Nutrition Basis**:
 The standard quantity used to express a Food Object's nutritional values: `100 g` for solids and `100 ml` for liquids.
@@ -45,7 +53,7 @@ _Avoid_: Storage basis, normalization basis
 Whether a Food Object is solid or liquid, determining whether its Nutrition Basis is `100 g` or `100 ml`.
 
 **Food Quantity**:
-An amount of a Food Object expressed in a supported unit.
+An amount of a Food Object expressed in grams, millilitres, or servings.
 
 **Serving**:
-An optional amount saved for a Food Object expressed in a supported unit that corresponds to Food Object's standard amount.
+An optional standard Food Quantity for a Food Object.

@@ -1,44 +1,40 @@
-# System Design
+# POC System Design
 
 ## Tech Stack
 
 ### Frontend
 
-Web framework: Svelte
+Web framework: Svelte 5
 Build tool: Bun
 State management: Svelte stores + TanStack Query
 CSS: Tailwind
-Testing: Bun test runner + @testing-library/svelte + Playwright
-Caching: Service Worker + localStorage
+Testing: Bun + @testing-library/svelte for component integration; Playwright for browser integration and visual checks
+Client persistence: localStorage for the selected interface language
 
 ### Backend
 
 Language: Go
 Framework: Fiber
-Query builder: raw SQL
+Database queries: raw SQL
 Internal API: Direct function calls
 Cosine Similarity: Custom implementation
 API Documentation: OpenAPI
 Testing: testing package (built-in)
 Database: PostgreSQL
-Session management: Fiber session middleware
 Logging: Fiber logger middleware
 
 ### Data Layer
 
 Database: PostgreSQL
-PostgreSQL driver: lib/pq or pgx
+PostgreSQL driver: pgx
+Food data: deterministic seed SQL
+Food images: bundled assets with a shared placeholder
 
-### External Services
+### Project Services
 
-Food data: USDA FoodData Central, OpenFoodFacts
 CI/CD: GitHub Actions
 
-### Security
-
-Rate limiting: Fiber built-in limiter
-CSRF: Fiber csrf middleware
 
 ### Operational
 
-Container orchestration: Not needed (managed services)
+Deployment: local frontend, backend, and PostgreSQL processes
