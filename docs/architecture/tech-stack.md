@@ -5,7 +5,8 @@
 ### Frontend
 
 Web framework: Svelte 5
-Build tool: Bun
+Package manager, command runner, and test runner: Bun
+Development server and bundler: Vite
 State management: Svelte stores + TanStack Query
 CSS: Tailwind
 Testing: Bun + @testing-library/svelte for component integration; Playwright for browser integration and visual checks
@@ -14,11 +15,11 @@ Client persistence: localStorage for the selected interface language
 ### Backend
 
 Language: Go
-Framework: Fiber
+Framework: Fiber v3
 Database queries: raw SQL
 Internal API: Direct function calls
 Cosine Similarity: Custom implementation
-API Documentation: OpenAPI
+HTTP contract: OpenAPI-first generated Go transport models and TypeScript client/types
 Testing: testing package (built-in)
 Database: PostgreSQL
 Logging: Fiber logger middleware
@@ -37,4 +38,5 @@ CI/CD: GitHub Actions
 
 ### Operational
 
-Deployment: local frontend, backend, and PostgreSQL processes
+Deployment: local Vite frontend, Fiber backend, and PostgreSQL processes
+Acceptance frontend: optimized Vite build served through Vite preview

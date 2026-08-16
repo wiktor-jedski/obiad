@@ -4,6 +4,11 @@ Obiad helps people find nutritionally similar food substitutions.
 
 ## Language
 
+### Localization
+
+**Interface Language**:
+The supported language used for interface text, accessibility text, and localized Food Object names. Obiad supports English and Polish.
+
 ### Food Objects
 
 **Food Object**:
@@ -56,4 +61,4 @@ Whether a Food Object is solid or liquid, determining whether its Nutrition Basi
 An amount of a Food Object expressed in grams, millilitres, or servings.
 
 **Serving**:
-An optional standard Food Quantity for a Food Object.
+An optional positive standard Food Quantity for a Food Object. Its unit is grams for a solid and millilitres for a liquid. A Serving count converts to a base-unit Food Quantity by multiplication.
