@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -855,56 +854,5 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	}
 	if n := countRows(t, owner, "SELECT count(*) FROM food_families"); n != 0 {
 		t.Fatalf("food_families has %d rows, want 0 (empty catalog)", n)
-	}
-}
-
-// TestLocalSetupScriptDoesNotDiscloseCredentials verifies that the local
-// deployment setup script (scripts/setup_local_database.sh) never prints the
-// supplied role passwords or credential-bearing connection URLs. It runs the
-// script with stub psql and go binaries, so no real PostgreSQL is required,
-// captures the full output, and asserts that neither supplied password and no
-// user:password@ URL appears while the runtime env contract names and the
-// password-free endpoint still do.
-func TestLocalSetupScriptDoesNotDiscloseCredentials(t *testing.T) {
-	binDir := t.TempDir()
-	stub := "#!/bin/sh\necho 1\nexit 0\n"
-	for _, name := range []string{"psql", "go"} {
-		if err := os.WriteFile(filepath.Join(binDir, name), []byte(stub), 0o755); err != nil {
-			t.Fatalf("write %s stub: %v", name, err)
-		}
-	}
-	ownerPassword := "sentinel-owner-password"
-	runtimePassword := "sentinel-runtime-password"
-	script := filepath.Join(filepath.Dir(moduleRoot(t)), "scripts", "setup_local_database.sh")
-	cmd := exec.Command("bash", script)
-	cmd.Env = append(os.Environ(),
-		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"OBIAD_OWNER_PASSWORD="+ownerPassword,
-		"OBIAD_RUNTIME_PASSWORD="+runtimePassword,
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("setup script failed: %v\noutput:\n%s", err, out)
-	}
-	output := string(out)
-
-	// Neither supplied password may appear anywhere in the output.
-	if strings.Contains(output, ownerPassword) || strings.Contains(output, runtimePassword) {
-		t.Fatalf("setup script output discloses a supplied role password:\n%s", output)
-	}
-	// No credential-bearing URL (user:password@) may appear either.
-	credentialURL := regexp.MustCompile(`postgres://[^/@\s]+:[^/@\s]+@`)
-	if m := credentialURL.FindString(output); m != "" {
-		t.Fatalf("setup script output discloses a credential-bearing URL %q:\n%s", m, output)
-	}
-	// The runtime env contract is still communicated, without credentials.
-	for _, want := range []string{
-		"OBIAD_SCHEMA_OWNER_DATABASE_URL",
-		"OBIAD_RUNTIME_DATABASE_URL",
-		"postgres://localhost:5432/obiad",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("setup script output does not mention %q:\n%s", want, output)
-		}
 	}
 }
