@@ -117,7 +117,7 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 
 **Responsibility:** Create the deterministic database state before Fiber starts.
 
-**Contract:** An explicit Go command applies embedded versioned migrations and deterministic seed SQL in transactions. It uses a schema-owner credential. The command creates the complete POC catalog with fixed IDs and test-designed nutrition values. The request-serving process does not execute DDL or seed operations.
+**Contract:** An explicit Go command applies embedded versioned migrations and deterministic seed SQL in transactions. It uses a schema-owner database credential. The command creates the complete POC catalog with fixed IDs and test-designed nutrition values. The request-serving process does not execute DDL or seed operations.
 
 ## ARCH-008 — OpenAPI HTTP Interface
 
@@ -227,7 +227,7 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 | Status | Active |
 | Requirements | REQ-002, REQ-004–REQ-010, REQ-070–REQ-072 |
 | Dependencies | PostgreSQL |
-| ADR | [0001 — Store localized names in Food Object JSONB](architecture/0001-localized-names-jsonb.md) |
+| ADR | [0001 — Store localized names in Food Object JSONB](0001-localized-names-jsonb.md) |
 
 **Responsibility:** Represent the authoritative seeded Food Objects and their nutrition data.
 
@@ -245,7 +245,7 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 
 Additional language keys are permitted in the localized-name map. A solid has a Nutrition Basis of `100 g`. A liquid has a Nutrition Basis of `100 ml`. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
 
-**Flow:** ARCH-007 writes migrations and seed data. The Fiber runtime role has SELECT-only access. ARCH-006 reads the rows for every operation. HTTP results carry only required values. Calories, similarities, Matched Quantities, pages, and rounded card values are derived and are never stored.
+**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry only required values. Calories, similarities, Matched Quantities, pages, and rounded card values are derived and are never stored.
 
 ## ARCH-014 — Interface Language Preference
 
@@ -296,7 +296,7 @@ Additional language keys are permitted in the localized-name map. A solid has a 
 
 **Runtime constraints:** Bun installs frontend dependencies and runs scripts and tests. Vite owns the development server, production bundle, preview server, and `/api` proxy. Development uses Vite dev. Acceptance, visual, browser-integration, and performance checks use the optimized Vite build through Vite preview.
 
-Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authentication, cookies, rate limiter, or third-party runtime system. The pgx pool has zero minimum and four maximum connections. The setup command and Fiber use separate environment-provided database credentials. The Fiber credential is SELECT-only. Credentials are not committed.
+Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authentication, cookies, rate limiter, or third-party runtime system. The pgx pool has zero minimum and four maximum connections. Local deployment setup and integration fixtures create separate schema-owner and runtime database users before `dbsetup` runs. They remove `PUBLIC` object-creation and temporary-table privileges. The setup command uses the owner credential. Fiber uses the SELECT-only credential. Credentials are environment-provided and are not committed.
 
 ## ARCH-017 — Suggestion Ranking Mechanism
 

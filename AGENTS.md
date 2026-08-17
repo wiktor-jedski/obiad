@@ -8,6 +8,7 @@ When application code is added, follow the documented stack: Svelte frontend cod
 
 Task list: `docs/implementation/task-list.md`
 Phase plan: `docs/implementation/plan.md`
+Open items: `docs/implementation/issue-tracker.md`
 
 ## Build, Test, and Development Commands
 
@@ -33,7 +34,9 @@ For frontend, every hand-written exported type, interface, class, function, and 
 - For each phase, during task planning, add relevant integration tests for the newly implemented code AND the code that will work with this phase's code.
 - Unit tests are allowed only to check correctness during development. Remove all unit tests before committing changes.
 
-Testing commands for the current package layout:
+Phase-planning validation command: `python3 scripts/validate_phase_plan.py`
+
+Application testing commands for the current package layout: currently none; update when application testing is possible.
 
 ## Commit & Pull Request Guidelines
 
