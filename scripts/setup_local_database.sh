@@ -19,10 +19,11 @@
 #   OBIAD_RUNTIME_PASSWORD     password of the runtime role (required)
 #
 # The schema-owner connection runs dbsetup via OBIAD_SCHEMA_OWNER_DATABASE_URL.
-# The script prints the owner and runtime connection URLs; the later Fiber
-# process reads the runtime one from OBIAD_RUNTIME_DATABASE_URL. Passwords must
-# be URL-safe (no : / @ % characters) because they are embedded in the printed
-# connection URLs.
+# The script prints a password-free endpoint and the env contract names; the
+# later Fiber process reads its connection from OBIAD_RUNTIME_DATABASE_URL.
+# Passwords must be URL-safe (no : / @ % characters) because they are embedded
+# in the internal connection URLs. Credentials never appear in psql argv:
+# role statements are piped through stdin and the owner grants use PGPASSWORD.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -74,10 +75,14 @@ for role in "$OWNER_ROLE" "$RUNTIME_ROLE"; do
     [ "$role" = "$RUNTIME_ROLE" ] && password="$OBIAD_RUNTIME_PASSWORD"
     password_sql="$(psql_quote "$password")"
     if [ "$(psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${role}'")" = "1" ]; then
-        psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE ${role} LOGIN PASSWORD ${password_sql}" >/dev/null
+        # The role statement goes through stdin so the password never appears
+        # in the psql command line.
+        printf 'ALTER ROLE %s LOGIN PASSWORD %s\n' "$role" "$password_sql" \
+            | psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f - >/dev/null
         echo "updated role ${role} password"
     else
-        psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE ${role} LOGIN PASSWORD ${password_sql}" >/dev/null
+        printf 'CREATE ROLE %s LOGIN PASSWORD %s\n' "$role" "$password_sql" \
+            | psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f - >/dev/null
         echo "created role ${role}"
     fi
 done
@@ -97,12 +102,14 @@ echo "removed PUBLIC object-creation and temporary-table privileges"
 
 HOST_PORT="$(printf '%s' "$ADMIN_URL" | sed -E 's#^postgres(ql)?://[^@]*@##; s#/[^/]*$##')"
 OWNER_URL="postgres://${OWNER_ROLE}:${OBIAD_OWNER_PASSWORD}@${HOST_PORT}/${DB_NAME}"
-RUNTIME_URL="postgres://${RUNTIME_ROLE}:${OBIAD_RUNTIME_PASSWORD}@${HOST_PORT}/${DB_NAME}"
 
 echo "running dbsetup with the schema-owner credential"
 (cd "$ROOT/backend" && OBIAD_SCHEMA_OWNER_DATABASE_URL="$OWNER_URL" go run ./cmd/dbsetup)
 
-apply_sql "$OWNER_URL" "$PRIVILEGES_DIR/runtime_catalog_read.sql" \
+# The owner grants connect through PGPASSWORD with a password-free endpoint so
+# the owner password never appears in the psql command line.
+OWNER_ENDPOINT="postgres://${OWNER_ROLE}@${HOST_PORT}/${DB_NAME}"
+PGPASSWORD="$OBIAD_OWNER_PASSWORD" apply_sql "$OWNER_ENDPOINT" "$PRIVILEGES_DIR/runtime_catalog_read.sql" \
     "__OBIAD_RUNTIME_USER__=${RUNTIME_ROLE}"
 echo "granted ${RUNTIME_ROLE} SELECT-only catalog access"
 
