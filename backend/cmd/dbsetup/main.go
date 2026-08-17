@@ -1,7 +1,16 @@
 // Command dbsetup is the Database Setup Module (ARCH-007): it applies the
 // embedded versioned migrations to PostgreSQL before Fiber starts. It connects
 // with the schema-owner credential supplied by OBIAD_SCHEMA_OWNER_DATABASE_URL
-// and exits non-zero on any failure.
+// and exits non-zero on any failure. dbsetup never creates database users,
+// applies privileges, or reads the runtime connection; the local deployment
+// setup creates both roles before this command runs and grants the runtime
+// role SELECT-only catalog access afterwards (ARCH-016, ISSUE-001).
+//
+// Credential contract (credentials are environment-provided, never committed):
+//
+//	OBIAD_SCHEMA_OWNER_DATABASE_URL  schema-owner connection used by dbsetup
+//	OBIAD_RUNTIME_DATABASE_URL       SELECT-only connection read by the later
+//	                                 Fiber process (ARCH-016)
 //
 // Usage:
 //
