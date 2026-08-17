@@ -5,8 +5,10 @@ package dbsetup
 // schema-owner and SELECT-only runtime login roles the local deployment setup
 // creates before dbsetup runs (ARCH-016, ISSUE-001) — runs the real setup
 // command (go run ./cmd/dbsetup) against it, and drops the database and roles
-// afterwards. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL
-// and defaults to a local PostgreSQL; tests skip when no server is reachable.
+// afterwards. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or
+// from libpq-style environment variables (PGHOST, PGPORT, PGUSER, PGDATABASE)
+// with the password supplied by PGPASSWORD or ~/.pgpass; no credential is
+// committed and tests skip when no server is reachable.
 
 import (
 	"context"
@@ -14,6 +16,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -28,10 +31,37 @@ import (
 	sqlmigrations "obiad/backend/internal/repository/sql"
 )
 
-const (
-	testAdminDatabaseURLEnv = "OBIAD_TEST_ADMIN_DATABASE_URL"
-	defaultAdminDatabaseURL = "postgres://postgres:obiad@localhost:5432/postgres"
-)
+const testAdminDatabaseURLEnv = "OBIAD_TEST_ADMIN_DATABASE_URL"
+
+// adminDatabaseURL returns the admin connection URL for the fixtures. The
+// credential is never committed: OBIAD_TEST_ADMIN_DATABASE_URL wins when set;
+// otherwise libpq-style environment variables (PGHOST, PGPORT, PGUSER,
+// PGDATABASE) shape a password-free URL and the password comes from PGPASSWORD
+// or the ~/.pgpass file.
+func adminDatabaseURL() string {
+	if u := os.Getenv(testAdminDatabaseURLEnv); u != "" {
+		return u
+	}
+	host := os.Getenv("PGHOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("PGPORT")
+	if port == "" {
+		port = "5432"
+	}
+	user := os.Getenv("PGUSER")
+	if user == "" {
+		user = "postgres"
+	}
+	db := os.Getenv("PGDATABASE")
+	if db == "" {
+		db = "postgres"
+	}
+	u := url.URL{Scheme: "postgres", Host: net.JoinHostPort(host, port), Path: "/" + db}
+	u.User = url.User(user)
+	return u.String()
+}
 
 // separatedDatabase holds the connections the credential-separation fixture
 // creates: the schema-owner URL (dbsetup), the SELECT-only runtime URL (the
@@ -64,14 +94,11 @@ func newDisposableDB(t *testing.T) string {
 // finishes.
 func newSeparatedDatabase(t *testing.T) separatedDatabase {
 	t.Helper()
-	admin := os.Getenv(testAdminDatabaseURLEnv)
-	if admin == "" {
-		admin = defaultAdminDatabaseURL
-	}
+	admin := adminDatabaseURL()
 	ctx := context.Background()
 	adminConn, err := pgx.Connect(ctx, admin)
 	if err != nil {
-		t.Skipf("integration test requires PostgreSQL at %s: %v", admin, err)
+		t.Skipf("integration test requires PostgreSQL at %s: %v", redactedURL(admin), err)
 	}
 	suffix := time.Now().UnixNano()
 	dbName := fmt.Sprintf("obiad_test_%d", suffix)
@@ -266,12 +293,23 @@ func runDBSetupCommand(t *testing.T, dbURL string) string {
 	return string(out)
 }
 
+// redactedURL returns raw with any userinfo removed so failure and skip
+// messages never disclose credentials.
+func redactedURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<invalid database URL>"
+	}
+	u.User = nil
+	return u.String()
+}
+
 // connect opens a database connection closed when the test finishes.
 func connect(t *testing.T, dbURL string) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), dbURL)
 	if err != nil {
-		t.Fatalf("connect to %s: %v", dbURL, err)
+		t.Fatalf("connect to %s: %v", redactedURL(dbURL), err)
 	}
 	t.Cleanup(func() { conn.Close(context.Background()) })
 	return conn
