@@ -190,6 +190,37 @@ if [ -e "$CRED_FILE" ] && [ ! -f "$CRED_FILE" ]; then
     exit 1
 fi
 
+# preflight_runtime_ownership rejects the setup before any mutation when the
+# pre-existing runtime role owns any object in the target database. Ownership
+# is not revocable, so a runtime role that owns relations, sequences, views,
+# schemas, functions, procedures, types, extensions, or publications would
+# keep owner powers over them after setup. The definitive cluster-wide
+# ownership catalog pg_shdepend is queried for owner dependencies (deptype
+# 'o') scoped to the target database; the preflight connects to the target
+# database itself so pg_describe_object can resolve the objects and produce
+# readable, password-free diagnostics. It is a no-op when the target database
+# or the runtime role does not exist.
+preflight_runtime_ownership() {
+    if [ "$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" != "1" ]; then
+        return 0
+    fi
+    local owned
+    owned="$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_TARGET_ENDPOINT" -tAc \
+        "SELECT pg_describe_object(d.classid, d.objid, 0) \
+         FROM pg_shdepend d \
+         WHERE d.refclassid = 'pg_authid'::regclass \
+           AND d.refobjid = (SELECT oid FROM pg_roles WHERE rolname = '${RUNTIME_ROLE}') \
+           AND d.deptype = 'o' \
+           AND d.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())" | grep -v '^$' || true)"
+    if [ -n "$owned" ]; then
+        echo "error: pre-existing role ${RUNTIME_ROLE} owns object(s) in database ${DB_NAME}; refusing to mutate:" >&2
+        printf '%s\n' "$owned" | sed 's/^/  /' >&2
+        echo "drop these objects or reassign their ownership first" >&2
+        exit 1
+    fi
+}
+preflight_runtime_ownership
+
 if [ "$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" != "1" ]; then
     PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME}" >/dev/null
     echo "created database ${DB_NAME}"
