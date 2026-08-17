@@ -23,8 +23,12 @@
 #   OBIAD_OWNER_PASSWORD       password of the schema-owner role (required)
 #   OBIAD_RUNTIME_PASSWORD     password of the runtime role (required)
 #   OBIAD_CREDENTIAL_FILE      where the owner and runtime connection URLs are
-#                              written with mode 0600
-#                              (default: ${XDG_CONFIG_HOME:-$HOME/.config}/obiad/database-urls)
+#                              written with mode 0600 through an atomic rename.
+#                              A custom path must have an existing parent
+#                              directory (never created or chmodded here) and
+#                              must not be a symlink.
+#                              (default: ${XDG_CONFIG_HOME:-$HOME/.config}/obiad/database-urls,
+#                              created with mode 0700 when missing)
 #
 # The schema-owner connection runs dbsetup via OBIAD_SCHEMA_OWNER_DATABASE_URL.
 # The later Fiber process reads its connection from OBIAD_RUNTIME_DATABASE_URL;
@@ -154,6 +158,33 @@ apply_sql() { # <password-free-url> <sql-file> <PLACEHOLDER=value>...
 parse_admin_url "$DB_NAME"
 ADMIN_PGPASSWORD="${ADMIN_PASSWORD:-${PGPASSWORD:-}}"
 
+# Credential handoff contract, validated before any database mutation:
+#   * the default path is a dedicated private directory the script creates
+#     only when it is missing (mode 0700); it never chmods an existing one;
+#   * a custom OBIAD_CREDENTIAL_FILE path must have an existing parent
+#     directory, which the script never creates or chmods;
+#   * neither the parent directory nor the destination file may be a symlink
+#     (credentials must never be published through one), and an existing
+#     destination must be a regular file.
+CRED_FILE="${OBIAD_CREDENTIAL_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/obiad/database-urls}"
+CRED_DIR="$(dirname "$CRED_FILE")"
+if [ -n "${OBIAD_CREDENTIAL_FILE+x}" ]; then
+    if [ ! -d "$CRED_DIR" ]; then
+        echo "error: OBIAD_CREDENTIAL_FILE directory ${CRED_DIR} does not exist (create it first)" >&2
+        exit 1
+    fi
+elif [ ! -d "$CRED_DIR" ]; then
+    mkdir -m 700 -p "$CRED_DIR"
+fi
+if [ -L "$CRED_DIR" ] || [ -L "$CRED_FILE" ]; then
+    echo "error: credential path ${CRED_FILE} must not be a symlink" >&2
+    exit 1
+fi
+if [ -e "$CRED_FILE" ] && [ ! -f "$CRED_FILE" ]; then
+    echo "error: credential destination ${CRED_FILE} is not a regular file" >&2
+    exit 1
+fi
+
 if [ "$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" != "1" ]; then
     PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME}" >/dev/null
     echo "created database ${DB_NAME}"
@@ -199,17 +230,32 @@ PGPASSWORD="$OBIAD_OWNER_PASSWORD" apply_sql "$OWNER_ENDPOINT" "$PRIVILEGES_DIR/
 echo "granted ${RUNTIME_ROLE} SELECT-only catalog access"
 
 # Safe handoff: both connection URLs are written to a mode-0600 file outside
-# the repository and are never printed. Values are single-quoted so sourcing
-# the file survives query strings such as ?sslmode=…&connect_timeout=…; the
-# URLs are percent-encoded, so they never contain a literal quote. Load them
-# with
+# the repository and are never printed. The path contract was validated before
+# any database mutation; the publish step writes a securely created temp file
+# in the destination directory (mode 0600), fsyncs it, and atomically renames
+# it over the destination, removing the temp file on any failure. Values are
+# shell-escaped with printf %q, so sourcing the file yields the exact URLs for
+# every accepted URL character, including apostrophes in query strings. Load
+# them with
 #   set -a; source "$CRED_FILE"; set +a
-CRED_FILE="${OBIAD_CREDENTIAL_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/obiad/database-urls}"
-mkdir -p "$(dirname "$CRED_FILE")"
-chmod 700 "$(dirname "$CRED_FILE")"
-umask 077
-printf "OBIAD_SCHEMA_OWNER_DATABASE_URL='%s'\nOBIAD_RUNTIME_DATABASE_URL='%s'\n" "$OWNER_URL" "$RUNTIME_URL" > "$CRED_FILE"
-chmod 600 "$CRED_FILE"
+publish_credentials() {
+    local tmp
+    tmp="$(mktemp "$CRED_DIR/obiad-urls.XXXXXX")" || {
+        echo "error: cannot create a credential temp file in ${CRED_DIR}" >&2
+        exit 1
+    }
+    if printf "OBIAD_SCHEMA_OWNER_DATABASE_URL=%q\nOBIAD_RUNTIME_DATABASE_URL=%q\n" "$OWNER_URL" "$RUNTIME_URL" > "$tmp"; then
+        chmod 600 "$tmp"
+        python3 -c 'import os,sys; fd=os.open(sys.argv[1], os.O_RDONLY); os.fsync(fd); os.close(fd)' "$tmp" 2>/dev/null || true
+        if mv -f "$tmp" "$CRED_FILE"; then
+            return 0
+        fi
+    fi
+    rm -f "$tmp"
+    echo "error: failed to publish credentials to ${CRED_FILE}" >&2
+    exit 1
+}
+publish_credentials
 
 echo
 echo "Local database ready:"
