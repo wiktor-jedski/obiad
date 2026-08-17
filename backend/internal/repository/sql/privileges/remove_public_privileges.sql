@@ -15,11 +15,15 @@
 -- database; the explicit GRANT CONNECT statements re-enable only the two
 -- deployment roles. REVOKE CREATE ON SCHEMA public removes object creation
 -- from PUBLIC; the schema-owner role keeps CREATE through the explicit grant,
--- so dbsetup can still apply the schema. No role other than the owner may
--- create objects or temporary tables.
+-- so dbsetup can still apply the schema. The runtime role is normalized
+-- deterministically on every run: any pre-existing CREATE or TEMPORARY
+-- privilege (for example from a role that was created privileged) is revoked,
+-- so no role other than the owner may create objects or temporary tables.
 
 REVOKE ALL ON DATABASE "__OBIAD_DATABASE__" FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CREATE ON SCHEMA public TO "__OBIAD_OWNER_USER__";
 GRANT CONNECT ON DATABASE "__OBIAD_DATABASE__" TO "__OBIAD_OWNER_USER__", "__OBIAD_RUNTIME_USER__";
 GRANT USAGE ON SCHEMA public TO "__OBIAD_RUNTIME_USER__";
+REVOKE CREATE, TEMPORARY ON DATABASE "__OBIAD_DATABASE__" FROM "__OBIAD_RUNTIME_USER__";
+REVOKE CREATE ON SCHEMA public FROM "__OBIAD_RUNTIME_USER__";

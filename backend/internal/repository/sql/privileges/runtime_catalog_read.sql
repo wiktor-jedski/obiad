@@ -8,6 +8,13 @@
 -- integration fixtures apply this file verbatim after substituting this
 -- identifier placeholder:
 --   __OBIAD_RUNTIME_USER__  the SELECT-only runtime login role
+--
+-- The runtime role is normalized deterministically on every run: any
+-- pre-existing table or default-privilege grant (for example from a role that
+-- was created privileged) is revoked before the SELECT grants are applied, so
+-- the runtime role can only ever read the catalog.
 
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "__OBIAD_RUNTIME_USER__";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM "__OBIAD_RUNTIME_USER__";
 GRANT SELECT ON TABLE food_objects, food_families TO "__OBIAD_RUNTIME_USER__";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "__OBIAD_RUNTIME_USER__";
