@@ -107,6 +107,7 @@ apply_sql "$OWNER_URL" "$PRIVILEGES_DIR/runtime_catalog_read.sql" \
 echo "granted ${RUNTIME_ROLE} SELECT-only catalog access"
 
 echo
-echo "Local database ready:"
-echo "  owner   OBIAD_SCHEMA_OWNER_DATABASE_URL=${OWNER_URL}"
-echo "  runtime OBIAD_RUNTIME_DATABASE_URL=${RUNTIME_URL}"
+echo "Local database ready (credentials stay in your environment, never printed):"
+echo "  endpoint: postgres://${HOST_PORT}/${DB_NAME}"
+echo "  OBIAD_SCHEMA_OWNER_DATABASE_URL  schema-owner connection for dbsetup (user ${OWNER_ROLE}, password from OBIAD_OWNER_PASSWORD)"
+echo "  OBIAD_RUNTIME_DATABASE_URL       SELECT-only connection for the Fiber process (user ${RUNTIME_ROLE}, password from OBIAD_RUNTIME_PASSWORD)"
