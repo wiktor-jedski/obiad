@@ -1,7 +1,9 @@
-// Package sql embeds the versioned SQL migrations that the Database Setup
-// Module (ARCH-007) applies to PostgreSQL. Persistence SQL for the backend
-// repository lives under this directory and is embedded from Go; SQL statement
-// strings are never placed inline in repository Go files.
+// Package sql embeds the SQL that the Database Setup Module (ARCH-007) and
+// the local deployment setup (ARCH-016) apply to PostgreSQL. Versioned schema
+// migrations live under migrations/ and deployment privilege statements under
+// privileges/; persistence SQL for the backend repository stays colocated
+// here and is embedded from Go. SQL statement strings are never placed inline
+// in repository Go files.
 package sql
 
 import "embed"
@@ -11,3 +13,11 @@ import "embed"
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS
+
+// Privileges holds every deployment privilege file under privileges/. The
+// local deployment setup script and the integration fixtures apply these
+// files verbatim after substituting their identifier placeholders, so the
+// tested SQL is exactly the deployed SQL.
+//
+//go:embed privileges/*.sql
+var Privileges embed.FS

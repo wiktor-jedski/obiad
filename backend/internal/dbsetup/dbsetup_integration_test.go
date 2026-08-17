@@ -1,14 +1,17 @@
 package dbsetup
 
-// Integration tests for tasks 1 and 2 (Phase 1): they require a real
-// PostgreSQL server (ARCH-022). Each test creates a disposable database, runs
-// the real setup command (go run ./cmd/dbsetup) against it, and drops the
-// database afterwards. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL and defaults to a local PostgreSQL; tests skip
-// when no server is reachable.
+// Integration tests for Phase 1 (tasks 1-4): they require a real PostgreSQL
+// server (ARCH-022). Each test creates a disposable database — plus the
+// schema-owner and SELECT-only runtime login roles the local deployment setup
+// creates before dbsetup runs (ARCH-016, ISSUE-001) — runs the real setup
+// command (go run ./cmd/dbsetup) against it, and drops the database and roles
+// afterwards. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL
+// and defaults to a local PostgreSQL; tests skip when no server is reachable.
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,6 +24,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	sqlmigrations "obiad/backend/internal/repository/sql"
 )
 
 const (
@@ -28,9 +33,36 @@ const (
 	defaultAdminDatabaseURL = "postgres://postgres:obiad@localhost:5432/postgres"
 )
 
-// newDisposableDB creates a uniquely named empty database and returns its
-// connection URL. The database is dropped when the test finishes.
+// separatedDatabase holds the connections the credential-separation fixture
+// creates: the schema-owner URL (dbsetup), the SELECT-only runtime URL (the
+// later Fiber process), the runtime role name (needed to grant SELECT), and
+// the CONNECT-only role URL that proves PUBLIC object-creation and
+// temporary-table privileges are removed.
+type separatedDatabase struct {
+	ownerURL    string
+	runtimeURL  string
+	runtimeRole string
+	anonURL     string
+}
+
+// newDisposableDB creates a uniquely named empty database with the two login
+// roles the local deployment setup creates before dbsetup runs and returns
+// the schema-owner connection URL. The database and roles are dropped when
+// the test finishes.
 func newDisposableDB(t *testing.T) string {
+	t.Helper()
+	return newSeparatedDatabase(t).ownerURL
+}
+
+// newSeparatedDatabase creates a uniquely named empty database plus three
+// login roles: a schema-owner role, a SELECT-only runtime role, and an
+// unprivileged CONNECT-only role that proves the PUBLIC revocations (ARCH-016,
+// ISSUE-001). The owner owns the database; PUBLIC object-creation and
+// temporary-table privileges are removed before dbsetup runs. It returns the
+// owner and runtime connection URLs, the runtime role name, and the
+// CONNECT-only role URL. The database and all roles are dropped when the test
+// finishes.
+func newSeparatedDatabase(t *testing.T) separatedDatabase {
 	t.Helper()
 	admin := os.Getenv(testAdminDatabaseURLEnv)
 	if admin == "" {
@@ -41,23 +73,74 @@ func newDisposableDB(t *testing.T) string {
 	if err != nil {
 		t.Skipf("integration test requires PostgreSQL at %s: %v", admin, err)
 	}
-	name := fmt.Sprintf("obiad_test_%d", time.Now().UnixNano())
+	suffix := time.Now().UnixNano()
+	dbName := fmt.Sprintf("obiad_test_%d", suffix)
+	ownerRole := fmt.Sprintf("obiad_owner_%d", suffix)
+	runtimeRole := fmt.Sprintf("obiad_runtime_%d", suffix)
+	anonRole := fmt.Sprintf("obiad_anon_%d", suffix)
+	ownerPassword := randomPassword(t)
+	runtimePassword := randomPassword(t)
+	anonPassword := randomPassword(t)
 	t.Cleanup(func() {
 		dropCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if dropConn, err := pgx.Connect(dropCtx, admin); err == nil {
 			defer dropConn.Close(dropCtx)
-			_, _ = dropConn.Exec(dropCtx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")
+			_, _ = dropConn.Exec(dropCtx, "DROP DATABASE IF EXISTS "+dbName+" WITH (FORCE)")
+			for _, role := range []string{ownerRole, runtimeRole, anonRole} {
+				_, _ = dropConn.Exec(dropCtx, "DROP ROLE IF EXISTS "+role)
+			}
 		}
 	})
-	if _, err := adminConn.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+	if _, err := adminConn.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
 		adminConn.Close(ctx)
 		t.Fatalf("create disposable database: %v", err)
+	}
+	for _, role := range []struct {
+		name     string
+		password string
+	}{
+		{ownerRole, ownerPassword},
+		{runtimeRole, runtimePassword},
+		{anonRole, anonPassword},
+	} {
+		if _, err := adminConn.Exec(ctx, "CREATE ROLE "+role.name+" LOGIN PASSWORD "+quoteLiteral(role.password)); err != nil {
+			adminConn.Close(ctx)
+			t.Fatalf("create role %s: %v", role.name, err)
+		}
+	}
+	if _, err := adminConn.Exec(ctx, "ALTER DATABASE "+dbName+" OWNER TO "+ownerRole); err != nil {
+		adminConn.Close(ctx)
+		t.Fatalf("set database owner: %v", err)
+	}
+
+	// Remove PUBLIC object-creation and temporary-table privileges and grant
+	// the runtime role connection rights before dbsetup runs. The admin
+	// applies the same embedded SQL the local deployment setup applies.
+	applyPrivilegeSQL(t, connect(t, withDatabase(admin, dbName)),
+		"privileges/remove_public_privileges.sql",
+		map[string]string{
+			"__OBIAD_DATABASE__":     dbName,
+			"__OBIAD_OWNER_USER__":   ownerRole,
+			"__OBIAD_RUNTIME_USER__": runtimeRole,
+		})
+	// The CONNECT-only role proves the PUBLIC revocations; the local
+	// deployment setup has no such role, so the fixture grants its CONNECT.
+	if _, err := adminConn.Exec(ctx, "GRANT CONNECT ON DATABASE "+dbName+" TO "+anonRole); err != nil {
+		adminConn.Close(ctx)
+		t.Fatalf("grant anon role connect: %v", err)
 	}
 	if err := adminConn.Close(ctx); err != nil {
 		t.Fatalf("close admin connection: %v", err)
 	}
-	return withDatabase(admin, name)
+
+	base := withDatabase(admin, dbName)
+	return separatedDatabase{
+		ownerURL:    withCredentials(base, ownerRole, ownerPassword),
+		runtimeURL:  withCredentials(base, runtimeRole, runtimePassword),
+		runtimeRole: runtimeRole,
+		anonURL:     withCredentials(base, anonRole, anonPassword),
+	}
 }
 
 // withDatabase returns url with its database path replaced by name.
@@ -68,6 +151,87 @@ func withDatabase(raw string, name string) string {
 	}
 	u.Path = "/" + name
 	return u.String()
+}
+
+// withCredentials returns url with its userinfo replaced by user and password.
+func withCredentials(raw string, user string, password string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		panic(fmt.Sprintf("invalid database URL %q: %v", raw, err))
+	}
+	u.User = url.UserPassword(user, password)
+	return u.String()
+}
+
+// randomPassword returns a fresh 32-hex-character password from crypto/rand
+// for a disposable role. Passwords are generated per run, are never committed
+// or logged, and are useless after the disposable database is dropped.
+func randomPassword(t *testing.T) string {
+	t.Helper()
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		t.Fatalf("generate role password: %v", err)
+	}
+	return hex.EncodeToString(buf)
+}
+
+// quoteLiteral quotes s as a PostgreSQL string literal.
+func quoteLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// isSQLIdentifier reports whether s is a safe PostgreSQL identifier
+// ([a-z_][a-z0-9_]*). The fixture generates every role and database name, so
+// the check is defense in depth: a placeholder can never inject SQL.
+func isSQLIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		lower := r >= 'a' && r <= 'z'
+		digit := r >= '0' && r <= '9'
+		underscore := r == '_'
+		if i == 0 && !(lower || underscore) {
+			return false
+		}
+		if !(lower || digit || underscore) {
+			return false
+		}
+	}
+	return true
+}
+
+// applyPrivilegeSQL reads one embedded privilege SQL file, substitutes its
+// identifier placeholders, and executes it on conn. The same files are
+// applied by the local deployment setup script, so the tested SQL is exactly
+// the deployed SQL.
+func applyPrivilegeSQL(t *testing.T, conn *pgx.Conn, path string, replacements map[string]string) {
+	t.Helper()
+	body, err := sqlmigrations.Privileges.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read privilege SQL %s: %v", path, err)
+	}
+	replaced := string(body)
+	for placeholder, value := range replacements {
+		if !isSQLIdentifier(value) {
+			t.Fatalf("refusing to substitute %s with non-identifier %q", placeholder, value)
+		}
+		replaced = strings.ReplaceAll(replaced, placeholder, value)
+	}
+	// Simple protocol so the multi-statement privilege file executes as one
+	// batch, like the migration runner does.
+	if _, err := conn.Exec(context.Background(), replaced, pgx.QueryExecModeSimpleProtocol); err != nil {
+		t.Fatalf("apply privilege SQL %s: %v", path, err)
+	}
+}
+
+// grantRuntimeCatalogRead applies the embedded runtime_catalog_read.sql grants
+// as the schema owner, exactly as the local deployment setup does after
+// dbsetup runs.
+func grantRuntimeCatalogRead(t *testing.T, owner *pgx.Conn, runtimeRole string) {
+	t.Helper()
+	applyPrivilegeSQL(t, owner, "privileges/runtime_catalog_read.sql",
+		map[string]string{"__OBIAD_RUNTIME_USER__": runtimeRole})
 }
 
 // moduleRoot walks up from the test working directory to the module root.
@@ -604,5 +768,91 @@ func TestFoodFamilyConstraints(t *testing.T) {
 	}
 	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 2 {
 		t.Fatalf("food_objects has %d rows, want 2 (only test rows, no seed rows)", n)
+	}
+}
+
+// TestDatabaseCredentialSeparation verifies P01-G1 and P01-G2 for ARCH-007,
+// ARCH-013, and ARCH-016: the schema-owner credential applies the complete
+// schema to the empty owner database; the SELECT-only runtime credential can
+// read both Food Catalog tables but cannot INSERT, UPDATE, DELETE, create
+// tables, or create temporary tables; PUBLIC object-creation and
+// temporary-table privileges are removed; and every catalog table remains
+// empty.
+func TestDatabaseCredentialSeparation(t *testing.T) {
+	db := newSeparatedDatabase(t)
+	ctx := context.Background()
+
+	// P01-G1: the exact setup command applies the complete schema on the empty
+	// owner database.
+	out := runDBSetupCommand(t, db.ownerURL)
+	if !strings.Contains(out, "applied 3 pending migration(s)") {
+		t.Fatalf("setup output %q does not report three applied migrations", out)
+	}
+	owner := connect(t, db.ownerURL)
+
+	// The schema is complete: three migration versions recorded and both Food
+	// Catalog tables present.
+	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 3 {
+		t.Fatalf("schema_migrations has %d rows, want 3", n)
+	}
+	for _, table := range []string{"food_objects", "food_families"} {
+		var exists bool
+		if err := owner.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name = $1)`, table).Scan(&exists); err != nil {
+			t.Fatalf("check %s table: %v", table, err)
+		}
+		if !exists {
+			t.Fatalf("%s table does not exist after dbsetup", table)
+		}
+	}
+
+	// The runtime role reads the catalog through the same grants the local
+	// deployment setup applies after dbsetup runs.
+	grantRuntimeCatalogRead(t, owner, db.runtimeRole)
+	runtime := connect(t, db.runtimeURL)
+
+	// The runtime credential can SELECT both catalog tables, and the catalog
+	// is empty.
+	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("runtime SELECT on food_objects returns %d rows, want 0 (empty catalog)", n)
+	}
+	if n := countRows(t, runtime, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("runtime SELECT on food_families returns %d rows, want 0 (empty catalog)", n)
+	}
+
+	// The runtime credential cannot INSERT, UPDATE, or DELETE.
+	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (1, '{"en": "Milk", "pl": "Mleko"}'::jsonb, 'liquid', 10.0, 5.0, 1.0)`
+	for _, stmt := range []string{
+		insertFoodObject,
+		`UPDATE food_objects SET physical_state = 'solid' WHERE id = 1`,
+		`DELETE FROM food_objects WHERE id = 1`,
+	} {
+		_, err := runtime.Exec(ctx, stmt)
+		wantSQLState(t, err, "42501") // insufficient_privilege
+	}
+
+	// The runtime credential cannot create tables or temporary tables.
+	_, err := runtime.Exec(ctx, "CREATE TABLE runtime_created (id integer)")
+	wantSQLState(t, err, "42501")
+	_, err = runtime.Exec(ctx, "CREATE TEMP TABLE runtime_temp (id integer)")
+	wantSQLState(t, err, "42501")
+
+	// PUBLIC object-creation and temporary-table privileges are removed: a
+	// role that holds only CONNECT (no CREATE on the public schema, no
+	// TEMPORARY on the database) can connect, yet it cannot create tables or
+	// temporary tables either.
+	anon := connect(t, db.anonURL)
+	_, err = anon.Exec(ctx, "CREATE TABLE anon_created (id integer)")
+	wantSQLState(t, err, "42501")
+	_, err = anon.Exec(ctx, "CREATE TEMP TABLE anon_temp (id integer)")
+	wantSQLState(t, err, "42501")
+
+	// The failed writes left every catalog table empty.
+	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("food_objects has %d rows, want 0 (empty catalog)", n)
+	}
+	if n := countRows(t, owner, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows, want 0 (empty catalog)", n)
 	}
 }
