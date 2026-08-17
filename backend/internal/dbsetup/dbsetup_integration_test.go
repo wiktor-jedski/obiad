@@ -144,22 +144,26 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	dbURL := newDisposableDB(t)
 	ctx := context.Background()
 
-	// First run applies exactly two pending migrations.
+	// First run applies exactly three pending migrations.
 	out := runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 2 pending migration(s)") {
-		t.Fatalf("first run output %q does not report two applied migrations", out)
+	if !strings.Contains(out, "applied 3 pending migration(s)") {
+		t.Fatalf("first run output %q does not report three applied migrations", out)
 	}
 
 	conn := connect(t, dbURL)
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 2 {
-		t.Fatalf("schema_migrations has %d rows, want 2 (one transaction per migration)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 3 {
+		t.Fatalf("schema_migrations has %d rows, want 3 (one transaction per migration)", n)
 	}
 	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations ORDER BY version")
 	if err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
 	}
 	defer rows.Close()
-	wantVersions := map[int]string{1: "create_food_objects", 2: "add_macro_profile_and_serving"}
+	wantVersions := map[int]string{
+		1: "create_food_objects",
+		2: "add_macro_profile_and_serving",
+		3: "add_food_family",
+	}
 	gotVersions := map[int]string{}
 	for rows.Next() {
 		var version int
@@ -190,14 +194,25 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 0 {
 		t.Fatalf("food_objects has %d rows after dbsetup, want 0 (no seed rows)", n)
 	}
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'food_families')`).Scan(&exists); err != nil {
+		t.Fatalf("check food_families table: %v", err)
+	}
+	if !exists {
+		t.Fatal("food_families table does not exist after dbsetup")
+	}
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows after dbsetup, want 0 (no seed rows)", n)
+	}
 
 	// A second run is a versioned no-op.
 	out = runDBSetupCommand(t, dbURL)
 	if !strings.Contains(out, "applied 0 pending migration(s)") {
 		t.Fatalf("second run output %q does not report zero applied migrations", out)
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 2 {
-		t.Fatalf("schema_migrations has %d rows after second run, want 2", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 3 {
+		t.Fatalf("schema_migrations has %d rows after second run, want 3", n)
 	}
 }
 
@@ -470,5 +485,124 @@ func TestServingConstraints(t *testing.T) {
 	// No seed rows: the table holds exactly the valid rows inserted here.
 	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != len(valid) {
 		t.Fatalf("food_objects has %d rows, want %d (only test rows, no seed rows)", n, len(valid))
+	}
+}
+
+// TestFoodFamilyConstraints verifies P01-G3 and P01-G4 for REQ-009 and the
+// glossary Food Family contract: a Food Object belongs to zero or one flat
+// Food Family, nonpositive Food Family IDs and references to missing Families
+// are rejected, the single nullable foreign key is the only membership path,
+// the Food Family table has no hierarchy column, and the catalog retains zero
+// seed rows.
+func TestFoodFamilyConstraints(t *testing.T) {
+	dbURL := newDisposableDB(t)
+	runDBSetupCommand(t, dbURL)
+	conn := connect(t, dbURL)
+	ctx := context.Background()
+
+	// No seed rows: dbsetup leaves both Food Catalog tables empty.
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows after dbsetup, want 0 (no seed rows)", n)
+	}
+
+	// A fixed valid Macro Profile keeps this test focused on the Food Family
+	// membership column.
+	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
+
+	// P01-G3: zero membership (NULL) and one valid membership both succeed.
+	if _, err := conn.Exec(ctx, insertFoodObject, 1, `{"en": "Milk", "pl": "Mleko"}`, "liquid", nil); err != nil {
+		t.Fatalf("zero-membership Food Object insert failed: %v", err)
+	}
+	if _, err := conn.Exec(ctx, "INSERT INTO food_families (id) VALUES (1)"); err != nil {
+		t.Fatalf("valid Food Family insert failed: %v", err)
+	}
+	if _, err := conn.Exec(ctx, insertFoodObject, 2, `{"en": "Greek yogurt", "pl": "Jogurt grecki"}`, "solid", 1); err != nil {
+		t.Fatalf("one-membership Food Object insert failed: %v", err)
+	}
+	var familyID int
+	if err := conn.QueryRow(ctx, "SELECT food_family_id FROM food_objects WHERE id = 2").Scan(&familyID); err != nil {
+		t.Fatalf("read food_family_id: %v", err)
+	}
+	if familyID != 1 {
+		t.Fatalf("Food Object 2 belongs to family %d, want 1", familyID)
+	}
+
+	// P01-G4: nonpositive Food Family IDs are rejected by the ID CHECK.
+	rejectFamily := func(id int) {
+		t.Helper()
+		_, err := conn.Exec(ctx, "INSERT INTO food_families (id) VALUES ($1)", id)
+		wantSQLState(t, err, "23514") // check_violation
+	}
+	rejectFamily(0)  // zero Food Family ID
+	rejectFamily(-5) // negative Food Family ID
+
+	// P01-G4: a Food Object cannot reference a missing Food Family.
+	_, err := conn.Exec(ctx, insertFoodObject, 3, `{"en": "Bad", "pl": "Zly"}`, "solid", 99)
+	wantSQLState(t, err, "23503") // foreign_key_violation
+
+	// The single nullable foreign key is the only membership path: food_objects
+	// has exactly one foreign key, it targets food_families, it is the only
+	// foreign key in the whole schema that references food_families (no
+	// junction-table membership representation), and food_families itself has
+	// no foreign keys (no hierarchy: no self-referencing parent, level, or
+	// path column and no reverse membership column).
+	if n := countRows(t, conn, `SELECT count(*) FROM pg_constraint
+		WHERE contype = 'f' AND conrelid = 'food_objects'::regclass`); n != 1 {
+		t.Fatalf("food_objects has %d foreign keys, want exactly 1 (the Food Family membership path)", n)
+	}
+	var referenced string
+	if err := conn.QueryRow(ctx, `SELECT confrelid::regclass::text FROM pg_constraint
+		WHERE contype = 'f' AND conrelid = 'food_objects'::regclass`).Scan(&referenced); err != nil {
+		t.Fatalf("read food_objects foreign key target: %v", err)
+	}
+	if referenced != "food_families" {
+		t.Fatalf("food_objects foreign key targets %q, want food_families", referenced)
+	}
+	if n := countRows(t, conn, `SELECT count(*) FROM pg_constraint
+		WHERE contype = 'f' AND confrelid = 'food_families'::regclass`); n != 1 {
+		t.Fatalf("%d foreign keys reference food_families, want 1 (only the food_objects membership path)", n)
+	}
+	if n := countRows(t, conn, `SELECT count(*) FROM pg_constraint
+		WHERE contype = 'f' AND conrelid = 'food_families'::regclass`); n != 0 {
+		t.Fatalf("food_families has %d foreign keys, want 0 (no hierarchy column)", n)
+	}
+
+	// The membership column is nullable and of integer type, and the Food
+	// Family table owns only its positive integer ID (no hierarchy column).
+	var isNullable, dataType string
+	if err := conn.QueryRow(ctx, `SELECT is_nullable, data_type FROM information_schema.columns
+		WHERE table_name = 'food_objects' AND column_name = 'food_family_id'`).Scan(&isNullable, &dataType); err != nil {
+		t.Fatalf("read food_family_id column metadata: %v", err)
+	}
+	if isNullable != "YES" || dataType != "integer" {
+		t.Fatalf("food_family_id is nullable=%s data_type=%s, want nullable=YES integer", isNullable, dataType)
+	}
+	rows, err := conn.Query(ctx, `SELECT column_name FROM information_schema.columns
+		WHERE table_name = 'food_families' ORDER BY ordinal_position`)
+	if err != nil {
+		t.Fatalf("list food_families columns: %v", err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			t.Fatalf("scan food_families column: %v", err)
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate food_families columns: %v", err)
+	}
+	if len(columns) != 1 || columns[0] != "id" {
+		t.Fatalf("food_families columns are %v, want exactly [id] (no hierarchy column)", columns)
+	}
+
+	// No seed rows: each table holds exactly the test rows inserted here.
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 1 {
+		t.Fatalf("food_families has %d rows, want 1 (only the test family, no seed rows)", n)
+	}
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 2 {
+		t.Fatalf("food_objects has %d rows, want 2 (only test rows, no seed rows)", n)
 	}
 }
