@@ -198,20 +198,30 @@ fi
 # ownership catalog pg_shdepend is queried for owner dependencies (deptype
 # 'o') scoped to the target database; the preflight connects to the target
 # database itself so pg_describe_object can resolve the objects and produce
-# readable, password-free diagnostics. It is a no-op when the target database
-# or the runtime role does not exist.
+# readable, password-free diagnostics. Query failures are never suppressed:
+# the output and exit status of each psql call are captured explicitly and
+# any failure exits before a single mutation. It is a no-op when the target
+# database or the runtime role does not exist.
 preflight_runtime_ownership() {
-    if [ "$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" != "1" ]; then
+    local exists owned
+    if ! exists="$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_ENDPOINT" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")"; then
+        echo "error: preflight cannot reach the admin connection; refusing to mutate" >&2
+        exit 1
+    fi
+    if [ "$exists" != "1" ]; then
         return 0
     fi
-    local owned
-    owned="$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_TARGET_ENDPOINT" -tAc \
+    if ! owned="$(PGPASSWORD="$ADMIN_PGPASSWORD" psql "$ADMIN_TARGET_ENDPOINT" -v ON_ERROR_STOP=1 -tAc \
         "SELECT pg_describe_object(d.classid, d.objid, 0) \
          FROM pg_shdepend d \
          WHERE d.refclassid = 'pg_authid'::regclass \
            AND d.refobjid = (SELECT oid FROM pg_roles WHERE rolname = '${RUNTIME_ROLE}') \
            AND d.deptype = 'o' \
-           AND d.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())" | grep -v '^$' || true)"
+           AND d.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())")"; then
+        echo "error: preflight ownership check of role ${RUNTIME_ROLE} in database ${DB_NAME} failed; refusing to mutate" >&2
+        exit 1
+    fi
+    owned="$(printf '%s\n' "$owned" | sed '/^$/d')"
     if [ -n "$owned" ]; then
         echo "error: pre-existing role ${RUNTIME_ROLE} owns object(s) in database ${DB_NAME}; refusing to mutate:" >&2
         printf '%s\n' "$owned" | sed 's/^/  /' >&2
