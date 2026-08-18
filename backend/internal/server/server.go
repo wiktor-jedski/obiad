@@ -2,7 +2,8 @@
 // backend process (ARCH-009, ARCH-016). It reads the SELECT-only runtime
 // database credential, configures a pgx pool with zero minimum and four
 // maximum connections, and exposes the unversioned GET /health readiness
-// endpoint (ARCH-009).
+// endpoint (ARCH-009) and the versioned GET /api/v1/food-suggestions
+// suggestion route (ARCH-008).
 //
 // The composition adds no CORS, TLS, authentication, cookies, rate limiter,
 // or third-party runtime service (ARCH-016). The production command binds to
@@ -39,8 +40,8 @@ type healthStatus struct {
 // Compose builds the Fiber v3 application over a pgx pool connected with the
 // runtime database credential. The pool keeps zero minimum and four maximum
 // connections (ARCH-016). The returned application serves the unversioned
-// GET /health route; the caller owns starting the listener and closing the
-// pool.
+// GET /health route and the versioned GET /api/v1/food-suggestions route;
+// the caller owns starting the listener and closing the pool.
 func Compose(runtimeDatabaseURL string) (*fiber.App, *pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(runtimeDatabaseURL)
 	if err != nil {
@@ -56,6 +57,7 @@ func Compose(runtimeDatabaseURL string) (*fiber.App, *pgxpool.Pool, error) {
 
 	app := fiber.New()
 	app.Get("/health", healthHandler(pool))
+	app.Get("/api/v1/food-suggestions", suggestionsHandler(pool))
 	return app, pool, nil
 }
 
