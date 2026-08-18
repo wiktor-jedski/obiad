@@ -12,7 +12,7 @@ Open items: `docs/implementation/issue-tracker.md`
 
 ## Build, Test, and Development Commands
 
-Planned app commands should use `docs/architecture/tech-stack.md`: Bun for Svelte from `frontend/` (`bun install`, `bun test`, `bun run dev`) and Go tooling from `backend/` (`go test ./...`, `go run ./cmd/...`) once package manifests exist.
+Backend commands run from `backend/`: `go test ./...` runs the complete Go suite, and `go run ./cmd/dbsetup` applies embedded migrations using `OBIAD_SCHEMA_OWNER_DATABASE_URL`. The `frontend/` package does not exist yet; once added, use Bun (`bun install`, `bun test`, `bun run dev`) per `docs/architecture/tech-stack.md`.
 
 Installed development tooling:
 
@@ -30,13 +30,19 @@ For frontend, every hand-written exported type, interface, class, function, and 
 
 ## Testing Guidelines
 
-- Future Go tests should use the standard `testing` package and `Test...` names in `*_test.go` files. Future Svelte tests should use Bun, `@testing-library/svelte`, and Playwright. Add tests near changed behavior, especially around search, auth, subscriptions, and data normalization.
+- Go tests use the standard `testing` package and `Test...` names in `*_test.go` files. PostgreSQL integration tests are colocated in `backend/internal/dbsetup/dbsetup_integration_test.go`. Future Svelte tests should use Bun, `@testing-library/svelte`, and Playwright. Add tests near changed behavior, especially around search, auth, subscriptions, and data normalization.
 - For each phase, during task planning, add relevant integration tests for the newly implemented code AND the code that will work with this phase's code.
 - Unit tests are allowed only to check correctness during development. Remove all unit tests before committing changes.
 
-Phase-planning validation command: `python3 scripts/validate_phase_plan.py`
+Current test commands:
 
-Application testing commands for the current package layout: currently none; update when application testing is possible.
+- Complete CI check: run `python3 scripts/ci_check.py` from the repository root. It validates phase planning, starts an isolated disposable PostgreSQL container, runs the complete backend test suite, and removes the container.
+- PostgreSQL for integration tests: in a separate terminal, run `docker run --rm --name obiad-test-postgres -e POSTGRES_PASSWORD=obiad_test -p 127.0.0.1:5432:5432 postgres:17-alpine` and wait until it reports that it is ready to accept connections.
+- Backend suite: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test ./...` from `backend/`.
+- PostgreSQL integration suite with individual pass/skip output: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test -v ./internal/dbsetup` from `backend/`.
+- Phase-planning validation: run `python3 scripts/validate_phase_plan.py` from the repository root.
+
+The PostgreSQL integration suite requires an admin connection that can create and drop disposable databases and roles. The Docker command provides a loopback-only disposable test server; stop it with `Ctrl-C`, and `--rm` removes the container. To use another server, set `OBIAD_TEST_ADMIN_DATABASE_URL`; alternatively, configure `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE`, with the password supplied by `PGPASSWORD` or `~/.pgpass`. The tests skip when they cannot establish the admin connection, so use the verbose command to confirm they ran rather than skipped.
 
 ## Commit & Pull Request Guidelines
 
