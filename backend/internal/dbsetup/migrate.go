@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	sqlfiles "obiad/backend/internal/repository/sql"
 )
 
 // Migration is one versioned SQL migration.
@@ -93,11 +95,11 @@ func Apply(ctx context.Context, conn *pgx.Conn, fsys fs.FS) (int, error) {
 	// Unlock best effort; the session lock dies with the connection anyway.
 	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", advisoryLockKey) //nolint:errcheck
 
-	if _, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version    INTEGER PRIMARY KEY,
-		name       TEXT NOT NULL,
-		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`); err != nil {
+	schemaMigrationsSQL, err := fs.ReadFile(sqlfiles.Setup, "setup/schema_migrations.sql")
+	if err != nil {
+		return 0, fmt.Errorf("read schema migrations setup SQL: %w", err)
+	}
+	if _, err := conn.Exec(ctx, string(schemaMigrationsSQL)); err != nil {
 		return 0, fmt.Errorf("create schema_migrations: %w", err)
 	}
 
