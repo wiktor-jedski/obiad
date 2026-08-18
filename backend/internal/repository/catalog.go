@@ -1,15 +1,16 @@
 // Package repository implements the private concrete PostgreSQL Catalog
 // Loader (ARCH-006): one fresh embedded parameterized SELECT per operation,
 // executed through pgx from SQL colocated under
-// backend/internal/repository/sql/ and parameterized on the positive-ID
-// lower bound (REQ-005), mapping rows to private Food Object domain values,
-// validating the ARCH-013 catalog invariants, and classifying failures as
-// storage or catalog-invariant. The concrete loader, its constructor and
-// load operation, the mapped catalog and domain values, the error
-// classification type and constants, and the state constants are all
-// private to this package; the Module exposes no exported repository
-// interface, fake Adapter, runtime cache, SQL ranking, automatic retry, or
-// derived-value persistence.
+// backend/internal/repository/sql/ and parameterized with a
+// semantics-neutral boolean predicate ($1::boolean) bound true, mapping
+// rows to private Food Object domain values, validating the ARCH-013
+// catalog invariants, and classifying failures as storage or
+// catalog-invariant. The concrete loader, its constructor and load
+// operation, the mapped catalog and domain values, the error classification
+// type and constants, and the state constants are all private to this
+// package; the Module exposes no exported repository interface, fake
+// Adapter, runtime cache, SQL ranking, automatic retry, or derived-value
+// persistence.
 package repository
 
 import (
@@ -28,12 +29,12 @@ import (
 // catalogSelectPath is the embedded persistence SELECT the loader executes.
 const catalogSelectPath = "catalog/load_food_objects.sql"
 
-// minFoodObjectID is the ARCH-013 positive-ID lower bound (REQ-005). The
-// embedded catalog SELECT is parameterized on it: every valid Food Object
-// ID is positive, so the bound selects the whole request-local snapshot
-// while keeping the statement a genuinely parameterized query executed with
-// one bound pgx argument.
-const minFoodObjectID int32 = 1
+// allRows is the boolean value bound to the embedded catalog SELECT's
+// semantics-neutral predicate (WHERE $1::boolean). The predicate filters no
+// row, so every catalog row reaches Go-side invariant validation
+// (ARCH-006) while the statement stays a genuinely parameterized query
+// executed with one bound pgx argument.
+const allRows = true
 
 // localizedNames is the required English and Polish name pair of one Food
 // Object (ARCH-013, ADR 0001, REQ-006). Both names are nonempty string
@@ -134,14 +135,14 @@ func newLoader(conn *pgx.Conn) (*loader, error) {
 }
 
 // load performs one fresh PostgreSQL read: it executes the embedded
-// parameterized SELECT exactly once, binding the positive-ID lower bound as
-// its one query argument, maps every row to a Food Object value, validates
-// the ARCH-013 catalog invariants, and returns the request-local snapshot
-// in ascending stable ID order. A failure is classified as storage or
+// parameterized SELECT exactly once, binding the all-rows boolean as its
+// one query argument, maps every row to a Food Object value, validates the
+// ARCH-013 catalog invariants, and returns the request-local snapshot in
+// ascending stable ID order. A failure is classified as storage or
 // catalog-invariant (loadError.kind). load never caches, never retries, and
 // never mutates.
 func (l *loader) load(ctx context.Context) ([]foodObject, error) {
-	rows, err := l.conn.Query(ctx, l.selectSQL, minFoodObjectID)
+	rows, err := l.conn.Query(ctx, l.selectSQL, allRows)
 	if err != nil {
 		return nil, &loadError{kind: kindStorage, err: err}
 	}

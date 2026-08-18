@@ -9,11 +9,11 @@ package repository
 // local deployment setup applies, and drives the real Loader through the
 // SELECT-only runtime credential. A query tracer on the runtime connection
 // proves that every load executes exactly one parameterized embedded SELECT —
-// $1 bound to the positive-ID lower bound — and no mutating statement, and
-// that a failing load is not retried and a changed catalog is not cached.
-// The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from
-// libpq-style environment variables; no credential is committed and tests
-// skip when no server is reachable.
+// $1::boolean bound true — and no mutating statement, and that a failing
+// load is not retried and a changed catalog is not cached. The admin
+// connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style
+// environment variables; no credential is committed and tests skip when no
+// server is reachable.
 
 import (
 	"context"
@@ -128,10 +128,10 @@ func (t *stmtTracer) reset() { t.stmts = nil }
 
 // assertSingleSelect verifies that exactly one statement was recorded since
 // the last reset, that it is the embedded load SELECT — a genuinely
-// parameterized statement carrying the $1 placeholder — that its one bound
-// argument is the positive-ID lower bound, and that it is not a mutating
-// statement. One recorded statement per load also proves that a failing
-// load is not automatically retried.
+// parameterized statement whose $1 placeholder is cast to boolean and bound
+// to the all-rows value true — and that it is not a mutating statement. One
+// recorded statement per load also proves that a failing load is not
+// automatically retried.
 func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	tb.Helper()
 	if len(t.stmts) != 1 {
@@ -148,11 +148,11 @@ func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	if t.stmts[0].SQL != wantSQL {
 		tb.Fatalf("loader executed unexpected SQL %q, want the embedded SELECT %q", t.stmts[0].SQL, wantSQL)
 	}
-	if !strings.Contains(t.stmts[0].SQL, "$1") {
-		tb.Fatalf("loader executed a statement without the $1 positional placeholder: %s", t.stmts[0].SQL)
+	if !strings.Contains(t.stmts[0].SQL, "$1::boolean") {
+		tb.Fatalf("loader executed a statement whose $1 placeholder is not boolean-typed: %s", t.stmts[0].SQL)
 	}
-	if len(t.stmts[0].Args) != 1 || t.stmts[0].Args[0] != minFoodObjectID {
-		tb.Fatalf("loader bound arguments %v, want exactly one argument with the positive-ID lower bound %d", t.stmts[0].Args, minFoodObjectID)
+	if len(t.stmts[0].Args) != 1 || t.stmts[0].Args[0] != allRows {
+		tb.Fatalf("loader bound arguments %v, want exactly one argument with the all-rows boolean %v", t.stmts[0].Args, allRows)
 	}
 	for _, kw := range mutationKeywords {
 		if strings.Contains(strings.ToUpper(t.stmts[0].SQL), kw) {
@@ -341,6 +341,31 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	if catalogErr.kind != kindInvariant {
 		t.Fatalf("all-zero Macro Profile row classified as %s, want %s (cause: %v)", catalogErr.kind, kindInvariant, catalogErr.err)
+	}
+	tracer.assertSingleSelect(t, wantSQL)
+
+	// Nonpositive-ID invariant failure: the schema owner drops the
+	// positive-ID constraint and inserts a row with ID 0. Because the
+	// embedded SELECT's predicate ($1::boolean bound true) is
+	// semantics-neutral and filters no row, the loader must read the
+	// nonpositive row, reach Go-side invariant validation, and classify the
+	// load as a catalog-invariant failure — never silently filter it out.
+	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_id_check"); err != nil {
+		t.Fatalf("drop positive-ID constraint: %v", err)
+	}
+	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (0, '{"en": "Zero id", "pl": "Zero id"}'::jsonb, 'solid', 1, 0, 0)`); err != nil {
+		t.Fatalf("insert nonpositive-ID fixture row: %v", err)
+	}
+	tracer.reset()
+	_, err = loader.load(ctx)
+	if !errors.As(err, &catalogErr) {
+		t.Fatalf("Load with a nonpositive-ID row: want classified *loadError, got %v", err)
+	}
+	if catalogErr.kind != kindInvariant {
+		t.Fatalf("nonpositive-ID row classified as %s, want %s (cause: %v)", catalogErr.kind, kindInvariant, catalogErr.err)
+	}
+	if !strings.Contains(catalogErr.err.Error(), "ID must be positive") {
+		t.Fatalf("nonpositive-ID row did not reach invariant validation (was it filtered by the predicate?): %v", catalogErr.err)
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 

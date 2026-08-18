@@ -7,17 +7,18 @@
 -- localized names, Physical State, Macro Profile, optional Serving, optional
 -- Food Family reference, and optional image key, in ascending stable ID
 -- order. Values are bound through pgx's parameterized query protocol; the
--- positional placeholder $1 carries the positive-ID lower bound (1) that the
--- ARCH-013 identity invariant requires, and no value is interpolated into
--- this statement. Because every valid Food Object ID is positive, the bound
--- preserves the whole request-local snapshot (ARCH-006); the request
--- language, ranking, and default Food Quantities are applied by the Modules
--- after the read. Ascending-ID order is deterministic snapshot order, not
--- SQL ranking: suggestion ranking belongs to the Suggest Food Objects module
--- and never happens in SQL.
+-- positional placeholder $1 is cast to boolean and bound to true, and no
+-- value is interpolated into this statement. The predicate is
+-- semantics-neutral: it filters no row, so every catalog row reaches the
+-- loader's Go-side invariant validation (ARCH-006), including rows that
+-- violate the positive-ID invariant when database constraints are absent.
+-- The request language, ranking, and default Food Quantities are applied by
+-- the Modules after the read. Ascending-ID order is deterministic snapshot
+-- order, not SQL ranking: suggestion ranking belongs to the Suggest Food
+-- Objects module and never happens in SQL.
 
 SELECT id, names, physical_state, protein, carbohydrate, fat, serving,
        food_family_id, image_key
 FROM food_objects
-WHERE id >= $1
+WHERE $1::boolean
 ORDER BY id;
