@@ -3,9 +3,12 @@
 // executed through pgx from SQL colocated under
 // backend/internal/repository/sql/, mapping rows to private Food Object
 // domain values, validating the ARCH-013 catalog invariants, and
-// classifying failures as storage or catalog-invariant. The Module exposes
-// no repository interface, fake Adapter, runtime cache, SQL ranking,
-// automatic retry, or derived-value persistence.
+// classifying failures as storage or catalog-invariant. The concrete
+// loader, its constructor and load operation, the mapped catalog and domain
+// values, the error classification type and constants, and the state
+// constants are all private to this package; the Module exposes no exported
+// repository interface, fake Adapter, runtime cache, SQL ranking, automatic
+// retry, or derived-value persistence.
 package repository
 
 import (
@@ -24,36 +27,36 @@ import (
 // catalogSelectPath is the embedded persistence SELECT the loader executes.
 const catalogSelectPath = "catalog/load_food_objects.sql"
 
-// LocalizedNames is the required English and Polish name pair of one Food
+// localizedNames is the required English and Polish name pair of one Food
 // Object (ARCH-013, ADR 0001, REQ-006). Both names are nonempty string
 // values on the one stable Food Object ID.
-type LocalizedNames struct {
+type localizedNames struct {
 	En string
 	Pl string
 }
 
-// PhysicalState is the ARCH-013 Physical State of a Food Object: solid or
+// physicalState is the ARCH-013 Physical State of a Food Object: solid or
 // liquid. It determines the Nutrition Basis (REQ-007).
-type PhysicalState string
+type physicalState string
 
 const (
-	// StateSolid is the Physical State whose Nutrition Basis is 100 g.
-	StateSolid PhysicalState = "solid"
-	// StateLiquid is the Physical State whose Nutrition Basis is 100 ml.
-	StateLiquid PhysicalState = "liquid"
+	// stateSolid is the Physical State whose Nutrition Basis is 100 g.
+	stateSolid physicalState = "solid"
+	// stateLiquid is the Physical State whose Nutrition Basis is 100 ml.
+	stateLiquid physicalState = "liquid"
 )
 
-// FoodObject is one validated Food Object domain value mapped from one
+// foodObject is one validated Food Object domain value mapped from one
 // seeded catalog row (ARCH-013). The fields are exactly the ARCH-013 source
 // fields: stable ID, required localized names, Physical State, finite
 // nonnegative Macro Profile, one optional positive Serving, one optional
 // Food Family reference, and one optional opaque image key. Derived values
 // (calories, Nutritional Similarities, Matched Quantities, page data,
 // rounded display values) are never stored and never loaded.
-type FoodObject struct {
+type foodObject struct {
 	ID            int32
-	Names         LocalizedNames
-	PhysicalState PhysicalState
+	Names         localizedNames
+	physicalState physicalState
 	Protein       float64
 	Carbohydrate  float64
 	Fat           float64
@@ -62,80 +65,80 @@ type FoodObject struct {
 	ImageKey      *string
 }
 
-// Kind classifies a failed catalog load (ARCH-006): storage or
+// kind classifies a failed catalog load (ARCH-006): storage or
 // catalog-invariant.
-type Kind string
+type kind string
 
 const (
-	// KindStorage reports that the catalog could not be read: PostgreSQL was
+	// kindStorage reports that the catalog could not be read: PostgreSQL was
 	// unreachable, the SELECT failed (for example a missing table or a
 	// revoked read grant), or the row stream broke. The catalog data itself
 	// was never observed.
-	KindStorage Kind = "storage"
+	kindStorage kind = "storage"
 
-	// KindInvariant reports that PostgreSQL returned rows that violate the
+	// kindInvariant reports that PostgreSQL returned rows that violate the
 	// ARCH-013 catalog invariants: a nonpositive ID, missing or empty
 	// localized names, an unknown Physical State, a nonfinite or negative
 	// Macro Profile value, an all-zero Macro Profile, a nonpositive or
 	// nonfinite Serving, a nonpositive Food Family reference, or an empty
 	// image key.
-	KindInvariant Kind = "invariant"
+	kindInvariant kind = "invariant"
 )
 
 // String returns the stable classification name.
-func (k Kind) String() string { return string(k) }
+func (k kind) String() string { return string(k) }
 
-// Error is a classified catalog load failure (ARCH-006). It distinguishes
-// storage failures — PostgreSQL is unreachable or the read fails — from
-// catalog-invariant failures — the returned rows do not satisfy the
-// ARCH-013 structure contract. Err holds the underlying cause.
-type Error struct {
-	Kind Kind
+// loadError is a classified catalog load failure (ARCH-006). It
+// distinguishes storage failures — PostgreSQL is unreachable or the read
+// fails — from catalog-invariant failures — the returned rows do not
+// satisfy the ARCH-013 structure contract. Err holds the underlying cause.
+type loadError struct {
+	kind kind
 	Err  error
 }
 
 // Error implements error.
-func (e *Error) Error() string {
-	return fmt.Sprintf("catalog %s failure: %v", e.Kind, e.Err)
+func (e *loadError) Error() string {
+	return fmt.Sprintf("catalog %s failure: %v", e.kind, e.Err)
 }
 
 // Unwrap returns the underlying cause.
-func (e *Error) Unwrap() error { return e.Err }
+func (e *loadError) Unwrap() error { return e.Err }
 
-// Loader is the private concrete PostgreSQL Catalog Loader (ARCH-006). Each
-// Load operation executes one fresh embedded parameterized SELECT through
+// loader is the private concrete PostgreSQL Catalog loader (ARCH-006). Each
+// load operation executes one fresh embedded parameterized SELECT through
 // pgx from SQL colocated under backend/internal/repository/sql/, maps rows
 // to private Food Object values, validates the ARCH-013 catalog invariants,
-// and classifies failures as storage or catalog-invariant. The Loader holds
+// and classifies failures as storage or catalog-invariant. The loader holds
 // no runtime cache, performs no automatic retry, and never mutates.
-type Loader struct {
+type loader struct {
 	conn      *pgx.Conn
 	selectSQL string
 }
 
-// New returns a Loader that reads the catalog through conn.
-func New(conn *pgx.Conn) (*Loader, error) {
+// newLoader returns a loader that reads the catalog through conn.
+func newLoader(conn *pgx.Conn) (*loader, error) {
 	sqlText, err := loadCatalogSelect()
 	if err != nil {
 		return nil, err
 	}
-	return &Loader{conn: conn, selectSQL: sqlText}, nil
+	return &loader{conn: conn, selectSQL: sqlText}, nil
 }
 
-// Load performs one fresh PostgreSQL read: it executes the embedded
+// load performs one fresh PostgreSQL read: it executes the embedded
 // parameterized SELECT exactly once, maps every row to a Food Object value,
 // validates the ARCH-013 catalog invariants, and returns the request-local
 // snapshot in ascending stable ID order. A failure is classified as storage
-// or catalog-invariant (Error.Kind). Load never caches, never retries, and
-// never mutates.
-func (l *Loader) Load(ctx context.Context) ([]FoodObject, error) {
+// or catalog-invariant (loadError.kind). load never caches, never retries,
+// and never mutates.
+func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 	rows, err := l.conn.Query(ctx, l.selectSQL)
 	if err != nil {
-		return nil, &Error{Kind: KindStorage, Err: err}
+		return nil, &loadError{kind: kindStorage, Err: err}
 	}
 	defer rows.Close()
 
-	var objects []FoodObject
+	var objects []foodObject
 	for rows.Next() {
 		var (
 			id           int32
@@ -149,16 +152,16 @@ func (l *Loader) Load(ctx context.Context) ([]FoodObject, error) {
 			imageKey     *string
 		)
 		if err := rows.Scan(&id, &namesJSON, &state, &protein, &carbohydrate, &fat, &serving, &family, &imageKey); err != nil {
-			return nil, &Error{Kind: KindInvariant, Err: fmt.Errorf("scan Food Object row: %w", err)}
+			return nil, &loadError{kind: kindInvariant, Err: fmt.Errorf("scan Food Object row: %w", err)}
 		}
 		object, err := mapFoodObject(id, namesJSON, state, protein, carbohydrate, fat, serving, family, imageKey)
 		if err != nil {
-			return nil, &Error{Kind: KindInvariant, Err: err}
+			return nil, &loadError{kind: kindInvariant, Err: err}
 		}
 		objects = append(objects, object)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &Error{Kind: KindStorage, Err: err}
+		return nil, &loadError{kind: kindStorage, Err: err}
 	}
 	return objects, nil
 }
@@ -175,39 +178,39 @@ func loadCatalogSelect() (string, error) {
 
 // mapFoodObject maps one scanned row to a Food Object value after checking
 // every ARCH-013 catalog invariant.
-func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (FoodObject, error) {
+func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (foodObject, error) {
 	if id <= 0 {
-		return FoodObject{}, fmt.Errorf("Food Object %d: ID must be positive", id)
+		return foodObject{}, fmt.Errorf("Food Object %d: ID must be positive", id)
 	}
 	names, err := decodeNames(namesJSON)
 	if err != nil {
-		return FoodObject{}, fmt.Errorf("Food Object %d: %w", id, err)
+		return foodObject{}, fmt.Errorf("Food Object %d: %w", id, err)
 	}
-	var physicalState PhysicalState
-	switch PhysicalState(state) {
-	case StateSolid:
-		physicalState = StateSolid
-	case StateLiquid:
-		physicalState = StateLiquid
+	var stateValue physicalState
+	switch physicalState(state) {
+	case stateSolid:
+		stateValue = stateSolid
+	case stateLiquid:
+		stateValue = stateLiquid
 	default:
-		return FoodObject{}, fmt.Errorf("Food Object %d: Physical State %q must be %q or %q", id, state, StateSolid, StateLiquid)
+		return foodObject{}, fmt.Errorf("Food Object %d: Physical State %q must be %q or %q", id, state, stateSolid, stateLiquid)
 	}
 	if err := validateMacroProfile(id, protein, carbohydrate, fat); err != nil {
-		return FoodObject{}, err
+		return foodObject{}, err
 	}
 	if serving != nil && !isPositiveFinite(*serving) {
-		return FoodObject{}, fmt.Errorf("Food Object %d: Serving must be a positive finite number when present", id)
+		return foodObject{}, fmt.Errorf("Food Object %d: Serving must be a positive finite number when present", id)
 	}
 	if family != nil && *family <= 0 {
-		return FoodObject{}, fmt.Errorf("Food Object %d: Food Family ID must be positive when present", id)
+		return foodObject{}, fmt.Errorf("Food Object %d: Food Family ID must be positive when present", id)
 	}
 	if imageKey != nil && strings.Trim(*imageKey, " ") == "" {
-		return FoodObject{}, fmt.Errorf("Food Object %d: image key must be nonempty when present", id)
+		return foodObject{}, fmt.Errorf("Food Object %d: image key must be nonempty when present", id)
 	}
-	return FoodObject{
+	return foodObject{
 		ID:            id,
 		Names:         names,
-		PhysicalState: physicalState,
+		physicalState: stateValue,
 		Protein:       protein,
 		Carbohydrate:  carbohydrate,
 		Fat:           fat,
@@ -221,23 +224,23 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 // must be a JSON object with nonempty string values for the required "en"
 // and "pl" keys, mirroring the migration-0001 btrim semantics (ADR 0001,
 // REQ-006). Additional language keys are permitted and ignored.
-func decodeNames(rawJSON []byte) (LocalizedNames, error) {
+func decodeNames(rawJSON []byte) (localizedNames, error) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(rawJSON, &m); err != nil {
-		return LocalizedNames{}, fmt.Errorf("localized names must be a JSON object: %w", err)
+		return localizedNames{}, fmt.Errorf("localized names must be a JSON object: %w", err)
 	}
-	var names LocalizedNames
+	var names localizedNames
 	for _, key := range []string{"en", "pl"} {
 		raw, ok := m[key]
 		if !ok {
-			return LocalizedNames{}, fmt.Errorf("localized names are missing the %q name", key)
+			return localizedNames{}, fmt.Errorf("localized names are missing the %q name", key)
 		}
 		var value string
 		if err := json.Unmarshal(raw, &value); err != nil {
-			return LocalizedNames{}, fmt.Errorf("localized name %q must be a string", key)
+			return localizedNames{}, fmt.Errorf("localized name %q must be a string", key)
 		}
 		if strings.Trim(value, " ") == "" {
-			return LocalizedNames{}, fmt.Errorf("localized name %q must be nonempty", key)
+			return localizedNames{}, fmt.Errorf("localized name %q must be nonempty", key)
 		}
 		switch key {
 		case "en":
