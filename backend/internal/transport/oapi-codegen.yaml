@@ -1,0 +1,10 @@
+# oapi-codegen configuration for the authoritative OpenAPI document
+# (api/openapi.yaml). Generates Go transport models only: the supported
+# application has no Go API consumer, so no Go HTTP client or server binding
+# is generated (ISSUE-004).
+package: transport
+output: suggestions.gen.go
+generate:
+  models: true
+  client: false
+  embedded-spec: false
