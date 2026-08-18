@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+
+	"obiad/backend/internal/testdb"
 )
 
 type catalogCoverageCase struct {
@@ -23,7 +25,7 @@ type catalogCoverageCase struct {
 // fresh database setup. It does not predict ranking, similarity, quantity, or
 // paging behavior owned by later application modules.
 func TestAcceptanceCatalogCoverage(t *testing.T) {
-	dbURL := newDisposableDB(t)
+	dbURL := testdb.NewDB(t).OwnerURL
 	runDBSetupCommand(t, dbURL)
 	conn := connect(t, dbURL)
 	ctx := context.Background()
