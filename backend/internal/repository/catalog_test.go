@@ -8,11 +8,12 @@ package repository
 // grants the runtime catalog read through the same embedded privilege SQL the
 // local deployment setup applies, and drives the real Loader through the
 // SELECT-only runtime credential. A query tracer on the runtime connection
-// proves that every load executes exactly one embedded SELECT and no mutating
-// statement, and that a failing load is not retried and a changed catalog is
-// not cached. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL
-// or from libpq-style environment variables; no credential is committed and
-// tests skip when no server is reachable.
+// proves that every load executes exactly one parameterized embedded SELECT —
+// $1 bound to the positive-ID lower bound — and no mutating statement, and
+// that a failing load is not retried and a changed catalog is not cached.
+// The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from
+// libpq-style environment variables; no credential is committed and tests
+// skip when no server is reachable.
 
 import (
 	"context"
@@ -126,9 +127,11 @@ func (t *stmtTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx
 func (t *stmtTracer) reset() { t.stmts = nil }
 
 // assertSingleSelect verifies that exactly one statement was recorded since
-// the last reset, that it is the embedded load SELECT, and that it is not a
-// mutating statement. One recorded statement per load also proves that a
-// failing load is not automatically retried.
+// the last reset, that it is the embedded load SELECT — a genuinely
+// parameterized statement carrying the $1 placeholder — that its one bound
+// argument is the positive-ID lower bound, and that it is not a mutating
+// statement. One recorded statement per load also proves that a failing
+// load is not automatically retried.
 func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	tb.Helper()
 	if len(t.stmts) != 1 {
@@ -144,6 +147,12 @@ func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	}
 	if t.stmts[0].SQL != wantSQL {
 		tb.Fatalf("loader executed unexpected SQL %q, want the embedded SELECT %q", t.stmts[0].SQL, wantSQL)
+	}
+	if !strings.Contains(t.stmts[0].SQL, "$1") {
+		tb.Fatalf("loader executed a statement without the $1 positional placeholder: %s", t.stmts[0].SQL)
+	}
+	if len(t.stmts[0].Args) != 1 || t.stmts[0].Args[0] != minFoodObjectID {
+		tb.Fatalf("loader bound arguments %v, want exactly one argument with the positive-ID lower bound %d", t.stmts[0].Args, minFoodObjectID)
 	}
 	for _, kw := range mutationKeywords {
 		if strings.Contains(strings.ToUpper(t.stmts[0].SQL), kw) {
