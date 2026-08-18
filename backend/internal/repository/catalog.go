@@ -31,8 +31,8 @@ const catalogSelectPath = "catalog/load_food_objects.sql"
 // Object (ARCH-013, ADR 0001, REQ-006). Both names are nonempty string
 // values on the one stable Food Object ID.
 type localizedNames struct {
-	En string
-	Pl string
+	en string
+	pl string
 }
 
 // physicalState is the ARCH-013 Physical State of a Food Object: solid or
@@ -54,15 +54,15 @@ const (
 // (calories, Nutritional Similarities, Matched Quantities, page data,
 // rounded display values) are never stored and never loaded.
 type foodObject struct {
-	ID            int32
-	Names         localizedNames
+	id            int32
+	names         localizedNames
 	physicalState physicalState
-	Protein       float64
-	Carbohydrate  float64
-	Fat           float64
-	Serving       *float64
-	FoodFamilyID  *int32
-	ImageKey      *string
+	protein       float64
+	carbohydrate  float64
+	fat           float64
+	serving       *float64
+	foodFamilyID  *int32
+	imageKey      *string
 }
 
 // kind classifies a failed catalog load (ARCH-006): storage or
@@ -91,19 +91,19 @@ func (k kind) String() string { return string(k) }
 // loadError is a classified catalog load failure (ARCH-006). It
 // distinguishes storage failures — PostgreSQL is unreachable or the read
 // fails — from catalog-invariant failures — the returned rows do not
-// satisfy the ARCH-013 structure contract. Err holds the underlying cause.
+// satisfy the ARCH-013 structure contract. err holds the underlying cause.
 type loadError struct {
 	kind kind
-	Err  error
+	err  error
 }
 
 // Error implements error.
 func (e *loadError) Error() string {
-	return fmt.Sprintf("catalog %s failure: %v", e.kind, e.Err)
+	return fmt.Sprintf("catalog %s failure: %v", e.kind, e.err)
 }
 
 // Unwrap returns the underlying cause.
-func (e *loadError) Unwrap() error { return e.Err }
+func (e *loadError) Unwrap() error { return e.err }
 
 // loader is the private concrete PostgreSQL Catalog loader (ARCH-006). Each
 // load operation executes one fresh embedded parameterized SELECT through
@@ -134,7 +134,7 @@ func newLoader(conn *pgx.Conn) (*loader, error) {
 func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 	rows, err := l.conn.Query(ctx, l.selectSQL)
 	if err != nil {
-		return nil, &loadError{kind: kindStorage, Err: err}
+		return nil, &loadError{kind: kindStorage, err: err}
 	}
 	defer rows.Close()
 
@@ -152,16 +152,16 @@ func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 			imageKey     *string
 		)
 		if err := rows.Scan(&id, &namesJSON, &state, &protein, &carbohydrate, &fat, &serving, &family, &imageKey); err != nil {
-			return nil, &loadError{kind: kindInvariant, Err: fmt.Errorf("scan Food Object row: %w", err)}
+			return nil, &loadError{kind: kindInvariant, err: fmt.Errorf("scan Food Object row: %w", err)}
 		}
 		object, err := mapFoodObject(id, namesJSON, state, protein, carbohydrate, fat, serving, family, imageKey)
 		if err != nil {
-			return nil, &loadError{kind: kindInvariant, Err: err}
+			return nil, &loadError{kind: kindInvariant, err: err}
 		}
 		objects = append(objects, object)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &loadError{kind: kindStorage, Err: err}
+		return nil, &loadError{kind: kindStorage, err: err}
 	}
 	return objects, nil
 }
@@ -208,15 +208,15 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 		return foodObject{}, fmt.Errorf("Food Object %d: image key must be nonempty when present", id)
 	}
 	return foodObject{
-		ID:            id,
-		Names:         names,
+		id:            id,
+		names:         names,
 		physicalState: stateValue,
-		Protein:       protein,
-		Carbohydrate:  carbohydrate,
-		Fat:           fat,
-		Serving:       serving,
-		FoodFamilyID:  family,
-		ImageKey:      imageKey,
+		protein:       protein,
+		carbohydrate:  carbohydrate,
+		fat:           fat,
+		serving:       serving,
+		foodFamilyID:  family,
+		imageKey:      imageKey,
 	}, nil
 }
 
@@ -244,9 +244,9 @@ func decodeNames(rawJSON []byte) (localizedNames, error) {
 		}
 		switch key {
 		case "en":
-			names.En = value
+			names.en = value
 		case "pl":
-			names.Pl = value
+			names.pl = value
 		}
 	}
 	return names, nil

@@ -251,27 +251,27 @@ func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 	}
 	for i := range want {
 		got, want := objects[i], want[i]
-		if got.ID != want.id {
-			t.Fatalf("Food Object %d: loader returned ID %d, want %d", i, got.ID, want.id)
+		if got.id != want.id {
+			t.Fatalf("Food Object %d: loader returned ID %d, want %d", i, got.id, want.id)
 		}
-		if got.Names.En != want.en || got.Names.Pl != want.pl {
-			t.Fatalf("Food Object %d: loader returned names %+v, want en=%q pl=%q", got.ID, got.Names, want.en, want.pl)
+		if got.names.en != want.en || got.names.pl != want.pl {
+			t.Fatalf("Food Object %d: loader returned names %+v, want en=%q pl=%q", got.id, got.names, want.en, want.pl)
 		}
 		if got.physicalState != want.state {
-			t.Fatalf("Food Object %d: loader returned Physical State %q, want %q", got.ID, got.physicalState, want.state)
+			t.Fatalf("Food Object %d: loader returned Physical State %q, want %q", got.id, got.physicalState, want.state)
 		}
-		if got.Protein != want.protein || got.Carbohydrate != want.carbohydrate || got.Fat != want.fat {
+		if got.protein != want.protein || got.carbohydrate != want.carbohydrate || got.fat != want.fat {
 			t.Fatalf("Food Object %d: loader returned Macro Profile (%g, %g, %g), want (%g, %g, %g)",
-				got.ID, got.Protein, got.Carbohydrate, got.Fat, want.protein, want.carbohydrate, want.fat)
+				got.id, got.protein, got.carbohydrate, got.fat, want.protein, want.carbohydrate, want.fat)
 		}
-		if !equalFloatPtr(got.Serving, want.serving) {
-			t.Fatalf("Food Object %d: loader returned Serving %v, want %v", got.ID, got.Serving, want.serving)
+		if !equalFloatPtr(got.serving, want.serving) {
+			t.Fatalf("Food Object %d: loader returned Serving %v, want %v", got.id, got.serving, want.serving)
 		}
-		if !equalInt32Ptr(got.FoodFamilyID, want.family) {
-			t.Fatalf("Food Object %d: loader returned Food Family ID %v, want %v", got.ID, got.FoodFamilyID, want.family)
+		if !equalInt32Ptr(got.foodFamilyID, want.family) {
+			t.Fatalf("Food Object %d: loader returned Food Family ID %v, want %v", got.id, got.foodFamilyID, want.family)
 		}
-		if !equalStrPtr(got.ImageKey, want.imageKey) {
-			t.Fatalf("Food Object %d: loader returned image key %v, want %v", got.ID, got.ImageKey, want.imageKey)
+		if !equalStrPtr(got.imageKey, want.imageKey) {
+			t.Fatalf("Food Object %d: loader returned image key %v, want %v", got.id, got.imageKey, want.imageKey)
 		}
 	}
 }
@@ -331,7 +331,7 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 		t.Fatalf("Load with an all-zero Macro Profile row: want classified *loadError, got %v", err)
 	}
 	if catalogErr.kind != kindInvariant {
-		t.Fatalf("all-zero Macro Profile row classified as %s, want %s (cause: %v)", catalogErr.kind, kindInvariant, catalogErr.Err)
+		t.Fatalf("all-zero Macro Profile row classified as %s, want %s (cause: %v)", catalogErr.kind, kindInvariant, catalogErr.err)
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
@@ -349,7 +349,7 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 		t.Fatalf("Load after revoking the runtime SELECT grant: want classified *loadError, got %v", err)
 	}
 	if catalogErr.kind != kindStorage {
-		t.Fatalf("permission failure classified as %s, want %s (cause: %v)", catalogErr.kind, kindStorage, catalogErr.Err)
+		t.Fatalf("permission failure classified as %s, want %s (cause: %v)", catalogErr.kind, kindStorage, catalogErr.err)
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 }
@@ -408,14 +408,14 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	if len(second) != 39 {
 		t.Fatalf("second load returned %d Food Objects, want 39 after the owner fixture change", len(second))
 	}
-	if second[0].Names.En != "Pizza Margherita Fresca" || second[0].Names.Pl != "Pizza margherita" {
-		t.Fatalf("second load did not observe the owner-updated localized names: got %+v", second[0].Names)
+	if second[0].names.en != "Pizza Margherita Fresca" || second[0].names.pl != "Pizza margherita" {
+		t.Fatalf("second load did not observe the owner-updated localized names: got %+v", second[0].names)
 	}
 	added := second[38]
-	if added.ID != 39 || added.Names.En != "Cucumber" || added.Names.Pl != "Ogórek" ||
-		added.physicalState != stateSolid || added.Protein != 0.4 || added.Carbohydrate != 3 ||
-		added.Fat != 0.1 || added.Serving == nil || *added.Serving != 100 ||
-		added.FoodFamilyID != nil || added.ImageKey != nil {
+	if added.id != 39 || added.names.en != "Cucumber" || added.names.pl != "Ogórek" ||
+		added.physicalState != stateSolid || added.protein != 0.4 || added.carbohydrate != 3 ||
+		added.fat != 0.1 || added.serving == nil || *added.serving != 100 ||
+		added.foodFamilyID != nil || added.imageKey != nil {
 		t.Fatalf("second load did not observe the owner-inserted Food Object 39: %+v", added)
 	}
 }
