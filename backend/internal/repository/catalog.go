@@ -11,6 +11,17 @@
 // package; the Module exposes no exported repository interface, fake
 // Adapter, runtime cache, SQL ranking, automatic retry, or derived-value
 // persistence.
+//
+// The package also implements the concrete Suggest Food Objects Module
+// (ARCH-004). Its one Run operation validates and normalizes a raw Search
+// Query, ranks the request-local snapshot loaded through the private Loader
+// by raw code-point Levenshtein distance, the ISSUE-004-pinned
+// active-language collation, and stable Food Object ID, and returns exactly
+// five distinct suggestions carrying both localized names and the
+// backend-derived default Food Quantity. The Module's exported surface is
+// the concrete Suggest type and its domain values and stable failure codes;
+// the normalization, distance, and ranking internals stay private, and no
+// generated transport value enters the Module.
 package repository
 
 import (
