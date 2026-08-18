@@ -1,6 +1,6 @@
 package dbsetup
 
-// Integration tests for Phase 1 (tasks 1-4): they require a real PostgreSQL
+// Integration tests for Phases 1-2 (tasks 1-5): they require a real PostgreSQL
 // server (ARCH-022). Each test creates a disposable database — plus the
 // schema-owner and SELECT-only runtime login roles the local deployment setup
 // creates before dbsetup runs (ARCH-016, ISSUE-001) — runs the real setup
@@ -346,15 +346,15 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	dbURL := newDisposableDB(t)
 	ctx := context.Background()
 
-	// First run applies exactly three pending migrations.
+	// First run applies exactly four pending migrations.
 	out := runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 3 pending migration(s)") {
-		t.Fatalf("first run output %q does not report three applied migrations", out)
+	if !strings.Contains(out, "applied 4 pending migration(s)") {
+		t.Fatalf("first run output %q does not report four applied migrations", out)
 	}
 
 	conn := connect(t, dbURL)
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 3 {
-		t.Fatalf("schema_migrations has %d rows, want 3 (one transaction per migration)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 4 {
+		t.Fatalf("schema_migrations has %d rows, want 4 (one transaction per migration)", n)
 	}
 	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations ORDER BY version")
 	if err != nil {
@@ -365,6 +365,7 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 		1: "create_food_objects",
 		2: "add_macro_profile_and_serving",
 		3: "add_food_family",
+		4: "add_image_key",
 	}
 	gotVersions := map[int]string{}
 	for rows.Next() {
@@ -413,8 +414,8 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	if !strings.Contains(out, "applied 0 pending migration(s)") {
 		t.Fatalf("second run output %q does not report zero applied migrations", out)
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 3 {
-		t.Fatalf("schema_migrations has %d rows after second run, want 3", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 4 {
+		t.Fatalf("schema_migrations has %d rows after second run, want 4", n)
 	}
 }
 
@@ -823,15 +824,15 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	// P01-G1: the exact setup command applies the complete schema on the empty
 	// owner database.
 	out := runDBSetupCommand(t, db.ownerURL)
-	if !strings.Contains(out, "applied 3 pending migration(s)") {
-		t.Fatalf("setup output %q does not report three applied migrations", out)
+	if !strings.Contains(out, "applied 4 pending migration(s)") {
+		t.Fatalf("setup output %q does not report four applied migrations", out)
 	}
 	owner := connect(t, db.ownerURL)
 
-	// The schema is complete: three migration versions recorded and both Food
+	// The schema is complete: four migration versions recorded and both Food
 	// Catalog tables present.
-	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 3 {
-		t.Fatalf("schema_migrations has %d rows, want 3", n)
+	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 4 {
+		t.Fatalf("schema_migrations has %d rows, want 4", n)
 	}
 	for _, table := range []string{"food_objects", "food_families"} {
 		var exists bool
@@ -892,5 +893,147 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	}
 	if n := countRows(t, owner, "SELECT count(*) FROM food_families"); n != 0 {
 		t.Fatalf("food_families has %d rows, want 0 (empty catalog)", n)
+	}
+}
+
+// TestFoodObjectImageKey verifies Phase 2 (task 5; ARCH-013, ARCH-015,
+// REQ-011): migration 0004 adds one optional opaque frontend image key per
+// Food Object. image_key is nullable, so NULL is the single "no usable image"
+// state that shows the bundled placeholder; a present key is opaque and is
+// preserved exactly (no trimming, normalization, truncation, or length
+// limit); empty and spaces-only keys are rejected (btrim semantics); and the production
+// schema stays limited to the ARCH-013 source fields — no derived calories,
+// Nutritional Similarities, Matched Quantities, page data, or rounded display
+// values in production tables, and no derived-value tables.
+func TestFoodObjectImageKey(t *testing.T) {
+	dbURL := newDisposableDB(t)
+	runDBSetupCommand(t, dbURL)
+	conn := connect(t, dbURL)
+	ctx := context.Background()
+
+	// Migration 0004 is applied and recorded.
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 4 {
+		t.Fatalf("schema_migrations has %d rows, want 4 (0001-0004)", n)
+	}
+
+	// A fixed valid Macro Profile keeps this test focused on the image key
+	// column.
+	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, image_key) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
+
+	// image_key is nullable: NULL is the "no usable image" state (REQ-011,
+	// ARCH-015) and is accepted.
+	if _, err := conn.Exec(ctx, insertFoodObject, 1, `{"en": "Milk", "pl": "Mleko"}`, "liquid", nil); err != nil {
+		t.Fatalf("NULL image_key insert failed: %v", err)
+	}
+	var imageKey *string
+	if err := conn.QueryRow(ctx, "SELECT image_key FROM food_objects WHERE id = 1").Scan(&imageKey); err != nil {
+		t.Fatalf("read NULL image_key: %v", err)
+	}
+	if imageKey != nil {
+		t.Fatalf("image_key without a value is %q, want NULL", *imageKey)
+	}
+	var isNullable, dataType string
+	if err := conn.QueryRow(ctx, `SELECT is_nullable, data_type FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'food_objects' AND column_name = 'image_key'`).Scan(&isNullable, &dataType); err != nil {
+		t.Fatalf("read image_key column metadata: %v", err)
+	}
+	if isNullable != "YES" || dataType != "text" {
+		t.Fatalf("image_key is nullable=%s data_type=%s, want nullable=YES text", isNullable, dataType)
+	}
+
+	// A present key is opaque and is preserved exactly: the stored value
+	// round-trips byte-for-byte with no trimming, case folding, normalization,
+	// or truncation. Keys carry realistic frontend values plus opaque
+	// characters (slashes, dots, dashes, uppercase, and non-ASCII) and
+	// significant surrounding whitespace.
+	opaqueKeys := []struct {
+		id  int
+		key string
+	}{
+		{10, "pizza-margherita"},
+		{11, "chicken-breast"},
+		{12, "Opaque/Key_v2.0-2026/08/18.зфыва"},
+		{13, "  keeps-significant-spaces  "},
+	}
+	for _, v := range opaqueKeys {
+		names := fmt.Sprintf(`{"en": "K%d", "pl": "P%d"}`, v.id, v.id)
+		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "solid", v.key); err != nil {
+			t.Fatalf("opaque image key %q insert failed: %v", v.key, err)
+		}
+		var got string
+		if err := conn.QueryRow(ctx, "SELECT image_key FROM food_objects WHERE id = $1", v.id).Scan(&got); err != nil {
+			t.Fatalf("read opaque image key %q: %v", v.key, err)
+		}
+		if got != v.key {
+			t.Fatalf("image_key round-tripped to %q, want %q (an opaque key must be preserved exactly)", got, v.key)
+		}
+	}
+
+	// Empty and spaces-only keys are rejected (btrim trims spaces, matching
+	// the localized-name constraint), so NULL stays the single "absent image"
+	// representation.
+	for _, bad := range []string{"", "   "} {
+		_, err := conn.Exec(ctx, insertFoodObject, 20, `{"en": "Bad", "pl": "Zly"}`, "solid", bad)
+		wantSQLState(t, err, "23514") // check_violation
+	}
+
+	// The production schema stays limited to the ARCH-013 source fields:
+	// food_objects carries exactly the source columns — no derived calories,
+	// Nutritional Similarity, Matched Quantity, page, or rounded display
+	// values — and the public schema holds no derived-value tables.
+	wantColumns := []string{"id", "names", "physical_state", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key"}
+	rows, err := conn.Query(ctx, `SELECT column_name FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'food_objects'
+		ORDER BY ordinal_position`)
+	if err != nil {
+		t.Fatalf("list food_objects columns: %v", err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			t.Fatalf("scan food_objects column: %v", err)
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate food_objects columns: %v", err)
+	}
+	if len(columns) != len(wantColumns) {
+		t.Fatalf("food_objects has %d columns %v, want exactly %v (ARCH-013 source fields only)", len(columns), columns, wantColumns)
+	}
+	for i, want := range wantColumns {
+		if columns[i] != want {
+			t.Fatalf("food_objects column %d is %q, want %q (full set %v)", i, columns[i], want, columns)
+		}
+	}
+
+	wantTables := []string{"food_families", "food_objects", "schema_migrations"}
+	rows, err = conn.Query(ctx, `SELECT table_name FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		ORDER BY table_name`)
+	if err != nil {
+		t.Fatalf("list public tables: %v", err)
+	}
+	defer rows.Close()
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			t.Fatalf("scan public table: %v", err)
+		}
+		tables = append(tables, table)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate public tables: %v", err)
+	}
+	if len(tables) != len(wantTables) {
+		t.Fatalf("public schema has %d tables %v, want exactly %v (no derived-value tables)", len(tables), tables, wantTables)
+	}
+	for i, want := range wantTables {
+		if tables[i] != want {
+			t.Fatalf("public table %d is %q, want %q (full set %v)", i, tables[i], want, tables)
+		}
 	}
 }
