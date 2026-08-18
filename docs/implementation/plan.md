@@ -65,7 +65,7 @@ Phase 1.
 - Add at least nine eligible Substitutes for each designated acceptance input.
 - Add plausible production records needed by later acceptance paths without shaping Macro Profiles around artificial test boundaries.
 - Keep artificial numeric boundary, tie, and failure data in isolated integration fixtures outside the production seed.
-- Keep expected result IDs, similarities, and Matched Quantities with the integration fixtures.
+- Defer expected result IDs, similarities, Matched Quantities, ranking, and paging fixtures until the corresponding production behavior exists in Phase 4.
 - Do not put expected derived values in production tables.
 
 **Requirements that become testable**
