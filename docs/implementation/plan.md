@@ -63,8 +63,9 @@ Phase 1.
 - Use fixed Food Object IDs.
 - Add at least 30 generic Food Objects.
 - Add at least nine eligible Substitutes for each designated acceptance input.
-- Add records for each later boundary and failure scenario.
-- Keep expected result IDs, similarities, and Matched Quantities with the integration fixtures.
+- Add plausible production records needed by later acceptance paths without shaping Macro Profiles around artificial test boundaries.
+- Keep artificial numeric boundary, tie, and failure data in isolated integration fixtures outside the production seed.
+- Defer expected result IDs, similarities, Matched Quantities, ranking, and paging fixtures until the corresponding production behavior exists in Phase 4.
 - Do not put expected derived values in production tables.
 
 **Requirements that become testable**
@@ -158,7 +159,7 @@ Phase 3.
 - Exclude other members of the Substitution Input's Food Family.
 - Sort by full-precision Nutritional Similarity, English name, and stable Food Object ID.
 - Return zero to three unique items.
-- Round values only during response projection.
+- Round only during response projection: Matched Quantity to a whole base unit, scaled macronutrients to 0.1 g, and Macro similarity to a whole percentage.
 - Enforce the 4 KiB request body limit.
 - Return the specified stable errors.
 - Return `PAGE_OUT_OF_RANGE` for an invalid nonzero page.
@@ -178,7 +179,7 @@ Collect page-0 evidence for REQ-032 through REQ-034 and REQ-072. Complete full-p
 
 **Phase gate**
 
-Regenerate and compile both clients. Run `go test ./...` from `backend/`. Use the designated fixtures to verify calories, cosine tolerance, exclusions, order, and ties. Verify full precision, exact-half rounding, zero results, three results, quantity units, and each applicable stable error.
+Regenerate and compile both clients. Run `go test ./...` from `backend/`. Use the designated fixtures to verify calories, cosine tolerance, exclusions, order, and ties. Verify full precision, whole-unit quantity rounding, one-decimal macronutrient rounding, whole-percentage similarity rounding, exact-half behavior at each target precision, zero results, three results, quantity units, and each applicable stable error.
 
 **Review stop**
 

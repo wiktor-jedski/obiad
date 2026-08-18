@@ -384,13 +384,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-039 — Display precision
 
-**Statement:** The system shall round Matched Quantity and each macronutrient to one unit and Macro similarity to one percentage point.
+**Statement:** The system shall round Matched Quantity to a whole gram or millilitre, each macronutrient to 0.1 g, and Macro similarity to one percentage point.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Calculation test: Boundary fixtures show the specified rounded values. |
+| Verification | Integration calculation test: Boundary fixtures show whole-unit Matched Quantity, one-decimal macronutrients, and whole-percentage similarity use the specified precision and round exact halves up. |
 
 ## REQ-040 — Calculation precision
 

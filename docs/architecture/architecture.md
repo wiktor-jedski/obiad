@@ -89,7 +89,7 @@ The default is `1 serving` when the Food Object has a Serving. Otherwise, it is 
 
 **Contract:** One concrete `Run` interface accepts a Substitution Input and a zero-based page index. It returns the requested page index, total eligible count, `hasMore`, and at most three Substitute items.
 
-Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, whole scaled protein, carbohydrate, and fat amounts, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
+Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, scaled protein, carbohydrate, and fat amounts to 0.1 g, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
 
 ## ARCH-006 — PostgreSQL Catalog Loader
 
@@ -330,7 +330,7 @@ Sort by increasing distance, pinned Go collation for the active Interface Langua
 
 For a Macro Profile `(p, c, f)`, derive calories as `4p + 4c + 9f`. Compute Nutritional Similarity as cosine similarity of the input and candidate Macro Profiles. Exclude the input Food Object and every other member of its Food Family. Sort by decreasing unrounded similarity, pinned English-name collation, and stable Food Object ID.
 
-Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. Compute each selected candidate Matched Quantity at equal derived calories. Scale protein, carbohydrate, and fat to the unrounded Matched Quantity. Round Matched Quantity, scaled macronutrients, and `100 × similarity` to whole display values. Exact halves round up. A positive value can display as zero.
+Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. Compute each selected candidate Matched Quantity at equal derived calories. Scale protein, carbohydrate, and fat to the unrounded Matched Quantity. Round Matched Quantity to a whole base unit, scaled macronutrients to 0.1 g, and `100 × similarity` to a whole percentage. Exact halves round up at each target precision. A positive value can display as zero.
 
 **Quality constraints:** Use `float64` through ranking and calculation. Do not round before response projection. Food Quantity and Interface Language changes do not change eligible IDs, order, or page for an unchanged catalog.
 
@@ -366,7 +366,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 
 **Behavior:** Tailwind renders one primary content column. The empty state centers the search control. The result state places it near the top and cards below it. The layout uses one card column from 320 px through 1023 px and three columns from 1024 px. Content does not overflow the viewport.
 
-The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, whole scaled macronutrients, and whole similarity percentage.
+The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage.
 
 After new-search success, focus remains in the search field. After intermediate MORE! success, focus remains on MORE!. After final-page success, focus moves to the results heading. A screen-reader status region receives the localized result count or result state.
 
