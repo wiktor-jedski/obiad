@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,18 +34,19 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, AddSource: false}))
+	if err := run(logger); err != nil {
 		log.Fatalf("server: %v", err)
 	}
 }
 
-func run() error {
+func run(logger *slog.Logger) error {
 	url := os.Getenv("OBIAD_RUNTIME_DATABASE_URL")
 	if url == "" {
 		return errors.New("OBIAD_RUNTIME_DATABASE_URL is not set")
 	}
 
-	app, pool, err := server.Compose(url)
+	app, pool, err := server.Compose(url, logger)
 	if err != nil {
 		return fmt.Errorf("compose server: %w", err)
 	}

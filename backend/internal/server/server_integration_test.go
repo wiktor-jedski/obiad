@@ -33,8 +33,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log/slog"
 
 	"obiad/backend/internal/testdb"
 )
@@ -107,13 +109,30 @@ func newSetupDB(t *testing.T) *testdb.DB {
 
 // startServer composes the real Fiber application over the runtime pool and
 // starts an actual loopback listener on 127.0.0.1:0 (ISSUE-004 test
-// composition). It returns the server base URL and the pool. The listener is
-// closed and the pool released when the test finishes.
+// composition), discarding request logs. It returns the server base URL and
+// the pool. The listener is closed and the pool released when the test
+// finishes. Tests that must observe the structured request logs use
+// startServerWithLogger instead.
 func startServer(t *testing.T, runtimeURL string) (baseURL string, pool *pgxpool.Pool) {
 	t.Helper()
-	app, pool, err := Compose(runtimeURL)
+	return startServerWithLogger(t, runtimeURL, slog.New(slog.DiscardHandler))
+}
+
+// startServerWithLogger composes the real Fiber application over the runtime
+// pool with the given request-log logger and starts an actual loopback
+// listener on 127.0.0.1:0 (ISSUE-004 test composition). Optional register
+// functions may add routes to the application before the listener starts
+// (used to force unexpected handler errors deterministically). It returns the
+// server base URL and the pool. The listener is closed and the pool released
+// when the test finishes.
+func startServerWithLogger(t *testing.T, runtimeURL string, logger *slog.Logger, register ...func(*fiber.App)) (baseURL string, pool *pgxpool.Pool) {
+	t.Helper()
+	app, pool, err := Compose(runtimeURL, logger)
 	if err != nil {
 		t.Fatalf("compose server: %v", err)
+	}
+	for _, fn := range register {
+		fn(app)
 	}
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
