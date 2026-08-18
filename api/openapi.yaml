@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: Obiad HTTP API
+  version: 1.0.0
+  description: >
+    Obiad helps people find nutritionally similar food substitutions. This
+    document is the authoritative browser-to-backend protocol (ARCH-008). It
+    generates the Go transport models and the TypeScript HTTP client and types
+    (ISSUE-004). Generated transport values never enter the operation Modules;
+    the Fiber Adapter maps them only at the HTTP boundary.
+paths:
+  /api/v1/food-suggestions:
+    get:
+      operationId: getFoodSuggestions
+      summary: Suggest Food Objects
+      description: >
+        Return exactly five distinct Food Object suggestions for a Search
+        Query. The backend compares the normalized Search Query against the
+        Food Object names of the active Interface Language, orders by raw
+        code-point Levenshtein distance, active-language collation, and stable
+        Food Object ID, and derives the default Food Quantity for every item.
+        The response envelope contains exactly five items and no unknown
+        fields.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: >
+            The Search Query text. The backend validates UTF-8 and normalizes
+            the query (NFC, trimmed and collapsed Unicode whitespace, Unicode
+            lowercase) before comparison. A missing or duplicate `query`
+            parameter returns `400 INVALID_REQUEST` with `field` `query`;
+            malformed query encoding returns `400 INVALID_REQUEST` without a
+            `field`; a normalized-empty or invalid-UTF-8 Search Query returns
+            `422 INVALID_SEARCH_QUERY` with `field` `query`; a normalized
+            Search Query longer than 128 Unicode code points returns `422
+            QUERY_TOO_LONG` with `field` `query`.
+          schema:
+            type: string
+        - name: language
+          in: query
+          required: true
+          description: >
+            The Interface Language used for name comparison. Only the exact
+            values `en` and `pl` are accepted. Any other value, including
+            invalid UTF-8, returns `422 UNSUPPORTED_LANGUAGE` with `field`
+            `language`. A missing or duplicate `language` parameter returns
+            `400 INVALID_REQUEST` with `field` `language`.
+          schema:
+            type: string
+            enum:
+              - en
+              - pl
+      responses:
+        "200":
+          description: >
+            Exactly five distinct Food Object suggestions ordered by raw
+            Levenshtein distance, active-language collation, and stable Food
+            Object ID. The response envelope has exactly five items and no
+            unknown fields; every item carries the stable positive Food Object
+            ID, both required localized names, and the backend-derived default
+            Food Quantity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodSuggestionsResponse"
+        "400":
+          description: >
+            The request is malformed: a required parameter is missing or
+            duplicated (`field` is `query` or `language`) or the query string
+            encoding is malformed (`field` is absent). The response is the
+            stable Error schema and never exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            The Search Query or Interface Language is invalid: a
+            normalized-empty or invalid-UTF-8 Search Query returns
+            `INVALID_SEARCH_QUERY` with `field` `query`; a normalized Search
+            Query longer than 128 Unicode code points returns `QUERY_TOO_LONG`
+            with `field` `query`; any `language` other than exact `en` or `pl`,
+            including invalid UTF-8, returns `UNSUPPORTED_LANGUAGE` with
+            `field` `language`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            The Food Catalog is unavailable. The response has the stable `code`
+            `CATALOG_UNAVAILABLE` and no `field`, and never exposes an internal
+            cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "504":
+          description: >
+            The request deadline expired. The response has the stable `code`
+            `SEARCH_TIMEOUT` and no `field`, and never exposes an internal
+            cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: >
+            A catalog-invariant or unexpected server failure. The response has
+            the stable `code` `INTERNAL_ERROR` and no `field`, and never
+            exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    FoodSuggestionsResponse:
+      description: >
+        The successful suggestion response: an envelope with exactly five
+        distinct Food Object suggestions and no unknown fields.
+      type: object
+      required:
+        - items
+      additionalProperties: false
+      properties:
+        items:
+          description: Exactly five distinct Food Object suggestions.
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/FoodSuggestion"
+    FoodSuggestion:
+      description: >
+        One suggested Food Object with its stable ID, both localized names, and
+        the backend-derived default Food Quantity.
+      type: object
+      required:
+        - foodObjectId
+        - names
+        - defaultQuantity
+      additionalProperties: false
+      properties:
+        foodObjectId:
+          description: The stable opaque Food Object ID. Positive 32-bit integer.
+          type: integer
+          format: int32
+          minimum: 1
+        names:
+          $ref: "#/components/schemas/LocalizedNames"
+        defaultQuantity:
+          $ref: "#/components/schemas/FoodQuantity"
+    LocalizedNames:
+      description: >
+        The localized Food Object names carried by the transport. Both the
+        nonempty English name and the nonempty Polish name are required.
+      type: object
+      required:
+        - en
+        - pl
+      additionalProperties: false
+      properties:
+        en:
+          description: The nonempty English localized name.
+          type: string
+          minLength: 1
+        pl:
+          description: The nonempty Polish localized name.
+          type: string
+          minLength: 1
+    FoodQuantity:
+      description: >
+        An amount of a Food Object. The backend derives the default Food
+        Quantity from the Food Object: `1 serving` when the Food Object has a
+        Serving, otherwise its Nutrition Basis (`100 g` for a solid and
+        `100 ml` for a liquid). The backend emits only `1 serving`, `100 g`, or
+        `100 ml`.
+      type: object
+      required:
+        - value
+        - unit
+      additionalProperties: false
+      properties:
+        value:
+          description: The numeric amount. The backend emits only 1 or 100.
+          type: number
+          format: double
+          minimum: 1
+        unit:
+          description: "The Food Quantity unit: `serving`, `g`, or `ml`."
+          type: string
+          enum:
+            - serving
+            - g
+            - ml
+    Error:
+      description: >
+        A stable error response. The `code` is always present and stable; the
+        optional `field` is present only for client-parameter errors and is
+        limited to `query` or `language`. The response never contains localized
+        prose, SQL text, a stack trace, or an internal cause, and has no
+        unknown fields.
+      type: object
+      required:
+        - code
+      additionalProperties: false
+      properties:
+        code:
+          description: >
+            The stable error code. `INVALID_REQUEST` for a missing or
+            duplicated parameter or malformed query encoding; `INVALID_SEARCH_QUERY`
+            for a normalized-empty or invalid-UTF-8 Search Query;
+            `QUERY_TOO_LONG` for a normalized Search Query over 128 Unicode
+            code points; `UNSUPPORTED_LANGUAGE` for a `language` other than
+            exact `en` or `pl`; `CATALOG_UNAVAILABLE` for a storage failure;
+            `SEARCH_TIMEOUT` for deadline expiry; `INTERNAL_ERROR` for
+            catalog-invariant and unexpected failures.
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - INVALID_SEARCH_QUERY
+            - QUERY_TOO_LONG
+            - UNSUPPORTED_LANGUAGE
+            - CATALOG_UNAVAILABLE
+            - SEARCH_TIMEOUT
+            - INTERNAL_ERROR
+        field:
+          description: >
+            The offending request parameter when the failure is a
+            client-parameter error. Only `query` and `language` are permitted;
+            server failures omit this field.
+          type: string
+          enum:
+            - query
+            - language
