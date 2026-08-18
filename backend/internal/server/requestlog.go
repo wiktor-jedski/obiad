@@ -7,12 +7,12 @@
 // sanitized against log injection (ARCH-019, golang-security logging
 // guidance).
 //
-// The request-log middleware emits the record for every request that
-// traverses the middleware chain with a known outcome. A request whose
-// request line fasthttp could not parse (malformed query encoding) cannot
-// traverse the chain with a written response: the app error handler answers
-// and logs it instead (errorHandler). The two paths coordinate through
-// requestLogEmittedKey so exactly one record is emitted per request.
+// The request-log middleware emits the record for requests whose handler
+// chain completes without an error. Every error outcome — router-level
+// not-found or method-not-allowed, requests whose request line fasthttp could
+// not parse (malformed query encoding), and unexpected handler failures — is
+// answered and logged by the app error handler (errorHandler), so exactly one
+// record is emitted per request.
 
 package server
 
@@ -28,6 +28,8 @@ import (
 	"unicode"
 
 	"github.com/gofiber/fiber/v3"
+
+	"obiad/backend/internal/transport"
 )
 
 // Request-log context keys. Handlers store the stable error code and the
@@ -40,10 +42,6 @@ const (
 	// requestLogCauseKey holds the sanitized internal cause of a failed
 	// request. It never appears in a response (ARCH-008).
 	requestLogCauseKey = "obiad.request.error_cause"
-	// requestLogEmittedKey marks that the request-log middleware already
-	// emitted the record, so the app error handler does not emit a second
-	// record for the same request.
-	requestLogEmittedKey = "obiad.request.log_emitted"
 )
 
 // requestIDCounter is the fallback source of request IDs when crypto/rand is
@@ -81,17 +79,6 @@ func sanitizeLogText(s string) string {
 	return b.String()
 }
 
-// statusFromError derives the HTTP status of an error returned from the
-// middleware chain: a *fiber.Error carries its status code; any other error
-// is an unexpected internal failure.
-func statusFromError(err error) int {
-	var fiberErr *fiber.Error
-	if errors.As(err, &fiberErr) && fiberErr != nil {
-		return fiberErr.Code
-	}
-	return fiber.StatusInternalServerError
-}
-
 // routeTemplate returns the registered route template of the matched route
 // for the request log (ARCH-019): static patterns log the pattern itself
 // ("/api/v1/food-suggestions"), and parameterized patterns would log their
@@ -124,65 +111,75 @@ func logRequest(logger *slog.Logger, requestID, method, route string, status int
 }
 
 // requestLogger returns the Fiber middleware that emits one structured log
-// record per request (ARCH-019): request ID, method, route template, status,
-// duration, stable error code, and internal cause, with query text,
-// quantities, request bodies, SQL parameters, credentials, and stack details
-// excluded.
+// record per successful request (ARCH-019): request ID, method, route
+// template, status, duration, stable error code, and internal cause, with
+// query text, quantities, request bodies, SQL parameters, credentials, and
+// stack details excluded.
 //
-// The middleware logs after the handler chain has determined the outcome.
-// When the chain returns an error (not found, method not allowed, or an
-// unexpected handler failure), the status is derived from the error because
-// the app error handler writes the response afterwards. When the chain
-// returns no error but never matched a route, the request could not be
-// parsed by fasthttp (malformed query encoding): no handler wrote a
-// response, the fasthttp response still carries its implicit default status,
-// and the app error handler answers and logs the request. The middleware
-// defers to it so no placeholder record is emitted.
+// The middleware logs only outcomes the handler chain fully determines
+// without an error: a handler either wrote the response (success) or the
+// chain returned no error but never matched a route (the fasthttp error
+// path). Every error outcome — router-level not-found or method-not-allowed,
+// malformed request lines, and unexpected handler failures — is deferred to
+// the app error handler (errorHandler), which owns the record and the stable
+// response for those requests, so exactly one record is emitted per request.
 func requestLogger(logger *slog.Logger) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		start := time.Now()
 		requestID := newRequestID()
 		err := c.Next()
-		status := c.Response().StatusCode()
 		if err != nil {
-			status = statusFromError(err)
-		} else if !c.Matched() {
-			// The response is still pending: the app error handler (malformed
-			// request path) owns the record for this request.
+			// The app error handler answers and logs this request (router
+			// 404/405, unexpected handler failure).
+			return err
+		}
+		if !c.Matched() {
+			// No handler wrote a response: the request line could not be
+			// parsed by fasthttp (malformed query encoding), and the app
+			// error handler answers and logs the request.
 			return nil
 		}
 		code, _ := c.Locals(requestLogCodeKey).(string)
 		cause, _ := c.Locals(requestLogCauseKey).(string)
-		c.Locals(requestLogEmittedKey, true)
-		logRequest(logger, requestID, c.Method(), routeTemplate(c), status, time.Since(start), code, cause)
-		return err
+		logRequest(logger, requestID, c.Method(), routeTemplate(c), c.Response().StatusCode(), time.Since(start), code, cause)
+		return nil
 	}
 }
 
-// errorHandler is the app-level error handler. Two kinds of errors reach it:
+// errorHandler is the app-level error handler. It answers and logs every
+// request whose outcome the middleware could not determine, so exactly one
+// record is emitted per request:
 //
-//   - malformed requests whose request line fasthttp could not parse (the
-//     only 400 errors that reach the app error handler, because the
-//     application handlers map every failure themselves). Those are answered
-//     with the stable 400 INVALID_REQUEST JSON error without a field
-//     (ISSUE-004) and are logged here because the request-log middleware
-//     could not observe their outcome;
-//   - router-level errors (not found, method not allowed) and unexpected
-//     handler errors, which the request-log middleware already logged and
-//     which keep the Fiber default behavior.
+//   - malformed requests whose request line fasthttp could not parse (a
+//     control byte in the request-target) are answered with the stable
+//     400 INVALID_REQUEST JSON error without a field (ISSUE-004);
+//   - router-level not-found (404) and method-not-allowed (405) errors keep
+//     the Fiber default behavior and have no stable error code;
+//   - every other error — an unexpected handler failure — is answered with
+//     the exact stable 500 {"code":"INTERNAL_ERROR"} response with no field
+//     and no internal cause; the sanitized internal cause appears only in
+//     the request log (ARCH-008, golang-security: log details server-side,
+//     return generic messages).
 func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
-		if _, emitted := c.Locals(requestLogEmittedKey).(bool); !emitted {
-			start := time.Now()
-			code := ""
-			if fiberErr, ok := err.(*fiber.Error); ok && fiberErr != nil && fiberErr.Code == fiber.StatusBadRequest {
-				code = codeInvalidRequest
-			}
-			logRequest(logger, newRequestID(), c.Method(), "", statusFromError(err), time.Since(start), code, sanitizeLogText(err.Error()))
+		start := time.Now()
+		requestID := newRequestID()
+		route := ""
+		if c.Matched() {
+			route = c.Route().Path
 		}
-		if fiberErr, ok := err.(*fiber.Error); ok && fiberErr != nil && fiberErr.Code == fiber.StatusBadRequest {
+		var fiberErr *fiber.Error
+		matched := errors.As(err, &fiberErr)
+		switch {
+		case matched && fiberErr != nil && fiberErr.Code == fiber.StatusBadRequest:
+			logRequest(logger, requestID, c.Method(), route, fiber.StatusBadRequest, time.Since(start), codeInvalidRequest, sanitizeLogText(err.Error()))
 			return c.Status(fiber.StatusBadRequest).JSON(transportError(codeInvalidRequest, nil))
+		case matched && fiberErr != nil && (fiberErr.Code == fiber.StatusNotFound || fiberErr.Code == fiber.StatusMethodNotAllowed):
+			logRequest(logger, requestID, c.Method(), route, fiberErr.Code, time.Since(start), "", sanitizeLogText(err.Error()))
+			return fiber.DefaultErrorHandler(c, err)
+		default:
+			logRequest(logger, requestID, c.Method(), route, fiber.StatusInternalServerError, time.Since(start), string(transport.INTERNALERROR), sanitizeLogText(err.Error()))
+			return c.Status(fiber.StatusInternalServerError).JSON(transportError(transport.INTERNALERROR, nil))
 		}
-		return fiber.DefaultErrorHandler(c, err)
 	}
 }

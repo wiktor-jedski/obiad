@@ -56,11 +56,13 @@ func suggestionsHandler(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		params, field, err := readSuggestionParams(c)
 		if err != nil {
-			// Missing or duplicated required parameter: 400 INVALID_REQUEST
-			// with the offending field (ISSUE-004). Malformed query encoding
-			// never reaches this handler: fasthttp cannot parse such a
-			// request line, so the app error handler answers 400
-			// INVALID_REQUEST without a field.
+			// Malformed query encoding (an invalid or incomplete percent
+			// escape) returns 400 INVALID_REQUEST without a field; a missing
+			// or duplicated required parameter returns 400 INVALID_REQUEST
+			// with the offending field (ISSUE-004). Requests whose request
+			// line fasthttp itself cannot parse (for example a control byte
+			// in the request-target) never reach this handler: the app error
+			// handler answers 400 INVALID_REQUEST without a field.
 			return writeSuggestionError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err)
 		}
 
@@ -102,13 +104,25 @@ func suggestionsHandler(pool *pgxpool.Pool) fiber.Handler {
 
 // readSuggestionParams reads the generated transport query values from the
 // raw query string at the HTTP boundary (ARCH-008) and enforces the
-// ISSUE-004 parameter contract: exactly one query parameter and exactly one
-// language parameter must be present. A missing or duplicated parameter is
-// rejected with the offending field. Presence and cardinality are checked on
-// the raw fasthttp query arguments so a present-but-empty value ("?query=")
-// is not mistaken for a missing parameter: it reaches the Module and fails
+// ISSUE-004 parameter contract: the raw query encoding must be well-formed,
+// and exactly one query parameter and exactly one language parameter must be
+// present. A malformed encoding (an invalid or incomplete percent escape
+// such as %ZZ or %0) is rejected with 400 INVALID_REQUEST without a field
+// before any decoding; a missing or duplicated parameter is rejected with
+// the offending field. Presence and cardinality are checked on the raw
+// fasthttp query arguments so a present-but-empty value ("?query=") is not
+// mistaken for a missing parameter: it reaches the Module and fails
 // normalization as INVALID_SEARCH_QUERY, exactly as ISSUE-004 resolves.
 func readSuggestionParams(c fiber.Ctx) (params transport.GetFoodSuggestionsParams, field *transport.ErrorField, err error) {
+	// fasthttp's query decoder is permissive: it keeps an invalid escape
+	// (e.g. %ZZ) or an incomplete one (e.g. %0, a trailing %) as literal
+	// text, so the raw encoding must be validated before any decoding,
+	// otherwise malformed query encoding would reach the Module as ordinary
+	// query text. The raw query string is exactly the bytes after '?' in the
+	// request-target, untouched by decoding.
+	if err := validateQueryEncoding(c.RequestCtx().URI().QueryString()); err != nil {
+		return params, nil, err
+	}
 	args := c.RequestCtx().QueryArgs()
 	for _, name := range []transport.ErrorField{transport.Query, transport.Language} {
 		key := string(name)
@@ -122,6 +136,33 @@ func readSuggestionParams(c fiber.Ctx) (params transport.GetFoodSuggestionsParam
 	params.Query = string(args.Peek("query"))
 	params.Language = transport.GetFoodSuggestionsParamsLanguage(args.Peek("language"))
 	return params, nil, nil
+}
+
+// validateQueryEncoding rejects every invalid or incomplete percent escape in
+// a raw query string. A valid escape is '%' followed by exactly two
+// hexadecimal digits; anything else — a '%' at the end, a '%' followed by one
+// character, or a '%' followed by a non-hexadecimal digit ('%ZZ', '%0G') —
+// makes the query encoding malformed. The error describes the byte offset
+// only, so the internal cause never echoes query text into the log.
+func validateQueryEncoding(raw []byte) error {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '%' {
+			continue
+		}
+		if i+2 >= len(raw) {
+			return fmt.Errorf("incomplete percent escape at query byte offset %d", i)
+		}
+		if !isHexDigit(raw[i+1]) || !isHexDigit(raw[i+2]) {
+			return fmt.Errorf("invalid percent escape at query byte offset %d", i)
+		}
+		i += 2
+	}
+	return nil
+}
+
+// isHexDigit reports whether b is an ASCII hexadecimal digit.
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
 // suggestionRunError maps one Suggest Module failure to the

@@ -25,6 +25,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -36,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 
 	"obiad/backend/internal/transport"
@@ -347,8 +349,77 @@ func TestFoodSuggestionValidationHTTPIntegration(t *testing.T) {
 		"Host: " + base.Host + "\r\n" +
 		"Connection: close\r\n" +
 		"\r\n"
-	rawStatus, rawContentType, rawBody := rawRequest(t, base.Host, raw)
-	assertError(t, httpResult{status: rawStatus, body: rawBody, contentType: rawContentType}, http.StatusBadRequest, "INVALID_REQUEST", "")
+	status, contentType, body := rawRequest(t, base.Host, raw)
+	assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusBadRequest, "INVALID_REQUEST", "")
+
+	// Malformed percent escapes in the raw query encoding: fasthttp's query
+	// decoder keeps an invalid escape (e.g. %ZZ) or an incomplete one (e.g.
+	// %0, a trailing %) as literal text, so the adapter validates the raw
+	// query bytes itself before any decoding and rejects every malformed
+	// escape with 400 INVALID_REQUEST without a field (ISSUE-004). net/http
+	// refuses to send invalid escapes, so these fixtures go over raw TCP.
+	malformedQuery := []string{
+		"query=%ZZ&language=en", // invalid hexadecimal digits in query
+		"query=%0G&language=en", // invalid second hex digit in query
+		"query=%&language=en",   // trailing percent in query
+		"query=%0&language=en",  // incomplete escape in query
+		"query=a&language=%ZZ",  // invalid hexadecimal digits in language
+		"query=a&language=%G0",  // invalid first hex digit in language
+		"query=a&language=%",    // trailing percent in language
+		"query=a&language=%0",   // incomplete escape in language
+	}
+	for _, queryString := range malformedQuery {
+		raw := "GET /api/v1/food-suggestions?" + queryString + " HTTP/1.1\r\n" +
+			"Host: " + base.Host + "\r\n" +
+			"Connection: close\r\n" +
+			"\r\n"
+		status, contentType, body := rawRequest(t, base.Host, raw)
+		assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusBadRequest, "INVALID_REQUEST", "")
+	}
+
+	// Malformed query encoding is rejected before any PostgreSQL access: on a
+	// fresh disposable database whose catalog SELECT is blocked by an owner
+	// ACCESS EXCLUSIVE lock (any real pgx read would stall until the 450 ms
+	// deadline), the malformed request still returns the exact 400 response
+	// promptly. A control request against the same locked server blocks until
+	// the deadline and returns SEARCH_TIMEOUT, proving the lock is effective
+	// and therefore that the malformed request really bypassed PostgreSQL.
+	lockedDB := newSetupDB(t)
+	lockedBaseURL, _ := startServer(t, lockedDB.RuntimeURL)
+	lockedOwner := connect(t, lockedDB.OwnerURL)
+	if _, err := lockedOwner.Exec(context.Background(), "BEGIN"); err != nil {
+		t.Fatalf("begin lock transaction: %v", err)
+	}
+	if _, err := lockedOwner.Exec(context.Background(), "LOCK TABLE food_objects IN ACCESS EXCLUSIVE MODE"); err != nil {
+		t.Fatalf("lock food_objects in ACCESS EXCLUSIVE MODE: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = lockedOwner.Exec(context.Background(), "ROLLBACK")
+	})
+	lockedBase, err := url.Parse(lockedBaseURL)
+	if err != nil {
+		t.Fatalf("parse locked server base URL %q: %v", lockedBaseURL, err)
+	}
+	start := time.Now()
+	raw = "GET /api/v1/food-suggestions?query=%ZZ&language=en HTTP/1.1\r\n" +
+		"Host: " + lockedBase.Host + "\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	status, contentType, body = rawRequest(t, lockedBase.Host, raw)
+	assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusBadRequest, "INVALID_REQUEST", "")
+	if elapsed := time.Since(start); elapsed >= 200*time.Millisecond {
+		t.Fatalf("malformed request took %v with the catalog locked, want well under the 450 ms deadline: malformed encoding must be rejected before any pgx attempt (a catalog query would block until the deadline)", elapsed)
+	}
+	// Control: with the same lock held, a valid request reaches pgx, blocks,
+	// and returns SEARCH_TIMEOUT at the 450 ms deadline.
+	control := getSuggestionsResult(lockedBaseURL, "pizza", "en")
+	if control.err != nil {
+		t.Fatalf("locked control request: %v", control.err)
+	}
+	assertError(t, httpResult{status: control.status, body: control.body, contentType: control.contentType}, http.StatusGatewayTimeout, "SEARCH_TIMEOUT", "")
+	if control.elapsed < 350*time.Millisecond || control.elapsed > 900*time.Millisecond {
+		t.Fatalf("locked control request returned after %v, want about 450 ms (the lock must block catalog reads for the no-pgx proof to be meaningful)", control.elapsed)
+	}
 
 	// Normalized-empty Search Queries: present-but-empty, ASCII-whitespace-only,
 	// and Unicode-whitespace-only (U+00A0, U+3000) all normalize to empty and
@@ -704,4 +775,68 @@ func TestSuggestionRequestLogIntegration(t *testing.T) {
 	// The malformed request never matched a route: its record has no route
 	// template, status 400, and the stable INVALID_REQUEST code.
 	assertRequestLog(t, records[5], http.StatusBadRequest, "INVALID_REQUEST", "", "", forbidden)
+}
+
+// TestUnexpectedHandlerErrorHTTPIntegration verifies that an unexpected
+// handler failure — one that is neither a router-level error nor a handled
+// suggestion failure — is answered with the exact stable
+// 500 {"code":"INTERNAL_ERROR"} response, with no field and no internal
+// cause, while the sanitized internal cause appears only in the request log
+// (ARCH-008, ISSUE-004, P03-G9). The failing routes are registered on the
+// real composed application before the loopback listener starts, so the
+// unexpected errors travel the exact production error path through Fiber.
+func TestUnexpectedHandlerErrorHTTPIntegration(t *testing.T) {
+	db := newSetupDB(t)
+	var logs logBuffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo, AddSource: false}))
+	baseURL, _ := startServerWithLogger(t, db.RuntimeURL, logger, func(app *fiber.App) {
+		app.Get("/force-unexpected-error", func(c fiber.Ctx) error {
+			return errors.New("forced unexpected handler failure")
+		})
+		app.Get("/force-unexpected-fiber-error", func(c fiber.Ctx) error {
+			return fiber.NewError(fiber.StatusTeapot, "forced teapot failure")
+		})
+	})
+
+	cases := []struct {
+		path  string
+		cause string
+	}{
+		{"/force-unexpected-error", "forced unexpected handler failure"},
+		{"/force-unexpected-fiber-error", "forced teapot failure"},
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	for _, tc := range cases {
+		resp, err := client.Get(baseURL + tc.path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", tc.path, err)
+		}
+		rawBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatalf("read %s body: %v", tc.path, err)
+		}
+		// Exact stable INTERNAL_ERROR response, no field, and no internal
+		// cause: the response must not echo the forced failure text.
+		assertError(t, httpResult{status: resp.StatusCode, body: string(rawBody), contentType: resp.Header.Get("Content-Type")}, http.StatusInternalServerError, "INTERNAL_ERROR", "")
+		if strings.Contains(string(rawBody), "forced") {
+			t.Fatalf("unexpected-failure response %q leaks the internal cause", rawBody)
+		}
+	}
+
+	// Exactly one log record per request, with the stable code and the
+	// sanitized internal cause server-side, the matched route template, and
+	// no query, SQL, credential, or stack content.
+	lines := logs.snapshot()
+	if len(lines) != 2 {
+		t.Fatalf("captured %d log records, want exactly 2 (one per forced failure): %q", len(lines), lines)
+	}
+	forbidden := []string{"food_objects", "password", "goroutine", ".go:", "INSERT", "UPDATE"}
+	for i, line := range lines {
+		var record logRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("log line %q is not one JSON record: %v", line, err)
+		}
+		assertRequestLog(t, record, http.StatusInternalServerError, "INTERNAL_ERROR", cases[i].cause, cases[i].path, forbidden)
+	}
 }
