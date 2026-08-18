@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -68,7 +69,11 @@ func getSuggestionsURL(t *testing.T, baseURL, rawPath string) httpResult {
 	if err != nil {
 		t.Fatalf("GET %s: %v", rawPath, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close %s response body: %v", rawPath, err)
+		}
+	}()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read %s body: %v", rawPath, err)
@@ -143,7 +148,11 @@ func rawRequest(t *testing.T, addr, raw string) (status int, contentType string,
 	if err != nil {
 		t.Fatalf("dial %s: %v", addr, err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Errorf("close raw request connection: %v", err)
+		}
+	}()
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		t.Fatalf("set connection deadline: %v", err)
 	}
@@ -178,10 +187,13 @@ func getSuggestionsResult(addr, query, language string) suggestionResult {
 	if err != nil {
 		return suggestionResult{err: err}
 	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return suggestionResult{err: err}
+	raw, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return suggestionResult{err: readErr}
+	}
+	if closeErr != nil {
+		return suggestionResult{err: fmt.Errorf("close response body: %w", closeErr)}
 	}
 	return suggestionResult{
 		status:      resp.StatusCode,
@@ -811,10 +823,13 @@ func TestUnexpectedHandlerErrorHTTPIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s: %v", tc.path, err)
 		}
-		rawBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			t.Fatalf("read %s body: %v", tc.path, err)
+		rawBody, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			t.Fatalf("read %s body: %v", tc.path, readErr)
+		}
+		if closeErr != nil {
+			t.Fatalf("close %s response body: %v", tc.path, closeErr)
 		}
 		// Exact stable INTERNAL_ERROR response, no field, and no internal
 		// cause: the response must not echo the forced failure text.

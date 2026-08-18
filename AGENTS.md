@@ -18,11 +18,20 @@ Installed development tooling:
 
 - `golang-security` agent skill: use for backend security-sensitive work, especially authentication, authorization, OAuth, cookies, PII handling, and dependency review.
 
+For all backend Go work, change into `backend/` before invoking Go or editor tooling; do not run these commands from the repository root. Neovim's Go extra uses the Mason-installed `gopls`, `golangci-lint`, `goimports`, and `gofumpt` binaries under `$HOME/.local/share/nvim/mason/bin/`. Before finishing a Go change, use those same tools from `backend/`:
+
+- Materialize the intentionally uncommitted generated transport models before diagnostics, and regenerate them after changing `api/openapi.yaml` or generator configuration: `go generate ./...`.
+- Format every changed Go file, in Neovim's order: `$HOME/.local/share/nvim/mason/bin/goimports -w <changed .go files> && $HOME/.local/share/nvim/mason/bin/gofumpt -w <changed .go files>`.
+- Run command-line LSP diagnostics on every changed Go file: `$HOME/.local/share/nvim/mason/bin/gopls check <changed .go files>`.
+- Run Neovim's Go linter across the module: `$HOME/.local/share/nvim/mason/bin/golangci-lint run ./...`. Its enabled linters include `staticcheck`, matching Neovim's `gopls.staticcheck = true`; the `gopls check` CLI does not accept that LSP setting as a flag.
+
+Treat diagnostics from these commands as required fixes. Use the explicit Mason paths because agent shells may not inherit Neovim's `PATH`.
+
 ## Coding Style & Naming Conventions
 
 Keep Markdown filenames descriptive and consistent with existing prefixes.
 
-For frontend work, follow `docs/requirements/style.md`: Svelte components in `frontend/src/lib/components/`, Tailwind utilities, Inter for UI text, Roboto Mono for labels/data, and WCAG AA contrast. For backend Go, use `gofmt` and lower-case package names.
+For frontend work, follow `docs/requirements/style.md`: Svelte components in `frontend/src/lib/components/`, Tailwind utilities, Inter for UI text, Roboto Mono for labels/data, and WCAG AA contrast. For backend Go, use `goimports` followed by `gofumpt`, and use lower-case package names.
 
 For backend, follow the official Go Doc comments guidelines.
 Keep backend repository persistence SQL under the colocated `backend/internal/repository/sql/` directory and embed it from Go. Do not place SQL statement strings inline in repository Go files.

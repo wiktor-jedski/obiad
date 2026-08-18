@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,7 +37,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"log/slog"
 
 	"obiad/backend/internal/testdb"
 )
@@ -80,7 +80,11 @@ func connect(t *testing.T, dbURL string) *pgx.Conn {
 	if err != nil {
 		t.Fatalf("connect to %s: %v", redactedURL(dbURL), err)
 	}
-	t.Cleanup(func() { conn.Close(context.Background()) })
+	t.Cleanup(func() {
+		if err := conn.Close(context.Background()); err != nil {
+			t.Errorf("close database connection: %v", err)
+		}
+	})
 	return conn
 }
 
@@ -167,7 +171,11 @@ func getHealth(t *testing.T, baseURL string) (status int, body string, contentTy
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close /health response body: %v", err)
+		}
+	}()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read /health body: %v", err)
@@ -236,10 +244,10 @@ func isSQLIdentifier(s string) bool {
 		lower := r >= 'a' && r <= 'z'
 		digit := r >= '0' && r <= '9'
 		underscore := r == '_'
-		if i == 0 && !(lower || underscore) {
+		if i == 0 && !lower && !underscore {
 			return false
 		}
-		if !(lower || digit || underscore) {
+		if !lower && !digit && !underscore {
 			return false
 		}
 	}

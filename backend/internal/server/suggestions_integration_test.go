@@ -42,7 +42,11 @@ func getSuggestions(t *testing.T, baseURL string, query string, language string)
 	if err != nil {
 		t.Fatalf("GET /api/v1/food-suggestions?query=%q&language=%q: %v", query, language, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close food-suggestions response body: %v", err)
+		}
+	}()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read food-suggestions body: %v", err)

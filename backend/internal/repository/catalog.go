@@ -201,11 +201,11 @@ func loadCatalogSelect() (string, error) {
 // every ARCH-013 catalog invariant.
 func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (foodObject, error) {
 	if id <= 0 {
-		return foodObject{}, fmt.Errorf("Food Object %d: ID must be positive", id)
+		return foodObject{}, fmt.Errorf("food object %d: ID must be positive", id)
 	}
 	names, err := decodeNames(namesJSON)
 	if err != nil {
-		return foodObject{}, fmt.Errorf("Food Object %d: %w", id, err)
+		return foodObject{}, fmt.Errorf("food object %d: %w", id, err)
 	}
 	var stateValue physicalState
 	switch physicalState(state) {
@@ -214,19 +214,19 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	case stateLiquid:
 		stateValue = stateLiquid
 	default:
-		return foodObject{}, fmt.Errorf("Food Object %d: Physical State %q must be %q or %q", id, state, stateSolid, stateLiquid)
+		return foodObject{}, fmt.Errorf("food object %d: Physical State %q must be %q or %q", id, state, stateSolid, stateLiquid)
 	}
 	if err := validateMacroProfile(id, protein, carbohydrate, fat); err != nil {
 		return foodObject{}, err
 	}
 	if serving != nil && !isPositiveFinite(*serving) {
-		return foodObject{}, fmt.Errorf("Food Object %d: Serving must be a positive finite number when present", id)
+		return foodObject{}, fmt.Errorf("food object %d: Serving must be a positive finite number when present", id)
 	}
 	if family != nil && *family <= 0 {
-		return foodObject{}, fmt.Errorf("Food Object %d: Food Family ID must be positive when present", id)
+		return foodObject{}, fmt.Errorf("food object %d: Food Family ID must be positive when present", id)
 	}
 	if imageKey != nil && strings.Trim(*imageKey, " ") == "" {
-		return foodObject{}, fmt.Errorf("Food Object %d: image key must be nonempty when present", id)
+		return foodObject{}, fmt.Errorf("food object %d: image key must be nonempty when present", id)
 	}
 	return foodObject{
 		id:            id,
@@ -285,11 +285,11 @@ func validateMacroProfile(id int32, protein, carbohydrate, fat float64) error {
 		{"fat", fat},
 	} {
 		if math.IsNaN(value.value) || math.IsInf(value.value, 0) || value.value < 0 {
-			return fmt.Errorf("Food Object %d: %s must be finite and nonnegative", id, value.name)
+			return fmt.Errorf("food object %d: %s must be finite and nonnegative", id, value.name)
 		}
 	}
 	if protein == 0 && carbohydrate == 0 && fat == 0 {
-		return fmt.Errorf("Food Object %d: at least one Macro Profile value must be positive", id)
+		return fmt.Errorf("food object %d: at least one Macro Profile value must be positive", id)
 	}
 	return nil
 }

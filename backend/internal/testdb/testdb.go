@@ -103,6 +103,11 @@ func NewDB(t testing.TB) *DB {
 	if err != nil {
 		t.Skipf("integration test requires PostgreSQL at %s: %v", redactedURL(admin), err)
 	}
+	defer func() {
+		if err := adminConn.Close(ctx); err != nil {
+			t.Errorf("close admin connection: %v", err)
+		}
+	}()
 	suffix := time.Now().UnixNano()
 	dbName := fmt.Sprintf("obiad_test_%d", suffix)
 	ownerRole := fmt.Sprintf("obiad_owner_%d", suffix)
@@ -115,7 +120,11 @@ func NewDB(t testing.TB) *DB {
 		dropCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if dropConn, err := pgx.Connect(dropCtx, admin); err == nil {
-			defer dropConn.Close(dropCtx)
+			defer func() {
+				if err := dropConn.Close(dropCtx); err != nil {
+					t.Errorf("close cleanup connection: %v", err)
+				}
+			}()
 			_, _ = dropConn.Exec(dropCtx, "DROP DATABASE IF EXISTS "+dbName+" WITH (FORCE)")
 			for _, role := range []string{ownerRole, runtimeRole, anonRole} {
 				_, _ = dropConn.Exec(dropCtx, "DROP ROLE IF EXISTS "+role)
@@ -123,7 +132,6 @@ func NewDB(t testing.TB) *DB {
 		}
 	})
 	if _, err := adminConn.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
-		adminConn.Close(ctx)
 		t.Fatalf("create disposable database: %v", err)
 	}
 	for _, role := range []struct {
@@ -135,12 +143,10 @@ func NewDB(t testing.TB) *DB {
 		{anonRole, anonPassword},
 	} {
 		if _, err := adminConn.Exec(ctx, "CREATE ROLE "+role.name+" LOGIN PASSWORD "+quoteLiteral(role.password)); err != nil {
-			adminConn.Close(ctx)
 			t.Fatalf("create role %s: %v", role.name, err)
 		}
 	}
 	if _, err := adminConn.Exec(ctx, "ALTER DATABASE "+dbName+" OWNER TO "+ownerRole); err != nil {
-		adminConn.Close(ctx)
 		t.Fatalf("set database owner: %v", err)
 	}
 
@@ -157,11 +163,7 @@ func NewDB(t testing.TB) *DB {
 	// The CONNECT-only role proves the PUBLIC revocations; the local
 	// deployment setup has no such role, so the fixture grants its CONNECT.
 	if _, err := adminConn.Exec(ctx, "GRANT CONNECT ON DATABASE "+dbName+" TO "+anonRole); err != nil {
-		adminConn.Close(ctx)
 		t.Fatalf("grant anon role connect: %v", err)
-	}
-	if err := adminConn.Close(ctx); err != nil {
-		t.Fatalf("close admin connection: %v", err)
 	}
 
 	base := withDatabase(admin, dbName)
@@ -231,10 +233,10 @@ func isSQLIdentifier(s string) bool {
 		lower := r >= 'a' && r <= 'z'
 		digit := r >= '0' && r <= '9'
 		underscore := r == '_'
-		if i == 0 && !(lower || underscore) {
+		if i == 0 && !lower && !underscore {
 			return false
 		}
-		if !(lower || digit || underscore) {
+		if !lower && !digit && !underscore {
 			return false
 		}
 	}
@@ -283,6 +285,10 @@ func connect(t testing.TB, dbURL string) *pgx.Conn {
 	if err != nil {
 		t.Fatalf("connect to %s: %v", redactedURL(dbURL), err)
 	}
-	t.Cleanup(func() { conn.Close(context.Background()) })
+	t.Cleanup(func() {
+		if err := conn.Close(context.Background()); err != nil {
+			t.Errorf("close database connection: %v", err)
+		}
+	})
 	return conn
 }

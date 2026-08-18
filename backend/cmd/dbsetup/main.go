@@ -39,7 +39,7 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (runErr error) {
 	url := os.Getenv("OBIAD_SCHEMA_OWNER_DATABASE_URL")
 	if url == "" {
 		return errors.New("OBIAD_SCHEMA_OWNER_DATABASE_URL is not set")
@@ -51,7 +51,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer conn.Close(context.Background())
+	defer func() {
+		if err := conn.Close(context.Background()); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("close connection: %w", err))
+		}
+	}()
 
 	applied, err := dbsetup.Apply(ctx, conn, migrationsDir())
 	if err != nil {

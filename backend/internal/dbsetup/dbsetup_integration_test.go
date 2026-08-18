@@ -80,7 +80,11 @@ func connect(t *testing.T, dbURL string) *pgx.Conn {
 	if err != nil {
 		t.Fatalf("connect to %s: %v", redactedURL(dbURL), err)
 	}
-	t.Cleanup(func() { conn.Close(context.Background()) })
+	t.Cleanup(func() {
+		if err := conn.Close(context.Background()); err != nil {
+			t.Errorf("close database connection: %v", err)
+		}
+	})
 	return conn
 }
 

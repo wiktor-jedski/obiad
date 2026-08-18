@@ -180,7 +180,7 @@ func normalizeQuery(raw string) (string, error) {
 		return "", &Error{
 			Code:  CodeInvalidSearchQuery,
 			Field: "query",
-			cause: errors.New("Search Query is not valid UTF-8"),
+			cause: errors.New("search query is not valid UTF-8"),
 		}
 	}
 	normalized := normalize(raw)
@@ -188,14 +188,14 @@ func normalizeQuery(raw string) (string, error) {
 		return "", &Error{
 			Code:  CodeInvalidSearchQuery,
 			Field: "query",
-			cause: errors.New("Search Query is empty after normalization"),
+			cause: errors.New("search query is empty after normalization"),
 		}
 	}
 	if utf8.RuneCountInString(normalized) > maxQueryCodePoints {
 		return "", &Error{
 			Code:  CodeQueryTooLong,
 			Field: "query",
-			cause: fmt.Errorf("Search Query exceeds %d code points after normalization", maxQueryCodePoints),
+			cause: fmt.Errorf("search query exceeds %d code points after normalization", maxQueryCodePoints),
 		}
 	}
 	return normalized, nil
