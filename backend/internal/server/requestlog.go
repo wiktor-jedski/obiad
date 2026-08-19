@@ -143,6 +143,12 @@ func requestLogger(logger *slog.Logger) fiber.Handler {
 //   - malformed requests whose request line fasthttp could not parse (a
 //     control byte in the request-target) are answered with the stable
 //     400 INVALID_REQUEST JSON error without a field (ISSUE-004);
+//   - requests whose body exceeds the substitute search route's pre-read
+//     4 KiB ingress limit are answered with the exact stable
+//     413 {"code":"REQUEST_BODY_TOO_LARGE"} error without a field: the
+//     fasthttp HeaderReceived cap rejects the body while the request is
+//     read, before any Fiber handler runs, so no route matches and this
+//     handler owns the response and the log record (task 20, ISSUE-005);
 //   - router-level not-found (404) and method-not-allowed (405) errors keep
 //     the Fiber default behavior and have no stable error code;
 //   - every other error — an unexpected handler failure — is answered with
@@ -164,6 +170,13 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 		case matched && fiberErr != nil && fiberErr.Code == fiber.StatusBadRequest:
 			logRequest(logger, requestID, c.Method(), route, fiber.StatusBadRequest, time.Since(start), codeInvalidRequest, sanitizeLogText(err.Error()))
 			return c.Status(fiber.StatusBadRequest).JSON(transport.Error{Code: codeInvalidRequest})
+		case matched && fiberErr != nil && fiberErr.Code == fiber.StatusRequestEntityTooLarge:
+			// The pre-read 4 KiB ingress limit fired (task 20): the body was
+			// rejected while the request was read, before any handler ran,
+			// so the route template is unknown and the record carries the
+			// fixed sanitized cause instead of the generic Fiber message.
+			logRequest(logger, requestID, c.Method(), route, fiber.StatusRequestEntityTooLarge, time.Since(start), string(transport.REQUESTBODYTOOLARGE), "request body exceeds the 4 KiB limit")
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(transport.Error{Code: transport.REQUESTBODYTOOLARGE})
 		case matched && fiberErr != nil && (fiberErr.Code == fiber.StatusNotFound || fiberErr.Code == fiber.StatusMethodNotAllowed):
 			logRequest(logger, requestID, c.Method(), route, fiberErr.Code, time.Since(start), "", sanitizeLogText(err.Error()))
 			return fiber.DefaultErrorHandler(c, err)

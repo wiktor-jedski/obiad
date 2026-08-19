@@ -55,7 +55,7 @@ func suggestionsHandler(pool *pgxpool.Pool) fiber.Handler {
 			// line fasthttp itself cannot parse (for example a control byte
 			// in the request-target) never reach this handler: the app error
 			// handler answers 400 INVALID_REQUEST without a field.
-			return writeSuggestionError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err)
+			return writeError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err.Error())
 		}
 
 		// ARCH-019: one 450 ms context bounds the whole suggestion request —
@@ -72,9 +72,9 @@ func suggestionsHandler(pool *pgxpool.Pool) fiber.Handler {
 			// deadline expiry is SEARCH_TIMEOUT; every other acquire failure
 			// means the catalog storage is unavailable (ISSUE-004).
 			if errors.Is(err, context.DeadlineExceeded) {
-				return writeSuggestionError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err)
+				return writeError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err.Error())
 			}
-			return writeSuggestionError(c, fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err)
+			return writeError(c, fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err.Error())
 		}
 		defer poolConn.Release()
 
@@ -82,13 +82,13 @@ func suggestionsHandler(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil {
 			// The embedded catalog SELECT cannot be read: an unexpected
 			// internal failure, never a client error.
-			return writeSuggestionError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err)
+			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error())
 		}
 
 		suggestions, err := suggest.Run(ctx, params.Query, repository.Language(params.Language))
 		if err != nil {
 			status, code, field := suggestionRunError(err)
-			return writeSuggestionError(c, status, code, field, err)
+			return writeError(c, status, code, field, err.Error())
 		}
 		return c.JSON(suggestionsResponse(suggestions))
 	}
@@ -197,16 +197,25 @@ func fieldLanguage() *transport.ErrorField {
 	return &field
 }
 
-// writeSuggestionError writes one stable ISSUE-004 error response: the exact
-// generated error JSON with the stable code and optional field, and never an
-// internal cause. The code and the sanitized internal cause are recorded on
-// the Fiber context so the request-log middleware emits them server-side
-// (ARCH-019); the cause never reaches the response (ARCH-008,
-// golang-security: log details server-side, return generic messages).
-func writeSuggestionError(c fiber.Ctx, status int, code transport.ErrorCode, field *transport.ErrorField, cause error) error {
+// writeError writes one stable error response shared by the suggestion and
+// substitute search adapters: the exact generated error JSON with the
+// stable code and optional field (ISSUE-004, ISSUE-005), and never an
+// internal cause. The code and safeLogCause are recorded on the Fiber
+// context so the request-log middleware emits them server-side (ARCH-019);
+// the cause never reaches the response (ARCH-008, golang-security: log
+// details server-side, return generic messages).
+//
+// safeLogCause must already be safe for the log: fixed text or a
+// server-generated cause that contains no client values, request bodies,
+// SQL parameters, credentials, or stack details. The writer sanitizes it
+// against log injection but cannot remove sensitive data. Suggestion causes
+// never echo query text, substitute decoder causes are fixed text, and
+// substitute Module failures use safeSubstituteCause instead of their raw
+// errors because those may contain client quantity values and units.
+func writeError(c fiber.Ctx, status int, code transport.ErrorCode, field *transport.ErrorField, safeLogCause string) error {
 	c.Locals(requestLogCodeKey, string(code))
-	if cause != nil {
-		c.Locals(requestLogCauseKey, sanitizeLogText(cause.Error()))
+	if safeLogCause != "" {
+		c.Locals(requestLogCauseKey, sanitizeLogText(safeLogCause))
 	}
 	return c.Status(status).JSON(transport.Error{Code: code, Field: field})
 }

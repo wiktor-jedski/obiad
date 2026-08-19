@@ -20,6 +20,21 @@
 // the concrete Suggest type and its domain values and stable failure codes;
 // the normalization, distance, and ranking internals stay private, and no
 // generated transport value enters the Module.
+//
+// The package also implements the concrete Find Substitute Page Module
+// (ARCH-005). Its one Run operation validates the Food Object ID, page
+// index, and Food Quantity syntax, converts the validated Substitution
+// Input Food Quantity to its base unit, derives calories as 4p + 4c + 9f,
+// computes the full-precision cosine Nutritional Similarity and
+// equal-calorie Matched Quantity of every eligible Substitution candidate,
+// excludes the input and its Food Family, orders the candidates by
+// decreasing unrounded similarity, the ISSUE-004-pinned English collation,
+// and stable Food Object ID, and returns the page-0 total eligible count,
+// hasMore, and the first three unique items. The Module's exported surface
+// is the concrete FindSubstitutePage type, its domain values, and its
+// stable failure codes; the calorie, cosine, and Matched Quantity
+// calculations and the ranking internals stay private, and no generated
+// transport value enters the Module.
 package repository
 
 import (

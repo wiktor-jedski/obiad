@@ -96,10 +96,11 @@ const (
 	CodeInternalError Code = "INTERNAL_ERROR"
 )
 
-// Error is one stable Suggest failure (ARCH-004). Code is always present;
-// Field names the offending request parameter ("query" or "language") for
-// client-parameter failures and is empty for server failures. cause is the
-// internal cause and never appears in a response.
+// Error is one stable Module failure (ARCH-004, ARCH-005). Code is always
+// present; Field names the offending request field path ("query",
+// "language", "foodObjectId", "quantity.value", "quantity.unit", or
+// "pageIndex") for client failures and is empty for server failures. cause
+// is the internal cause and never appears in a response.
 type Error struct {
 	Code  Code
 	Field string
@@ -153,7 +154,7 @@ func (s *Suggest) Run(ctx context.Context, rawQuery string, lang Language) ([]Su
 		return nil, &Error{
 			Code:  CodeUnsupportedLanguage,
 			Field: "language",
-			cause: fmt.Errorf("unsupported Interface Language %q", lang),
+			cause: errors.New("unsupported Interface Language"),
 		}
 	}
 	query, err := normalizeQuery(rawQuery)

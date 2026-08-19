@@ -475,7 +475,7 @@ func TestFoodSuggestionValidationHTTPIntegration(t *testing.T) {
 	nfc := getSuggestionsEnvelope(t, baseURL, "pierś z kurczaka", "pl")
 	nfd := getSuggestionsEnvelope(t, baseURL, "pier"+"s\u0301"+" z kurczaka", "pl")
 	assertSameOrder(t, nfd, nfc)
-	assertSuggestionItem(t, nfc.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.G)
+	assertSuggestionItem(t, nfc.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.FoodQuantityUnitG)
 }
 
 // TestFoodSuggestionFailuresHTTPIntegration verifies every suggestion-relevant
@@ -663,17 +663,18 @@ type logRecord struct {
 // assertRequestLog asserts the structured request-log contract for one
 // request: the required fields are present with the expected values, the
 // stable code and internal cause appear only when expected, and the record
-// never carries query text, SQL text, credentials, or stack details. The
-// forbidden substrings are the distinct Search Query texts used by the test
-// and the runtime password, so a log record that echoed any sensitive input
-// fails here.
-func assertRequestLog(t *testing.T, record logRecord, wantStatus int, wantCode, wantCauseSubstring, wantRoute string, forbidden []string) {
+// never carries query text, quantities, request bodies, SQL text,
+// credentials, or stack details. The forbidden substrings are the distinct
+// sensitive texts used by the test (query texts, request bodies, and the
+// runtime password), so a log record that echoed any sensitive input fails
+// here.
+func assertRequestLog(t *testing.T, record logRecord, wantMethod string, wantStatus int, wantCode, wantCauseSubstring, wantRoute string, forbidden []string) {
 	t.Helper()
 	if record.RequestID == "" {
 		t.Fatalf("log record %+v has an empty request_id", record)
 	}
-	if record.Method != "GET" {
-		t.Fatalf("log record %+v method %q, want GET", record, record.Method)
+	if record.Method != wantMethod {
+		t.Fatalf("log record %+v method %q, want %q", record, record.Method, wantMethod)
 	}
 	if record.Route != wantRoute {
 		t.Fatalf("log record %+v route %q, want %q (the route template)", record, record.Route, wantRoute)
@@ -741,8 +742,10 @@ func TestSuggestionRequestLogIntegration(t *testing.T) {
 	// the sanitized internal cause logged server-side.
 	invalidUTF8 := getSuggestionsURL(t, baseURL, "/api/v1/food-suggestions?query=%FF%FE&language=en")
 	assertError(t, invalidUTF8, http.StatusUnprocessableEntity, "INVALID_SEARCH_QUERY", "query")
-	// An unsupported-language failure: 422 UNSUPPORTED_LANGUAGE.
-	assertError(t, getSuggestionsURL(t, baseURL, "/api/v1/food-suggestions?query=a&language=de"), http.StatusUnprocessableEntity, "UNSUPPORTED_LANGUAGE", "language")
+	// An unsupported-language failure: 422 UNSUPPORTED_LANGUAGE. Its
+	// client-controlled value must not reach the request log.
+	unsupportedLanguage := "secret-language-token-xyz"
+	assertError(t, getSuggestionsURL(t, baseURL, "/api/v1/food-suggestions?query=a&language="+url.QueryEscape(unsupportedLanguage)), http.StatusUnprocessableEntity, "UNSUPPORTED_LANGUAGE", "language")
 	// A missing-parameter failure: 400 INVALID_REQUEST with the field.
 	assertError(t, getSuggestionsURL(t, baseURL, "/api/v1/food-suggestions?language=en"), http.StatusBadRequest, "INVALID_REQUEST", "query")
 	// A malformed request that never reaches the handler: the app error
@@ -777,16 +780,16 @@ func TestSuggestionRequestLogIntegration(t *testing.T) {
 	}
 
 	forbidden := append([]string{}, queryTokens...)
-	forbidden = append(forbidden, runtimePassword, "food_objects", "password", "goroutine", ".go:", "INSERT", "UPDATE")
+	forbidden = append(forbidden, unsupportedLanguage, runtimePassword, "food_objects", "password", "goroutine", ".go:", "INSERT", "UPDATE")
 	wantRoute := "/api/v1/food-suggestions"
-	assertRequestLog(t, records[0], http.StatusOK, "", "", wantRoute, forbidden)
-	assertRequestLog(t, records[1], http.StatusOK, "", "", wantRoute, forbidden)
-	assertRequestLog(t, records[2], http.StatusUnprocessableEntity, "INVALID_SEARCH_QUERY", "not valid UTF-8", wantRoute, forbidden)
-	assertRequestLog(t, records[3], http.StatusUnprocessableEntity, "UNSUPPORTED_LANGUAGE", "unsupported Interface Language", wantRoute, forbidden)
-	assertRequestLog(t, records[4], http.StatusBadRequest, "INVALID_REQUEST", "missing", wantRoute, forbidden)
+	assertRequestLog(t, records[0], "GET", http.StatusOK, "", "", wantRoute, forbidden)
+	assertRequestLog(t, records[1], "GET", http.StatusOK, "", "", wantRoute, forbidden)
+	assertRequestLog(t, records[2], "GET", http.StatusUnprocessableEntity, "INVALID_SEARCH_QUERY", "not valid UTF-8", wantRoute, forbidden)
+	assertRequestLog(t, records[3], "GET", http.StatusUnprocessableEntity, "UNSUPPORTED_LANGUAGE", "unsupported Interface Language", wantRoute, forbidden)
+	assertRequestLog(t, records[4], "GET", http.StatusBadRequest, "INVALID_REQUEST", "missing", wantRoute, forbidden)
 	// The malformed request never matched a route: its record has no route
 	// template, status 400, and the stable INVALID_REQUEST code.
-	assertRequestLog(t, records[5], http.StatusBadRequest, "INVALID_REQUEST", "", "", forbidden)
+	assertRequestLog(t, records[5], "GET", http.StatusBadRequest, "INVALID_REQUEST", "", "", forbidden)
 }
 
 // TestUnexpectedHandlerErrorHTTPIntegration verifies that an unexpected
@@ -852,6 +855,6 @@ func TestUnexpectedHandlerErrorHTTPIntegration(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("log line %q is not one JSON record: %v", line, err)
 		}
-		assertRequestLog(t, record, http.StatusInternalServerError, "INTERNAL_ERROR", cases[i].cause, cases[i].path, forbidden)
+		assertRequestLog(t, record, "GET", http.StatusInternalServerError, "INTERNAL_ERROR", cases[i].cause, cases[i].path, forbidden)
 	}
 }
