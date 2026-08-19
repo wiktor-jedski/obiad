@@ -125,6 +125,17 @@ func matchedQuantity(inputCalories, candidateCaloriesPer100 float64) float64 {
 	return inputCalories * 100 / candidateCaloriesPer100
 }
 
+// isFiniteDerived reports whether one derived calculation result is a finite
+// float64. The ARCH-013 source schema accepts the largest finite double and
+// the smallest positive subnormal as Macro Profile values, and the derived
+// arithmetic over or under those values (for example 4×DBL_MAX becomes
+// +Inf, and a subnormal norm underflows to a zero denominator), so Run
+// classifies every nonfinite derived value as an internal failure at the
+// Module boundary instead of returning it in a page or ordering by it.
+func isFiniteDerived(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
 // baseQuantity converts one Substitution Input Food Quantity to its base
 // unit (ARCH-018): a direct gram or millilitre value is used as-is, and a
 // Serving count multiplies the Food Object's Serving base quantity. The
@@ -149,23 +160,28 @@ func baseQuantity(object foodObject, q FoodQuantity) (float64, error) {
 
 // rankedSubstitute is one eligible candidate before slicing: the Food
 // Object, its Macro Profile, its unrounded Nutritional Similarity to the
-// Substitution Input, and its normalized English name (the pinned collation
+// Substitution Input, and its stored English name (the pinned collation
 // key).
 type rankedSubstitute struct {
 	object     foodObject
 	profile    macroProfile
 	similarity float64
-	normName   string
+	enName     string
 }
 
 // rankEligible returns every eligible Substitution candidate ordered by
 // decreasing unrounded Nutritional Similarity, the ISSUE-004-pinned English
-// collation of the normalized English names (collate.New(language.English),
-// no options), and stable Food Object ID (ARCH-018, REQ-034, REQ-035). The
-// Substitution Input itself (REQ-032) and every other member of its Food
-// Family (REQ-033) are excluded. Similarities are the full-precision float64
-// values; no tolerance is used as a tie or ranking threshold (ISSUE-005).
-func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, objects []foodObject) []rankedSubstitute {
+// collation of the stored English names (collate.New(language.English), no
+// options), and stable Food Object ID (ARCH-018, REQ-034, REQ-035). The
+// collator distinguishes case and whitespace in the stored names — the
+// substitute tie rule does not normalize them; only the Suggest operation
+// applies its query normalizer (ISSUE-004). The Substitution Input itself
+// (REQ-032) and every other member of its Food Family (REQ-033) are
+// excluded. Similarities are the full-precision float64 values; no tolerance
+// is used as a tie or ranking threshold (ISSUE-005). A schema-valid extreme
+// Macro Profile whose cosine is not finite is reported as an error so a NaN
+// or infinite similarity can never enter the strict ordering.
+func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, objects []foodObject) ([]rankedSubstitute, error) {
 	collator := collate.New(language.English)
 	rankedList := make([]rankedSubstitute, 0, len(objects))
 	for _, object := range objects {
@@ -176,11 +192,15 @@ func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, 
 			continue
 		}
 		profile := macroProfile{protein: object.protein, carbohydrate: object.carbohydrate, fat: object.fat}
+		similarity := cosineSimilarity(inputProfile, profile)
+		if !isFiniteDerived(similarity) {
+			return nil, fmt.Errorf("food object %d: Nutritional Similarity %v is not finite for the seeded Macro Profile", object.id, similarity)
+		}
 		rankedList = append(rankedList, rankedSubstitute{
 			object:     object,
 			profile:    profile,
-			similarity: cosineSimilarity(inputProfile, profile),
-			normName:   normalize(object.names.En),
+			similarity: similarity,
+			enName:     object.names.En,
 		})
 	}
 	sort.Slice(rankedList, func(i, j int) bool {
@@ -188,12 +208,12 @@ func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, 
 		if a.similarity != b.similarity {
 			return a.similarity > b.similarity
 		}
-		if compared := collator.CompareString(a.normName, b.normName); compared != 0 {
+		if compared := collator.CompareString(a.enName, b.enName); compared != 0 {
 			return compared < 0
 		}
 		return a.object.id < b.object.id
 	})
-	return rankedList
+	return rankedList, nil
 }
 
 // FindSubstitutePage is the concrete Find Substitute Page Module (ARCH-005).
@@ -223,11 +243,15 @@ func NewFindSubstitutePage(conn *pgx.Conn) (*FindSubstitutePage, error) {
 // Quantity to its base unit, derives the input calories as 4p + 4c + 9f,
 // performs one fresh catalog read through the Catalog Loader, excludes the
 // input and its Food Family, orders the eligible Substitutes by decreasing
-// unrounded Nutritional Similarity, the pinned English collation, and stable
-// Food Object ID, and returns the total eligible count, hasMore, and the
-// first zero to three unique items. Every calculation stays in float64 until
-// Phase 4 task 17 completes the display projection. Failures are stable
-// Error values with a Code and an optional Field.
+// unrounded Nutritional Similarity, the pinned English collation of the
+// stored English names, and stable Food Object ID, and returns the total
+// eligible count, hasMore, and the first zero to three unique items. Every
+// calculation stays in float64 until Phase 4 task 17 completes the display
+// projection. A schema-valid finite Macro Profile whose derived calories,
+// similarity, Matched Quantity, or scaled macronutrients are not finite is
+// classified as an internal failure at the Module boundary instead of
+// reaching a page or the ranking order. Failures are stable Error values
+// with a Code and an optional Field.
 func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pageIndex int32) (*Page, error) {
 	if pageIndex != 0 {
 		return nil, &Error{
@@ -266,7 +290,16 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 
 	inputProfile := macroProfile{protein: inputObject.protein, carbohydrate: inputObject.carbohydrate, fat: inputObject.fat}
 	inputCalories := calories(inputProfile) * baseQty / 100
-	ranked := rankEligible(inputObject.id, inputObject.foodFamilyID, inputProfile, objects)
+	if !isFiniteDerived(inputCalories) {
+		return nil, &Error{
+			Code:  CodeInternalError,
+			cause: fmt.Errorf("input calories %v are not finite for the seeded Macro Profile", inputCalories),
+		}
+	}
+	ranked, err := rankEligible(inputObject.id, inputObject.foodFamilyID, inputProfile, objects)
+	if err != nil {
+		return nil, &Error{Code: CodeInternalError, cause: err}
+	}
 
 	total := len(ranked)
 	page := &Page{
@@ -277,14 +310,24 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 	}
 	for _, r := range ranked[:min(pageSize, total)] {
 		mq := matchedQuantity(inputCalories, calories(r.profile))
+		protein := r.profile.protein * mq / 100
+		carbohydrate := r.profile.carbohydrate * mq / 100
+		fat := r.profile.fat * mq / 100
+		if !isFiniteDerived(mq) || !isFiniteDerived(protein) || !isFiniteDerived(carbohydrate) || !isFiniteDerived(fat) {
+			return nil, &Error{
+				Code: CodeInternalError,
+				cause: fmt.Errorf("food object %d: Matched Quantity %v or scaled macronutrients (%v, %v, %v) are not finite for the seeded Macro Profile",
+					r.object.id, mq, protein, carbohydrate, fat),
+			}
+		}
 		page.Items = append(page.Items, SubstituteItem{
 			FoodObjectID:    r.object.id,
 			Names:           r.object.names,
 			ImageKey:        r.object.imageKey,
 			MatchedQuantity: mq,
-			Protein:         r.profile.protein * mq / 100,
-			Carbohydrate:    r.profile.carbohydrate * mq / 100,
-			Fat:             r.profile.fat * mq / 100,
+			Protein:         protein,
+			Carbohydrate:    carbohydrate,
+			Fat:             fat,
 			Similarity:      r.similarity,
 		})
 	}

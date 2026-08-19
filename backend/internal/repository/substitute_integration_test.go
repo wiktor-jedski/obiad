@@ -14,21 +14,25 @@ package repository
 //
 // The test verifies the designated seeded calories, Matched Quantities,
 // eligible counts, page-0 IDs, hasMore, input and Food Family exclusions,
-// decreasing full-precision order, English-name and stable-ID ties, three
-// unique results, one fresh SELECT, and no mutation or derived-value
-// persistence. In the same test, Macro Profiles loaded by the real private
-// Catalog Loader are passed directly to the private production calorie,
-// cosine, and Matched Quantity helpers and compared with independently
-// recorded full-precision expectations using abs(got - want) <= 1e-12
-// (ISSUE-005: the absolute 1e-12 tolerance is a test comparison only, never
-// a production tie or ranking threshold). No exported seam, fake, or test
-// hook is added: the helpers stay private and the test sits in the same
-// package. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or
-// from libpq-style environment variables; no credential is committed and
-// tests skip when no server is reachable.
+// decreasing full-precision order, English-name and stable-ID ties, the raw
+// stored-name collation tie rule (case and whitespace remain significant),
+// three unique results, one fresh SELECT, no mutation or derived-value
+// persistence, the Serving conversion branch, all three unrounded scaled
+// macro fields, and the finite-boundary classification of schema-valid
+// extreme Macro Profiles. In the same test, Macro Profiles loaded by the
+// real private Catalog Loader are passed directly to the private production
+// calorie, cosine, and Matched Quantity helpers and compared with
+// independently recorded full-precision expectations using
+// abs(got - want) <= 1e-12 (ISSUE-005: the absolute 1e-12 tolerance is a
+// test comparison only, never a production tie or ranking threshold). No
+// exported seam, fake, or test hook is added: the helpers stay private and
+// the test sits in the same package. The admin connection comes from
+// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables;
+// no credential is committed and tests skip when no server is reachable.
 
 import (
 	"context"
+	"errors"
 	"math"
 	"testing"
 
@@ -88,24 +92,29 @@ var wantCalories = map[int32]float64{
 
 // wantCandidate is one independently recorded full-precision expectation for
 // one eligible Substitute of a designated input: its seeded calories per
-// Nutrition Basis, its cosine Nutritional Similarity to the input, and its
-// equal-calorie Matched Quantity in the candidate base unit.
+// Nutrition Basis, its cosine Nutritional Similarity to the input, its
+// equal-calorie Matched Quantity in the candidate base unit, and the three
+// unrounded macronutrients scaled to that Matched Quantity.
 type wantCandidate struct {
 	id              int32
 	calories        float64
 	cosine          float64
 	matchedQuantity float64
+	protein         float64
+	carbohydrate    float64
+	fat             float64
 }
 
 // wantSubstitutePage is one independently recorded page-0 expectation for a
-// designated acceptance input (ISSUE-002): the input's converted base-unit
-// Food Quantity, its total derived calories, the exact page-0 ID order, and
-// the full-precision expectations of the first three eligible candidates in
-// that order. The designated eligible-candidate counts are 36 for Pizza
-// Margherita and 37 for Chicken breast and Milk (ISSUE-002).
+// designated acceptance input (ISSUE-002): the input's Food Quantity, its
+// converted base-unit quantity, its total derived calories, the exact page-0
+// ID order, and the full-precision expectations of the first three eligible
+// candidates in that order. The designated eligible-candidate counts are 36
+// for Pizza Margherita and 37 for Chicken breast and Milk (ISSUE-002).
 type wantSubstitutePage struct {
 	inputID       int32
 	quantity      FoodQuantity
+	baseQuantity  float64
 	totalCalories float64
 	pageIDs       []int32
 	candidates    []wantCandidate
@@ -116,35 +125,38 @@ type wantSubstitutePage struct {
 var wantSubstitutePages = []wantSubstitutePage{
 	{
 		inputID:       1, // Pizza Margherita, one Serving = 350 g
-		quantity:      FoodQuantity{Value: 350, Unit: UnitGram},
+		quantity:      FoodQuantity{Value: 1, Unit: UnitServing},
+		baseQuantity:  350,
 		totalCalories: 875.0,
 		pageIDs:       []int32{13, 29, 26},
 		candidates: []wantCandidate{
-			{id: 13, calories: 200.0, cosine: 0.9999999999999999, matchedQuantity: 437.5},
-			{id: 29, calories: 157.0, cosine: 0.9953414448979734, matchedQuantity: 557.3248407643312},
-			{id: 26, calories: 199.0, cosine: 0.992122967180221, matchedQuantity: 439.69849246231155},
+			{id: 13, calories: 200.0, cosine: 0.9999999999999999, matchedQuantity: 437.5, protein: 35.0, carbohydrate: 105.0, fat: 35.0},
+			{id: 29, calories: 157.0, cosine: 0.9953414448979734, matchedQuantity: 557.3248407643312, protein: 44.58598726114649, carbohydrate: 111.46496815286623, fat: 27.86624203821656},
+			{id: 26, calories: 199.0, cosine: 0.992122967180221, matchedQuantity: 439.69849246231155, protein: 26.38190954773869, carbohydrate: 123.11557788944724, fat: 30.77889447236181},
 		},
 	},
 	{
 		inputID:       5, // Chicken breast, 100 g Nutrition Basis
 		quantity:      FoodQuantity{Value: 100, Unit: UnitGram},
+		baseQuantity:  100,
 		totalCalories: 156.4,
 		pageIDs:       []int32{23, 11, 6},
 		candidates: []wantCandidate{
-			{id: 23, calories: 134.0, cosine: 0.998907198578582, matchedQuantity: 116.71641791044776},
-			{id: 11, calories: 61.8, cosine: 0.9353543324988515, matchedQuantity: 253.07443365695795},
-			{id: 6, calories: 234.0, cosine: 0.9349276360101546, matchedQuantity: 66.83760683760684},
+			{id: 23, calories: 134.0, cosine: 0.998907198578582, matchedQuantity: 116.71641791044776, protein: 33.84776119402985, carbohydrate: 0.0, fat: 2.334328358208955},
+			{id: 11, calories: 61.8, cosine: 0.9353543324988515, matchedQuantity: 253.07443365695795, protein: 27.838187702265373, carbohydrate: 10.122977346278319, fat: 0.506148867313916},
+			{id: 6, calories: 234.0, cosine: 0.9349276360101546, matchedQuantity: 66.83760683760684, protein: 18.046153846153846, carbohydrate: 0.0, fat: 9.357264957264958},
 		},
 	},
 	{
 		inputID:       10, // Milk, 100 ml Nutrition Basis
 		quantity:      FoodQuantity{Value: 100, Unit: UnitMillilitre},
+		baseQuantity:  100,
 		totalCalories: 50.8,
 		pageIDs:       []int32{33, 3, 21},
 		candidates: []wantCandidate{
-			{id: 33, calories: 96.0, cosine: 0.9948293845065213, matchedQuantity: 52.916666666666664},
-			{id: 3, calories: 180.0, cosine: 0.9884883774184667, matchedQuantity: 28.22222222222222},
-			{id: 21, calories: 265.0, cosine: 0.9870586973699207, matchedQuantity: 19.169811320754718},
+			{id: 33, calories: 96.0, cosine: 0.9948293845065213, matchedQuantity: 52.916666666666664, protein: 3.704166666666666, carbohydrate: 4.233333333333333, fat: 2.1166666666666667},
+			{id: 3, calories: 180.0, cosine: 0.9884883774184667, matchedQuantity: 28.22222222222222, protein: 2.54, carbohydrate: 5.08, fat: 2.2577777777777777},
+			{id: 21, calories: 265.0, cosine: 0.9870586973699207, matchedQuantity: 19.169811320754718, protein: 2.4920754716981133, carbohydrate: 4.6007547169811325, fat: 2.4920754716981133},
 		},
 	},
 }
@@ -329,7 +341,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 	for _, want := range wantSubstitutePages {
 		inputProfile := profiles[want.inputID]
-		inputCalories := calories(inputProfile) * want.quantity.Value / 100
+		inputCalories := calories(inputProfile) * want.baseQuantity / 100
 		assertNearEqual(t, "input total calories", inputCalories, want.totalCalories)
 		page := run(SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity})
 		for i, candidate := range want.candidates {
@@ -341,9 +353,16 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			assertNearEqual(t, "calories(candidate)", gotCalories, candidate.calories)
 			assertNearEqual(t, "matchedQuantity", gotMatched, candidate.matchedQuantity)
 			// The page-0 items returned by Run carry the same full-precision
-			// values the helpers produce for the recorded candidates.
-			assertNearEqual(t, "item similarity", page.Items[i].Similarity, candidate.cosine)
-			assertNearEqual(t, "item Matched Quantity", page.Items[i].MatchedQuantity, candidate.matchedQuantity)
+			// values the helpers produce for the recorded candidates: the
+			// unrounded similarity, the unrounded Matched Quantity, and the
+			// three unrounded macronutrients scaled to that Matched Quantity
+			// (REQ-031; Phase 4 task 17 rounds them for display).
+			item := page.Items[i]
+			assertNearEqual(t, "item similarity", item.Similarity, candidate.cosine)
+			assertNearEqual(t, "item Matched Quantity", item.MatchedQuantity, candidate.matchedQuantity)
+			assertNearEqual(t, "item protein", item.Protein, candidate.protein)
+			assertNearEqual(t, "item carbohydrate", item.Carbohydrate, candidate.carbohydrate)
+			assertNearEqual(t, "item fat", item.Fat, candidate.fat)
 			if i > 0 && want.candidates[i-1].cosine <= candidate.cosine {
 				t.Fatalf("recorded top-3 cosines for input %d are not strictly decreasing", want.inputID)
 			}
@@ -429,6 +448,104 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		t.Fatalf("English-name tie ordered as %v, want [55 54]: the pinned English collation must override the ascending stable-ID order",
 			pageIDs(nameTie)[:2])
 	}
+
+	// Raw stored-name collation (REQ-035, ARCH-018): the substitute tie rule
+	// collates the stored English names with collate.New(language.English)
+	// and never applies the Suggest operation's query normalizer, so case
+	// and whitespace distinctions in the stored names stay significant and
+	// decide the tie before the stable-ID fallback. Both fixtures make the
+	// raw-name order oppose the ascending-ID order, so the observed page
+	// order can only come from the raw collation.
+	insertTieObject(66, "Tie case input", "Wprowadzenie wielkosci liter", 2, 2, 2)
+	insertTieObject(67, "Tie case", "Wielkosc liter", 2, 2, 2)
+	insertTieObject(68, "tie case", "wielkosc liter", 2, 2, 2)
+	caseTie := run(SubstituteInput{FoodObjectID: 66, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+	if caseTie.TotalEligibleCount != 46 {
+		t.Fatalf("tie input 66: total eligible count %d, want 46 (38 seeded + 9 fixtures minus the input)", caseTie.TotalEligibleCount)
+	}
+	if !caseTie.HasMore {
+		t.Fatalf("tie input 66: hasMore false, want true")
+	}
+	assertPageIDs(t, caseTie, 68, 67, 15)
+	assertUniqueThree(t, caseTie)
+	if caseTie.Items[0].Similarity != caseTie.Items[1].Similarity {
+		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", caseTie.Items[0].Similarity, caseTie.Items[1].Similarity)
+	}
+	if caseTie.Items[0].Names.En != "tie case" || caseTie.Items[1].Names.En != "Tie case" {
+		t.Fatalf("case tie ordered as %q then %q, want \"tie case\" then \"Tie case\" by the raw English collation", caseTie.Items[0].Names.En, caseTie.Items[1].Names.En)
+	}
+	if caseTie.Items[0].FoodObjectID != 68 || caseTie.Items[1].FoodObjectID != 67 {
+		t.Fatalf("case tie ordered as %v, want [68 67]: the raw stored-name collation must order lowercase before title case; the Suggest normalizer would fold the names and fall back to IDs [67 68]",
+			pageIDs(caseTie)[:2])
+	}
+
+	insertTieObject(76, "Tie whitespace input", "Wprowadzenie spacji", 5, 3, 1)
+	insertTieObject(77, "Tie space", "Spacja", 5, 3, 1)
+	insertTieObject(78, "Tie  space", "Podwojna spacja", 5, 3, 1)
+	spaceTie := run(SubstituteInput{FoodObjectID: 76, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+	if spaceTie.TotalEligibleCount != 49 {
+		t.Fatalf("tie input 76: total eligible count %d, want 49 (38 seeded + 12 fixtures minus the input)", spaceTie.TotalEligibleCount)
+	}
+	if !spaceTie.HasMore {
+		t.Fatalf("tie input 76: hasMore false, want true")
+	}
+	assertPageIDs(t, spaceTie, 78, 77, 20)
+	assertUniqueThree(t, spaceTie)
+	if spaceTie.Items[0].Similarity != spaceTie.Items[1].Similarity {
+		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", spaceTie.Items[0].Similarity, spaceTie.Items[1].Similarity)
+	}
+	if spaceTie.Items[0].Names.En != "Tie  space" || spaceTie.Items[1].Names.En != "Tie space" {
+		t.Fatalf("whitespace tie ordered as %q then %q, want \"Tie  space\" then \"Tie space\" by the raw English collation", spaceTie.Items[0].Names.En, spaceTie.Items[1].Names.En)
+	}
+	if spaceTie.Items[0].FoodObjectID != 78 || spaceTie.Items[1].FoodObjectID != 77 {
+		t.Fatalf("whitespace tie ordered as %v, want [78 77]: the raw stored-name collation must order the double-space name before the single-space name; collapsing the whitespace would fall back to IDs [77 78]",
+			pageIDs(spaceTie)[:2])
+	}
+
+	// Finite-boundary classification (ARCH-018, ISSUE-005): the ARCH-013
+	// schema accepts the largest finite double and the smallest positive
+	// subnormal as Macro Profile values, but the derived arithmetic over or
+	// under them — 4×DBL_MAX overflows to +Inf calories and an Inf/Inf cosine,
+	// and a subnormal vector norm underflows to a zero denominator and a
+	// nonfinite cosine. Run must classify every such schema-valid profile as
+	// the stable internal failure at the Module boundary instead of returning
+	// nonfinite page fields or ordering by NaN, after exactly one fresh
+	// SELECT and no retry. The fixtures are artificial boundary data owned by
+	// this isolated integration test, never the production seed (ISSUE-002,
+	// ARCH-018 quality constraints).
+	runExpectInternalError := func(input SubstituteInput) {
+		t.Helper()
+		tracer.reset()
+		page, err := module.Run(ctx, input, 0)
+		if err == nil {
+			t.Fatalf("Run(input %d, %v) returned page %+v, want INTERNAL_ERROR for the nonfinite derived arithmetic", input.FoodObjectID, input.Quantity, page)
+		}
+		var moduleErr *Error
+		if !errors.As(err, &moduleErr) || moduleErr.Code != CodeInternalError {
+			t.Fatalf("Run(input %d, %v) failure %v, want the stable INTERNAL_ERROR classification", input.FoodObjectID, input.Quantity, err)
+		}
+		tracer.assertSingleSelect(t, wantSQL)
+	}
+
+	// Smallest positive subnormal candidate: its squared norm underflows to a
+	// zero denominator, so its cosine against any normal input is not finite.
+	insertTieObject(88, "Subnormal candidate", "Subnormalny kandydat", math.SmallestNonzeroFloat64, 0, 0)
+	runExpectInternalError(SubstituteInput{FoodObjectID: 43, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+
+	// Smallest positive subnormal input: the input vector norm underflows to
+	// zero, so every candidate cosine is not finite.
+	insertTieObject(89, "Subnormal input", "Subnormalne wprowadzenie", math.SmallestNonzeroFloat64, 0, 0)
+	runExpectInternalError(SubstituteInput{FoodObjectID: 89, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+
+	// Largest finite double candidate: its squared norm overflows to +Inf and
+	// its cosine against any normal input is Inf/Inf, that is NaN.
+	insertTieObject(87, "Largest candidate", "Najwiekszy kandydat", math.MaxFloat64, 0, 0)
+	runExpectInternalError(SubstituteInput{FoodObjectID: 43, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+
+	// Largest finite double input: 4 × DBL_MAX overflows to +Inf input
+	// calories, classified before any ranking.
+	insertTieObject(86, "Largest input", "Najwieksze wprowadzenie", math.MaxFloat64, 0, 0)
+	runExpectInternalError(SubstituteInput{FoodObjectID: 86, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
 }
 
 // countFoodObjects returns the number of Food Object rows on the owner
