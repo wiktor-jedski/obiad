@@ -2,8 +2,10 @@
 // backend process (ARCH-009, ARCH-016, ARCH-019). It reads the SELECT-only
 // runtime database credential, configures a pgx pool with zero minimum and
 // four maximum connections, and exposes the unversioned GET /health
-// readiness endpoint (ARCH-009) and the versioned GET /api/v1/food-suggestions
-// suggestion route (ARCH-008).
+// readiness endpoint (ARCH-009), the versioned GET /api/v1/food-suggestions
+// suggestion route (ARCH-008), and the versioned POST
+// /api/v1/substitutes/search substitute search route (task 19; ARCH-005,
+// ARCH-008).
 //
 // The composition adds no CORS, TLS, authentication, cookies, rate limiter,
 // or third-party runtime service (ARCH-016). The production command binds to
@@ -58,10 +60,11 @@ type healthStatus struct {
 // Compose builds the Fiber v3 application over a pgx pool connected with the
 // runtime database credential. The pool keeps zero minimum and four maximum
 // connections (ARCH-016). The returned application serves the unversioned
-// GET /health route and the versioned GET /api/v1/food-suggestions route;
-// the caller owns starting the listener and closing the pool. Structured
-// request logs (ARCH-019) are emitted through logger; when logger is nil,
-// slog.Default is used.
+// GET /health route, the versioned GET /api/v1/food-suggestions route, and
+// the versioned POST /api/v1/substitutes/search route; the caller owns
+// starting the listener and closing the pool. Structured request logs
+// (ARCH-019) are emitted through logger; when logger is nil, slog.Default
+// is used.
 func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpool.Pool, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -82,6 +85,7 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 	app.Use(requestLogger(logger))
 	app.Get("/health", healthHandler(pool))
 	app.Get("/api/v1/food-suggestions", suggestionsHandler(pool))
+	app.Post("/api/v1/substitutes/search", substitutesHandler(pool))
 	return app, pool, nil
 }
 
