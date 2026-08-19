@@ -211,17 +211,20 @@ func isPositiveInteger(v float64) bool {
 // input Food Object and converts it to its base unit (ARCH-018): a direct
 // gram or millilitre unit must match the Food Object Physical State (g for
 // a solid, ml for a liquid), a Serving count requires a stored Serving and
-// multiplies its base quantity, and the converted base quantity must be at
-// most 100,000 g or 100,000 ml. Failures are the ISSUE-005 stable errors:
-// QUANTITY_UNIT_MISMATCH with field quantity.unit for a direct unit that
-// does not match the Physical State, SERVING_UNAVAILABLE with field
-// quantity.unit for a Serving count without a stored Serving, and
-// QUANTITY_OUT_OF_RANGE with field quantity.value for a converted base
-// quantity over the limit. Run validates the page index, the Food Object
-// ID, and the catalog-independent quantity syntax before the single catalog
-// read, so the default branch below is unreachable for a request that
-// passed validateQuantityValue; it still returns a stable error instead of
-// panicking.
+// multiplies its base quantity, and the converted base quantity must be
+// strictly positive and finite and at most 100,000 g or 100,000 ml.
+// Failures are the ISSUE-005 stable errors: QUANTITY_UNIT_MISMATCH with
+// field quantity.unit for a direct unit that does not match the Physical
+// State, SERVING_UNAVAILABLE with field quantity.unit for a Serving count
+// without a stored Serving, INVALID_QUANTITY with field quantity.value for
+// a converted base quantity that is not a positive finite number (a
+// subnormal Serving count times a subnormal stored Serving can underflow to
+// exactly zero), and QUANTITY_OUT_OF_RANGE with field quantity.value for a
+// converted base quantity over the 100,000 limit. Run validates the page
+// index, the Food Object ID, and the catalog-independent quantity syntax
+// before the single catalog read, so the default branch below is
+// unreachable for a request that passed validateQuantityValue; it still
+// returns a stable error instead of panicking.
 func baseQuantity(object foodObject, q FoodQuantity) (float64, error) {
 	switch q.Unit {
 	case UnitServing:
@@ -233,6 +236,21 @@ func baseQuantity(object foodObject, q FoodQuantity) (float64, error) {
 			}
 		}
 		converted := q.Value * *object.serving
+		if converted <= 0 || math.IsNaN(converted) {
+			// ARCH-018 requires the converted base quantity to be strictly
+			// greater than zero. Both factors are positive finite by the
+			// pre-load and catalog invariants, so a nonpositive product can
+			// only be the exact zero of a subnormal Serving count times a
+			// subnormal stored Serving; it must not reach the page as a
+			// false successful zero-quantity result. ISSUE-005 classifies a
+			// nonpositive base quantity as INVALID_QUANTITY with field
+			// quantity.value.
+			return 0, &Error{
+				Code:  CodeInvalidQuantity,
+				Field: "quantity.value",
+				cause: fmt.Errorf("converted base quantity %v is not a positive finite number", converted),
+			}
+		}
 		if converted > maxBaseQuantity {
 			return 0, &Error{
 				Code:  CodeQuantityOutOfRange,
