@@ -1,0 +1,9 @@
+/**
+ * Application stylesheet for the client-only Obiad browser application.
+ *
+ * Tailwind CSS 4 is wired through the Vite plugin (`@tailwindcss/vite`) and
+ * its generated utilities enter the bundle through this single import.
+ * Palette tokens, font tokens, and `@font-face` ranges are owned by task 23
+ * (ISSUE-006 presentation contract) and are intentionally absent here.
+ */
+@import 'tailwindcss';
