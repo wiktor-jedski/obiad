@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"strconv"
 
@@ -144,6 +143,14 @@ var substituteRequestSpec = &objectSpec{fields: []fieldSpec{
 // its ISSUE-005 field path. The returned field is nil for structural
 // failures; err describes the sanitizable internal cause for the request
 // log and never reaches a response.
+//
+// Syntax precedence (task-19 repair): the complete body must first be one
+// valid JSON document (json.Valid) before any known-field classification.
+// A truncated or malformed document is rejected without a field no matter
+// what a partial token walk would have classified — {"foodObjectId":true
+// and {"foodObjectId":[] are malformed, not wrong-typed-field failures.
+// Only a syntactically complete document reaches the strict object walk,
+// where a wrong-typed or null known field carries its exact field path.
 func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *transport.ErrorField, error) {
 	var req transport.SubstituteSearchRequest
 	mediaType, _, err := mime.ParseMediaType(c.Get(fiber.HeaderContentType))
@@ -155,16 +162,20 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	if len(body) == 0 {
 		return req, nil, errors.New("request body is empty")
 	}
+	// The body must be exactly one syntactically complete JSON document:
+	// json.Valid rejects truncated, malformed, and trailing JSON, and a
+	// top-level value that is not the closed request object is rejected by
+	// readStrictObject — both without a field (ISSUE-005). The gate makes
+	// every wrong-type or null token the walk sees afterwards belong to a
+	// complete document, so its field path is exact.
+	if !json.Valid(body) {
+		return req, nil, errors.New("request body is not one valid JSON document")
+	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	members, field, err := readStrictObject(dec, substituteRequestSpec)
 	if err != nil {
 		return req, field, err
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		// A second JSON value or any non-whitespace byte after the request
-		// object is trailing JSON (ISSUE-005), rejected without a field.
-		return req, nil, errors.New("trailing JSON after the request object")
 	}
 
 	quantity := members["quantity"].(map[string]any)
@@ -251,9 +262,12 @@ func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *tr
 }
 
 // readStrictValue reads one JSON value and enforces the accepted kind of
-// field. A null or wrong-typed known field carries the field's ISSUE-005
-// path; a structurally broken value (a premature closing delimiter) is
-// malformed JSON and carries no field.
+// field. The caller has already proven the whole body is one valid JSON
+// document (decodeSubstituteRequest), so every token here belongs to a
+// syntactically complete value: a null or wrong-typed known field carries
+// the field's exact ISSUE-005 path. The premature-closing-delimiter branch
+// is unreachable after that gate and stays malformed without a field as a
+// defensive boundary.
 func readStrictValue(dec *json.Decoder, field *fieldSpec) (any, *transport.ErrorField, error) {
 	tok, err := dec.Token()
 	if err != nil {

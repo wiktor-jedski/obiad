@@ -469,6 +469,7 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		{"string quantity.value", `{"foodObjectId":1,"quantity":{"value":"100","unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
 		{"boolean quantity.value", `{"foodObjectId":1,"quantity":{"value":true,"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
 		{"number quantity.unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":5},"pageIndex":0}`, transport.QuantityUnit},
+		{"array foodObjectId", `{"foodObjectId":[],"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
 		{"fractional foodObjectId", `{"foodObjectId":1.5,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
 		{"out-of-int32 foodObjectId", `{"foodObjectId":2147483648,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
 		{"out-of-int32 pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":2147483648}`, transport.PageIndex},
@@ -478,6 +479,40 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		t.Run("reject "+tc.name, func(t *testing.T) {
 			status, body, contentType := postSubstitutes(t, baseURL, jsonType, tc.body)
 			assertInvalidRequest(t, status, body, contentType, tc.field)
+		})
+	}
+
+	// Complete-document syntax precedence (task-19 repair): a truncated or
+	// malformed document is rejected without a field even when a partial
+	// token walk would have classified a known field — a wrong-typed or
+	// null value token followed by truncation or a broken delimiter is
+	// still malformed JSON, never a field error (ISSUE-005: malformed JSON
+	// carries no field). The same wrong-type or null value inside a
+	// syntactically complete document is covered by the nullCases and
+	// wrongTypeCases above and keeps its exact field path.
+	precedenceCases := []struct {
+		name string
+		body string
+	}{
+		{"truncated after wrong-type scalar", `{"foodObjectId":true`},
+		{"truncated after wrong-type string", `{"foodObjectId":"x"`},
+		{"truncated after null", `{"pageIndex":null`},
+		{"truncated after fractional number", `{"foodObjectId":1.5`},
+		{"truncated after scalar quantity", `{"quantity":5`},
+		{"truncated after wrong-type composite", `{"foodObjectId":[]`},
+		{"truncated after array quantity", `{"quantity":[]`},
+		{"truncated after nested wrong-type", `{"quantity":{"value":[1],"unit":"g"},"pageIndex":0`},
+		{"truncated after nested null", `{"quantity":{"value":null,"unit":"serving"},"pageIndex":0`},
+		{"truncated after complete object", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0`},
+		{"malformed delimiter after wrong-type", `{"foodObjectId":]}`},
+		{"malformed delimiter after null", `{"quantity":{"value":null]}}`},
+		{"trailing comma after wrong-type", `{"foodObjectId":true,}`},
+		{"trailing comma after null", `{"foodObjectId":null,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,}`},
+	}
+	for _, tc := range precedenceCases {
+		t.Run("reject "+tc.name, func(t *testing.T) {
+			status, body, contentType := postSubstitutes(t, baseURL, jsonType, tc.body)
+			assertInvalidRequest(t, status, body, contentType, "")
 		})
 	}
 }
