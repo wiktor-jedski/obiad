@@ -82,23 +82,34 @@ type SubstituteInput struct {
 	Quantity     FoodQuantity
 }
 
-// SubstituteItem is one ranked eligible Substitute (ARCH-005, ARCH-018): the
-// stable Food Object ID, both localized names, the optional image key, the
-// unrounded Matched Quantity in the candidate base unit, the unrounded
-// protein, carbohydrate, and fat scaled to that Matched Quantity, and the
-// unrounded Nutritional Similarity as a fraction of one. Every calculation
-// stays in float64 until Phase 4 task 17 completes the display projection
-// (rounding Matched Quantity, macronutrients, and similarity) without
-// changing candidate eligibility or order.
+// MatchedQuantity is one Substitute's display-projected equal-calorie
+// amount (REQ-031, REQ-038): a whole value in the candidate base unit —
+// grams for a solid candidate, millilitres for a liquid candidate
+// (ARCH-013, ARCH-018). The value and unit are the final projection of the
+// full-precision Matched Quantity; candidate eligibility and order never
+// depend on them (REQ-040).
+type MatchedQuantity struct {
+	Value int64
+	Unit  Unit
+}
+
+// SubstituteItem is one ranked eligible Substitute after the final display
+// projection (ARCH-005, ARCH-018, REQ-039): the stable Food Object ID, both
+// localized names, the optional image key, the whole Matched Quantity in
+// the candidate base unit, the protein, carbohydrate, and fat scaled to the
+// unrounded Matched Quantity and rounded to 0.1 g, and the whole similarity
+// percentage. Every ranking and calculation stays in float64 until this
+// projection; candidate eligibility and order never depend on the rounded
+// values (REQ-040).
 type SubstituteItem struct {
-	FoodObjectID    int32
-	Names           LocalizedNames
-	ImageKey        *string
-	MatchedQuantity float64
-	Protein         float64
-	Carbohydrate    float64
-	Fat             float64
-	Similarity      float64
+	FoodObjectID      int32
+	Names             LocalizedNames
+	ImageKey          *string
+	MatchedQuantity   MatchedQuantity
+	Protein           float64
+	Carbohydrate      float64
+	Fat               float64
+	SimilarityPercent int32
 }
 
 // Page is one deterministic page of display-ready Substitutes (ARCH-005):
@@ -146,9 +157,57 @@ func cosineSimilarity(a, b macroProfile) float64 {
 // inputCalories is the input's total calorie value at its converted base
 // quantity and candidateCaloriesPer100 is the candidate's calories per
 // Nutrition Basis. The result stays the full-precision float64 Matched
-// Quantity; Phase 4 task 17 rounds it for display.
+// Quantity; the final display projection rounds it.
 func matchedQuantity(inputCalories, candidateCaloriesPer100 float64) float64 {
 	return inputCalories * 100 / candidateCaloriesPer100
+}
+
+// roundHalfUp returns the nearest whole number to v, rounding exact
+// nonnegative halves up (REQ-039, ARCH-018): 0.5 becomes 1, 1.5 becomes 2,
+// and 0.49999999999999994 becomes 0. Every value it receives is
+// nonnegative — Matched Quantities, scaled macronutrients, and similarities
+// never go below zero — so math.Round's half-away-from-zero rule is exactly
+// half-up here. It is the single rounding primitive of the final display
+// projection.
+func roundHalfUp(v float64) float64 {
+	return math.Round(v)
+}
+
+// projectMatchedQuantity rounds the full-precision Matched Quantity to a
+// whole candidate base unit and attaches that unit — g for a solid
+// candidate, ml for a liquid candidate (ARCH-013 Nutrition Basis, REQ-038,
+// REQ-039): 437.5 g becomes 438 g and 437.49999999999994 g becomes 437 g.
+// A positive value can display as zero. The whole value must fit the int64
+// display range; a schema-valid extreme input whose equal-calorie amount
+// exceeds it is a Module failure, never a wrapped or overflowed display
+// value.
+func projectMatchedQuantity(mq float64, state physicalState) (MatchedQuantity, error) {
+	whole := roundHalfUp(mq)
+	if whole >= float64(math.MaxInt64) {
+		return MatchedQuantity{}, fmt.Errorf("whole Matched Quantity %v exceeds the int64 display range", mq)
+	}
+	unit := UnitGram
+	if state == stateLiquid {
+		unit = UnitMillilitre
+	}
+	return MatchedQuantity{Value: int64(whole), Unit: unit}, nil
+}
+
+// projectMacronutrient rounds one macronutrient amount, already scaled to
+// the unrounded Matched Quantity, to 0.1 g (REQ-039, ARCH-018): 8.75 g
+// becomes 8.8 g and 0.04 g becomes 0.0 g, so a positive amount can display
+// as zero. The rounding happens once, in this final projection, never
+// before the scaling.
+func projectMacronutrient(amount float64) float64 {
+	return roundHalfUp(amount*10) / 10
+}
+
+// projectSimilarityPercent rounds 100 × the full-precision Nutritional
+// Similarity to a whole percentage (REQ-039, ARCH-018): 0.505 becomes 51
+// and 0.5049999999999999 becomes 50. The similarity itself stays unrounded
+// until this projection.
+func projectSimilarityPercent(similarity float64) int32 {
+	return int32(roundHalfUp(similarity * 100))
 }
 
 // isFiniteDerived reports whether one derived calculation result is a finite
@@ -396,16 +455,20 @@ func NewFindSubstitutePage(conn *pgx.Conn) (*FindSubstitutePage, error) {
 // decreasing unrounded Nutritional Similarity, the pinned English collation
 // of the stored English names, and stable Food Object ID, and returns the
 // total eligible count, hasMore, and the first zero to three unique items.
-// Every calculation stays in float64 until Phase 4 task 17 completes the
-// display projection. A schema-valid finite Macro Profile whose derived
-// calories, similarity, Matched Quantity, or scaled macronutrients are not
-// finite is classified as an internal failure at the Module boundary instead
-// of reaching a page or the ranking order. Failures are stable Error values
-// with a Code and an optional Field. Catalog-independent request failures
-// (page index, Food Object ID, quantity value or unit) are rejected before
-// the single catalog read, and object-dependent failures (absent ID, unit
-// mismatch, unavailable Serving, converted-value limit) after it, so Run
-// never reads the catalog twice and never retries.
+// Every ranking and calculation stays in float64 until the final display
+// projection (REQ-040), which rounds the Matched Quantity to a whole
+// candidate base unit, the scaled macronutrients to 0.1 g, and 100 ×
+// similarity to a whole percentage (REQ-039). A schema-valid finite Macro
+// Profile whose derived calories, similarity, Matched Quantity, or scaled
+// macronutrients are not finite, or whose projected Matched Quantity does
+// not fit the int64 display range, is classified as an internal failure at
+// the Module boundary instead of reaching a page or the ranking order.
+// Failures are stable Error values with a Code and an optional Field.
+// Catalog-independent request failures (page index, Food Object ID,
+// quantity value or unit) are rejected before the single catalog read, and
+// object-dependent failures (absent ID, unit mismatch, unavailable Serving,
+// converted-value limit) after it, so Run never reads the catalog twice and
+// never retries.
 func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pageIndex int32) (*Page, error) {
 	if input.FoodObjectID <= 0 {
 		return nil, &Error{
@@ -491,15 +554,22 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 					r.object.id, mq, protein, carbohydrate, fat),
 			}
 		}
+		matched, err := projectMatchedQuantity(mq, r.object.physicalState)
+		if err != nil {
+			return nil, &Error{
+				Code:  CodeInternalError,
+				cause: fmt.Errorf("food object %d: %w", r.object.id, err),
+			}
+		}
 		page.Items = append(page.Items, SubstituteItem{
-			FoodObjectID:    r.object.id,
-			Names:           r.object.names,
-			ImageKey:        r.object.imageKey,
-			MatchedQuantity: mq,
-			Protein:         protein,
-			Carbohydrate:    carbohydrate,
-			Fat:             fat,
-			Similarity:      r.similarity,
+			FoodObjectID:      r.object.id,
+			Names:             r.object.names,
+			ImageKey:          r.object.imageKey,
+			MatchedQuantity:   matched,
+			Protein:           projectMacronutrient(protein),
+			Carbohydrate:      projectMacronutrient(carbohydrate),
+			Fat:               projectMacronutrient(fat),
+			SimilarityPercent: projectSimilarityPercent(r.similarity),
 		})
 	}
 	return page, nil
