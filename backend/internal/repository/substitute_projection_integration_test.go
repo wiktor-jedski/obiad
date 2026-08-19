@@ -23,16 +23,19 @@ package repository
 // full-precision expectations are verified directly through the private
 // production calorie, cosine, and Matched Quantity helpers with
 // abs(got - want) <= 1e-12 (ISSUE-005), and the projected display is
-// verified on the concrete Run output. Exact-half boundaries that no
-// top-ranked fixture can reach through Run (whole-percentage halves and
-// arbitrary 0.1 g halves) are asserted directly on the private production
-// projection helpers, mirroring the task-16 helper-assertion pattern; the
-// schema-valid extreme pair whose projected Matched Quantity exceeds the
-// int64 display range is classified as the stable INTERNAL_ERROR through
-// Run. No exported seam, fake, or test hook is added. The admin connection
-// comes from OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment
-// variables; no credential is committed and tests skip when no server is
-// reachable.
+// verified on the concrete Run output. Exact-half boundaries at every
+// target precision are proven through concrete page-0 Run fixtures — the
+// whole-unit and 0.1 g halves (fixtures 101 and 103) and the whole-
+// percentage half (fixture 108, whose loaded cosine satisfies
+// 100 × similarity == 94.5 exactly); arbitrary 0.1 g halves that no
+// top-ranked fixture can reach are additionally asserted directly on the
+// private production projection helpers, mirroring the task-16
+// helper-assertion pattern. The schema-valid extreme pair whose projected
+// Matched Quantity exceeds the int64 display range is classified as the
+// stable INTERNAL_ERROR through Run. No exported seam, fake, or test hook
+// is added. The admin connection comes from
+// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables;
+// no credential is committed and tests skip when no server is reachable.
 
 import (
 	"context"
@@ -93,9 +96,13 @@ var scenarioAProjections = []wantProjectionItem{
 // (3, 4, 9) at 350 g): the half fixture 103 whose Matched Quantity lands
 // on the whole-unit half (437.50000000000006 ml → 438 ml) and whose protein
 // and fat land on 0.1 g halves (8.750000000000002 g → 8.8 g,
-// 29.750000000000004 g → 29.8 g), and two ordinary fixtures 107 and 106
-// whose whole Matched Quantities and ordinary 0.1 g macronutrients project
-// without boundary effects.
+// 29.750000000000004 g → 29.8 g); the ordinary fixture 107 whose whole
+// Matched Quantity and ordinary 0.1 g macronutrients project without
+// boundary effects; and the exact-percentage-half fixture 108 whose loaded
+// full-precision cosine satisfies 100 × similarity == 94.5 exactly in
+// float64 (0.94500000000000006 × 100 == 94.5), so Run must round
+// SimilarityPercent up to 95 — the concrete-Run exact-half-up evidence at
+// the whole-percentage target precision (P04-G4, REQ-039).
 var scenarioBProjections = []wantProjectionItem{
 	{
 		id: 103, cosine: 0.9856504098890393, mq: 437.50000000000006,
@@ -110,10 +117,10 @@ var scenarioBProjections = []wantProjectionItem{
 		displayProtein: 9.3, displayCarbohydrate: 23.3, displayFat: 27.9, similarityPercent: 96,
 	},
 	{
-		id: 106, cosine: 0.9358786874253313, mq: 443.6046511627907,
-		protein: 8.872093023255813, carbohydrate: 26.616279069767444, fat: 26.616279069767444,
-		matchedQuantity: 444, unit: UnitMillilitre,
-		displayProtein: 8.9, displayCarbohydrate: 26.6, displayFat: 26.6, similarityPercent: 94,
+		id: 108, cosine: 0.94500000000000006, mq: 341.07965651199112,
+		protein: 19.955564097289411, carbohydrate: 6.3508054590323875, fat: 30.697169086079203,
+		matchedQuantity: 341, unit: UnitMillilitre,
+		displayProtein: 20.0, displayCarbohydrate: 6.4, displayFat: 30.7, similarityPercent: 95,
 	},
 }
 
@@ -139,12 +146,13 @@ func displayOf(mq, protein float64) projectedDisplay {
 // artificial boundary fixtures prove full-precision ranking and scaling,
 // the solid g and liquid ml Matched Quantity units, whole-unit, one-decimal,
 // and whole-percentage projection, exact-half-up behavior at every target
-// precision, a positive value that displays as zero, and a fixture that
-// fails if any intermediate value is rounded early. Exact-half boundaries
-// that no top-ranked fixture can reach are asserted directly on the private
-// projection helpers, and the schema-valid extreme pair whose whole Matched
-// Quantity exceeds the int64 display range is classified as the stable
-// INTERNAL_ERROR after exactly one fresh SELECT and no retry.
+// precision — including an exact whole-percentage half through Run — a
+// positive value that displays as zero, and a fixture that fails if any
+// intermediate value is rounded early. Exact-half boundaries that no
+// top-ranked fixture can reach are additionally asserted directly on the
+// private projection helpers, and the schema-valid extreme pair whose whole
+// Matched Quantity exceeds the int64 display range is classified as the
+// stable INTERNAL_ERROR after exactly one fresh SELECT and no retry.
 func TestSubstituteProjectionIntegration(t *testing.T) {
 	_, module, tracer, wantSQL, owner := setupSubstituteFixture(t)
 	ctx := context.Background()
@@ -173,12 +181,12 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	// Exact-half-up projection primitives (REQ-039, ARCH-018): the rounding
 	// used at every target precision — whole Matched Quantity, 0.1 g
 	// macronutrients, whole percentage — rounds exact nonnegative halves up
-	// and permits a positive value to display as zero. Whole-percentage
-	// halves and arbitrary 0.1 g halves cannot all reach page 0 through Run
-	// (the seeded catalog's similarity spread bounds the visible
-	// candidates), so these boundaries are asserted directly on the private
-	// production projection helpers, the same pattern the task-16 test uses
-	// for the private calculation helpers.
+	// and permits a positive value to display as zero. Exact halves at all
+	// three target precisions are proven through concrete page-0 Run
+	// fixtures (101, 103, and 108); these direct assertions additionally pin
+	// the primitive boundaries and the arbitrary 0.1 g halves that no
+	// top-ranked fixture can reach through Run, mirroring the task-16
+	// helper-assertion pattern.
 	if got := roundHalfUp(0.5); got != 1 {
 		t.Fatalf("roundHalfUp(0.5) = %v, want 1 (exact half rounds up)", got)
 	}
@@ -265,7 +273,7 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	insert(110, "Projection liquid input", "Wprowadzenie projekcji cieklej", stateSolid, 3, 4, 9)
 	insert(103, "Projection half ml", "Projekcja polowa ml", stateLiquid, 2, 4.5, 6.8)
 	insert(107, "Projection ordinary ml", "Projekcja zwykla ml", stateLiquid, 2, 5, 6)
-	insert(106, "Projection third ml", "Projekcja trzecia ml", stateLiquid, 2, 6, 6)
+	insert(108, "Projection half percent", "Projekcja polowa procent", stateLiquid, 5.850704876791104, 1.8619713424066724, 9)
 	insert(130, "Projection extreme input", "Ekstremalne wprowadzenie", stateSolid, 2.5e16, 0, 0)
 	insert(131, "Projection extreme candidate", "Ekstremalny kandydat", stateSolid, 0.1, 0, 0)
 
@@ -336,6 +344,17 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	// exact-half-up projection, and ordinary whole-unit, one-decimal, and
 	// whole-percentage projection, all through the concrete Run operation.
 	assertScenario(110, scenarioBProjections)
+
+	// Exact whole-percentage half through Run (P04-G4, REQ-039): fixture
+	// 108's loaded full-precision cosine satisfies 100 × similarity == 94.5
+	// exactly in float64 (0.94500000000000006 × 100 == 94.5), so Run must
+	// round SimilarityPercent up to 95 — concrete-Run exact-half-up evidence
+	// at the whole-percentage target precision. The page-0 item assertion in
+	// the liquid scenario above checks the projected 95; this check pins the
+	// exact-half property of the loaded cosine itself.
+	if half := cosineSimilarity(profiles[110], profiles[108]) * 100; half != 94.5 {
+		t.Fatalf("fixture 108 cosine × 100 = %.17g, want the exact half 94.5", half)
+	}
 
 	// Early-rounding adversary (P04-G4, REQ-040): fixture 102's
 	// full-precision display is 437 g and 0.3 g protein. Rounding any
