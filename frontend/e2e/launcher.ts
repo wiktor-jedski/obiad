@@ -100,6 +100,8 @@ const PROCESS_START_TIMEOUT_MS = 60_000;
 const POSTGRES_START_TIMEOUT_MS = 60_000;
 const STOP_GRACE_MS = 3_000;
 const STOP_HARD_MS = 1_000;
+/** Brief poll before deregistering a completed child's group (zombie window). */
+const GROUP_DEREGISTER_GRACE_MS = 250;
 const HEALTH_PROBE_TIMEOUT_MS = 2_000;
 const CONTAINER_RM_RETRIES = 3;
 /** Bound for one Docker CLI operation (run, port, logs, rm). */
@@ -242,6 +244,29 @@ function spawnOwned(
   return child;
 }
 
+/**
+ * Deregisters a completed child's process group once its disappearance is
+ * confirmed. A group whose leader exited but still has members (for example
+ * a step that forked a background process) keeps its registration so cleanup
+ * still owns it; a group that is truly gone is removed promptly, so a stale
+ * registration can never outlive the process it refers to (PGID reuse).
+ */
+function deregisterGroupWhenGone(resources: OwnedResources, child: ChildProcess): void {
+  const pgid = child.pid;
+  if (pgid === undefined) {
+    return;
+  }
+  void (async () => {
+    const deadline = Date.now() + GROUP_DEREGISTER_GRACE_MS;
+    while (Date.now() < deadline && groupAlive(pgid)) {
+      await sleep(25);
+    }
+    if (!groupAlive(pgid)) {
+      resources.groups.delete(pgid);
+    }
+  })();
+}
+
 /** Runs one lifecycle step to completion and returns its exit status. */
 async function runStep(
   resources: OwnedResources,
@@ -253,7 +278,10 @@ async function runStep(
   const child = spawnOwned(resources, command, args, options);
   const { promise, resolve, reject } = Promise.withResolvers<number>();
   child.once('error', reject);
-  child.once('exit', (code) => resolve(code ?? 1));
+  child.once('exit', (code) => {
+    resolve(code ?? 1);
+    deregisterGroupWhenGone(resources, child);
+  });
   return promise;
 }
 
@@ -574,12 +602,18 @@ async function waitForService(
 }
 
 /**
- * The exact ARCH-009 ready contract: HTTP 200 with an `application/json`
- * body that is exactly the single-field object `{"status":"ready"}`. A
- * false or malformed ready body never passes.
+ * The exact ARCH-009 ready contract: HTTP 200 whose Content-Type is exactly
+ * the `application/json` media type (case-insensitive, trimmed, optional
+ * `;` parameters such as charset allowed) and whose body is exactly the
+ * single-field object `{"status":"ready"}`. Suffix/prefix types such as
+ * `application/jsonp` and a false or malformed ready body never pass.
  */
 function fiberReady(status: number, body: string, contentType: string): boolean {
-  if (status !== 200 || !contentType.toLowerCase().includes('application/json')) {
+  if (status !== 200) {
+    return false;
+  }
+  const mediaType = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (mediaType !== 'application/json') {
     return false;
   }
   try {
@@ -907,6 +941,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
   if (fiber.pid === undefined) {
     throw new Error(`failed to spawn the Fiber server ${serverBinary}`);
   }
+  fiber.once('exit', () => deregisterGroupWhenGone(resources, fiber));
   resources.fiberStarted = true;
   log(`started real Fiber process (pid ${fiber.pid}) on ${FIBER_ADDR}`);
   await waitForService(
@@ -927,6 +962,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
   if (preview.pid === undefined) {
     throw new Error('failed to spawn the Vite preview');
   }
+  preview.once('exit', () => deregisterGroupWhenGone(resources, preview));
   resources.previewStarted = true;
   log(`started optimized Vite preview (pid ${preview.pid}) on ${PREVIEW_ORIGIN}`);
   await waitForService(
