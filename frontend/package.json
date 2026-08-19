@@ -1,0 +1,15 @@
+{
+  "name": "obiad-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Minimal Bun package that compiles the generated TypeScript API client. No Svelte, Vite, /api proxy, or interaction code (ISSUE-004).",
+  "scripts": {
+    "generate:api": "openapi-ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "^5.9.3"
+  }
+}

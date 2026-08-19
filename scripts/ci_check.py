@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
+FRONTEND_ROOT = REPO_ROOT / "frontend"
 POSTGRES_IMAGE = "postgres:17-alpine"
 POSTGRES_CONTAINER_PORT = "5432/tcp"
 POSTGRES_START_TIMEOUT_SECONDS = 60
@@ -107,9 +108,13 @@ def published_postgres_port(container_name: str) -> int:
 
 
 def run_ci_checks() -> None:
-    """Validate planning files and run Go tests against disposable PostgreSQL."""
+    """Generate code, validate planning files, and run all compile and test checks."""
 
     run_checked([sys.executable, "scripts/validate_phase_plan.py"])
+    run_checked(["go", "generate", "./..."], cwd=BACKEND_ROOT)
+    run_checked(["bun", "install", "--frozen-lockfile"], cwd=FRONTEND_ROOT)
+    run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
+    run_checked(["bun", "run", "typecheck"], cwd=FRONTEND_ROOT)
 
     container_name = f"obiad-ci-postgres-{os.getpid()}-{secrets.token_hex(4)}"
     password = secrets.token_urlsafe(24)

@@ -1,0 +1,47 @@
+# Generated API code
+frontend/src/client/
+
+# Local dependencies
+frontend/node_modules/
+.env*
+
+### Go ##
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+.go-cache/
+.go-mod-cache/
+backend/.go-cache/
+backend/.go-mod-cache/
+backend/.go-mod-cache-*/
+backend/internal/transport/suggestions.gen.go
+
+### Svelte ###
+# gitignore template for the SvelteKit, frontend web component framework
+# website: https://kit.svelte.dev/
+
+.svelte-kit/
+node_modules/
+dist/
+package
+.bun-tmp/
+.bun-install/
+*.tsbuildinfo
+
+### Playwright ###
+# Browser test output directories (artifacts, traces, screenshots, reports)
+test-results/
+playwright-report/
+/playwright/.cache/
+
+### Python ###
+__pycache__/
+
+
+### Other ###
+*.log
