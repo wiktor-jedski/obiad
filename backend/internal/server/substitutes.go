@@ -34,7 +34,12 @@ import (
 // maxRequestBodyBytes is the request-body limit of POST
 // /api/v1/substitutes/search (ARCH-008, ISSUE-005): a body over 4 KiB
 // (4096 bytes) is rejected with the stable 413 REQUEST_BODY_TOO_LARGE
-// response without a field, and a body of exactly 4 KiB is accepted.
+// response without a field, and a body of exactly 4 KiB is accepted. The
+// limit is enforced as a pre-read ingress cap through the fasthttp
+// HeaderReceived hook in Compose, so an oversized body is rejected while
+// the request is read, before any handler runs and before the body is
+// buffered. This constant is the single source of the 4 KiB value for both
+// the ingress cap and the handler-level backstop below.
 const maxRequestBodyBytes = 4096
 
 // substitutesHandler returns the Fiber handler for the versioned
@@ -53,12 +58,13 @@ const maxRequestBodyBytes = 4096
 // (ARCH-008).
 func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// The 4 KiB request-body limit is a transport-level resource guard
-		// (ARCH-008, ISSUE-005): a body over 4096 bytes is rejected with
-		// the stable 413 REQUEST_BODY_TOO_LARGE response, without a field,
-		// before the Content-Type check or any JSON processing. The limit
-		// fires first so an oversized entity is refused outright no matter
-		// what else the request carries.
+		// The 4 KiB request-body limit is enforced pre-read by the fasthttp
+		// HeaderReceived ingress cap in Compose, so a body over 4096 bytes
+		// is rejected before this handler runs. This byte check is the
+		// handler-level backstop: if the ingress cap ever did not apply, the
+		// request still fails with the exact stable 413 REQUEST_BODY_TOO_LARGE
+		// response, without a field, before any JSON processing (ARCH-008,
+		// ISSUE-005).
 		if len(c.Body()) > maxRequestBodyBytes {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, transport.REQUESTBODYTOOLARGE, nil, errors.New("request body exceeds the 4 KiB limit"))
 		}

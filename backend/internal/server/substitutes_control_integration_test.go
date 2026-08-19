@@ -15,25 +15,28 @@ package server
 // The validation test proves the ISSUE-005-resolved request-control
 // contract of POST /api/v1/substitutes/search: the accepted 4 KiB and
 // rejected 4 KiB-plus-one request-body boundaries (413 REQUEST_BODY_TOO_LARGE
-// without a field), the strict content-type rule, the empty, malformed,
-// trailing, unknown-key, duplicate-key, missing, null, and wrong-typed
-// structural failures (400 INVALID_REQUEST with the exact field or
-// omission), the semantic quantity, unit, Serving, and range failures
-// (the specific 422 stable codes with their exact ISSUE-005 fields), and
-// PAGE_OUT_OF_RANGE for every nonzero page index. The failures test proves
-// every applicable stable server error — 400, 404, 413, 422, 503, 504, and
-// 500 — with the exact ISSUE-005 field or omission and no response leakage,
-// in isolated real database-outage, pool-blocking, deadline, and
-// catalog-invariant scenarios, proves that the single 450 ms deadline
-// reaches blocked pgx work and cancels it, and proves no retry: one
-// catalog query per request, a maximum of four concurrent queries for a
-// five-request pool-exhaustion batch, and every deadline response well
-// under two deadlines. The log test proves the structured request-log
-// fields and the sensitive-value exclusions: request ID, method, route
-// template, status, duration, stable code, and an exact stable safe
-// internal cause, with Food Quantities, units, unknown-key names, numeric
-// tokens, request bodies, SQL text, credentials, and stack details
-// excluded (P04-G2, P04-G4).
+// without a field), enforced as a route-aware pre-read ingress cap — a raw
+// request declaring a 100,000-byte Content-Length or a 100,000-byte chunk
+// is rejected while the request is read, before the body is buffered, and
+// an unrelated route keeps its default body limit; the strict
+// content-type rule, the empty, malformed, trailing, unknown-key,
+// duplicate-key, missing, null, and wrong-typed structural failures
+// (400 INVALID_REQUEST with the exact field or omission), the semantic
+// quantity, unit, Serving, and range failures (the specific 422 stable
+// codes with their exact ISSUE-005 fields), and PAGE_OUT_OF_RANGE for every
+// nonzero page index. The failures test proves every applicable stable
+// server error — 400, 404, 413, 422, 503, 504, and 500 — with the exact
+// ISSUE-005 field or omission and no response leakage, in isolated real
+// database-outage, pool-blocking, deadline, and catalog-invariant
+// scenarios, proves that the single 450 ms deadline reaches blocked pgx
+// work and cancels it, and proves no retry: one catalog query per request,
+// a maximum of four concurrent queries for a five-request pool-exhaustion
+// batch, and every deadline response well under two deadlines. The log
+// test proves the structured request-log fields and the sensitive-value
+// exclusions: request ID, method, route template, status, duration, stable
+// code, and an exact stable safe internal cause, with Food Quantities,
+// units, unknown-key names, numeric tokens, request bodies, SQL text,
+// credentials, and stack details excluded (P04-G2, P04-G4).
 //
 // The explicit ISSUE-003 and ISSUE-005 zero-result deviation is preserved:
 // no test introduces a fake or unsupported catalog fixture to force a
@@ -45,8 +48,10 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -66,6 +71,68 @@ func postSubstitutesResult(t *testing.T, baseURL string, contentType string, bod
 	t.Helper()
 	status, responseBody, responseContentType := postSubstitutes(t, baseURL, contentType, body)
 	return httpResult{status: status, body: responseBody, contentType: responseContentType}
+}
+
+// postTo performs a real POST of body to the given path with the given
+// Content-Type and returns the status, the raw response body, and the
+// response Content-Type header. It is used for unrelated-route requests
+// that the substitutes helper cannot express (route-awareness proof).
+func postTo(t *testing.T, baseURL, path, contentType, body string) (status int, responseBody string, responseContentType string) {
+	t.Helper()
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, baseURL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("build POST %s request: %v", path, err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s (body %q): %v", path, body, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close %s response body: %v", path, err)
+		}
+	}()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s body: %v", path, err)
+	}
+	return resp.StatusCode, string(raw), resp.Header.Get("Content-Type")
+}
+
+// partialRawRequest writes head to a fresh TCP connection to addr and then
+// reads the response without sending any further bytes. It proves the
+// pre-read 4 KiB ingress limit: a request whose declared Content-Length or
+// declared chunk already exceeds the limit must be rejected with the exact
+// 413 response while the client has sent only the head. If the server tried
+// to buffer the full declared body first, it would block on the missing
+// bytes and the read deadline would expire instead, failing the test.
+func partialRawRequest(t *testing.T, addr, head string) httpResult {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp4", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial %s: %v", addr, err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Errorf("close raw request connection: %v", err)
+		}
+	}()
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("set connection deadline: %v", err)
+	}
+	if _, err := conn.Write([]byte(head)); err != nil {
+		t.Fatalf("write raw request head: %v", err)
+	}
+	data, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatalf("read raw response: %v", err)
+	}
+	status, contentType, body := parseRawResponse(t, data)
+	return httpResult{status: status, body: body, contentType: contentType}
 }
 
 // TestSubstituteSearchValidationHTTPIntegration verifies the ISSUE-005-
@@ -103,18 +170,57 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 	// The rejected 4 KiB-plus-one boundary: the same closed object with one
 	// more trailing byte is structurally valid JSON, so only the size guard
 	// can reject it. It returns the exact 413 REQUEST_BODY_TOO_LARGE error
-	// without a field and without any internal cause.
+	// without a field and without any internal cause. The pre-read ingress
+	// cap (fasthttp HeaderReceived in Compose) rejects it while the request
+	// is read, before the body is buffered or any handler runs.
 	oversized4097 := canonicalSubstituteBody + strings.Repeat(" ", maxRequestBodyBytes+1-len(canonicalSubstituteBody))
 	if len(oversized4097) != maxRequestBodyBytes+1 {
 		t.Fatalf("oversized boundary body length %d, want %d", len(oversized4097), maxRequestBodyBytes+1)
 	}
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversized4097), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
 
-	// A clearly oversized body — valid JSON padded to about 128 KiB — is
-	// refused with the same exact 413 response, proving the limit is not a
-	// one-byte special case.
-	hugeBody := `{"foodObjectId":1,` + strings.Repeat(" ", 128*1024) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, hugeBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+	// Pre-read Content-Length rejection: a raw request that declares a
+	// 100,000-byte body and sends only the request head — no body bytes at
+	// all — must still receive the exact 413 response promptly. If the
+	// server buffered the declared body before enforcing the limit, it would
+	// block waiting for the missing bytes and the read deadline would expire
+	// instead. This proves the limit is an ingress cap, not a post-read
+	// check, so a client can never stream a large entity into memory.
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("parse server base URL %q: %v", baseURL, err)
+	}
+	contentLengthHead := "POST /api/v1/substitutes/search HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	assertError(t, partialRawRequest(t, base.Host, contentLengthHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Pre-read chunked rejection: a raw request with a chunked body whose
+	// first declared chunk is 100,000 bytes (hex 186a0) is rejected at the
+	// chunk-size line, before any chunk payload is read — the client never
+	// sends the 100,000 bytes. A server that buffered the body first would
+	// block on the missing chunk payload and time out instead.
+	chunkedHead := "POST /api/v1/substitutes/search HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Transfer-Encoding: chunked\r\n" +
+		"Connection: close\r\n" +
+		"\r\n" +
+		"186a0\r\n" // declares a 100,000-byte chunk; the payload is never sent
+	assertError(t, partialRawRequest(t, base.Host, chunkedHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// The ingress cap is route-aware: an unrelated route keeps the
+	// server-wide default body limit. A POST to the suggestion route with a
+	// body far over 4 KiB is not rejected as 413; it reaches routing and is
+	// answered 405 Method Not Allowed.
+	unrelatedBody := `{"query":` + strconv.Quote(strings.Repeat("x", 10000)) + `}`
+	status, _, _ = postTo(t, baseURL, "/api/v1/food-suggestions", jsonType, unrelatedBody)
+	if status != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /api/v1/food-suggestions with an over-4-KiB body status %d, want 405 (the ingress limit must be route-aware)", status)
+	}
 
 	// The 4 KiB limit fires before the Content-Type check: an oversized body
 	// with a non-JSON Content-Type is refused as 413 (the resource guard
@@ -319,7 +425,7 @@ func TestSubstituteSearchFailuresHTTPIntegration(t *testing.T) {
 	// nonzero page; every nonzero page is covered by the validation test).
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,`), http.StatusBadRequest, "INVALID_REQUEST", "")
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":9999,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
-	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 700) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":1}`), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
 
@@ -525,7 +631,7 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	// REQUEST_BODY_TOO_LARGE without a field, and the record's cause is the
 	// fixed "request body exceeds the 4 KiB limit" — the body padding must
 	// never reach the log.
-	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 700) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
 
 	// 8. A deadline expiry: with the schema owner holding an ACCESS
@@ -563,7 +669,6 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 		}
 		seenRequestIDs[record.RequestID] = true
 	}
-	wantRoute := "/api/v1/substitutes/search"
 	// Every record forbids the raw request body text and its distinctive
 	// client-supplied tokens: a record that echoed any request value, unit,
 	// unknown key, numeric token, Content-Type value, or body padding would
@@ -583,18 +688,23 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 		status int
 		code   string
 		cause  string
+		route  string
 	}{
-		{http.StatusOK, "", ""},
-		{http.StatusBadRequest, "INVALID_REQUEST", "request body contains an unknown field"},
-		{http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "converted quantity exceeds the base-unit limit (field quantity.value)"},
-		{http.StatusBadRequest, "INVALID_REQUEST", "field foodObjectId is not a valid int32"},
-		{http.StatusBadRequest, "INVALID_REQUEST", "Content-Type is not application/json"},
-		{http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "food object is absent from the catalog (field foodObjectId)"},
-		{http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "request body exceeds the 4 KiB limit"},
-		{http.StatusGatewayTimeout, "SEARCH_TIMEOUT", deadlineLogCause},
+		{http.StatusOK, "", "", "/api/v1/substitutes/search"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "request body contains an unknown field", "/api/v1/substitutes/search"},
+		{http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "converted quantity exceeds the base-unit limit (field quantity.value)", "/api/v1/substitutes/search"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "field foodObjectId is not a valid int32", "/api/v1/substitutes/search"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "Content-Type is not application/json", "/api/v1/substitutes/search"},
+		{http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "food object is absent from the catalog (field foodObjectId)", "/api/v1/substitutes/search"},
+		// The pre-read ingress cap rejected this body while the request was
+		// read, before any Fiber handler ran: no route matched, so the app
+		// error handler's record has no route template (the same convention
+		// as malformed requests that never reach the router).
+		{http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "request body exceeds the 4 KiB limit", ""},
+		{http.StatusGatewayTimeout, "SEARCH_TIMEOUT", deadlineLogCause, "/api/v1/substitutes/search"},
 	}
 	for i, record := range records {
-		assertRequestLog(t, record, http.MethodPost, want[i].status, want[i].code, "", wantRoute, forbiddenByRecord[i])
+		assertRequestLog(t, record, http.MethodPost, want[i].status, want[i].code, "", want[i].route, forbiddenByRecord[i])
 		if record.Cause != want[i].cause {
 			t.Fatalf("log record %d cause %q, want exactly %q (no client values, units, unknown keys, numeric tokens, body text, SQL, credentials, or stack details)", i, record.Cause, want[i].cause)
 		}

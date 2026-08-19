@@ -17,21 +17,26 @@
 // (ARCH-019): suggestion and substitute search requests derive a 450 ms
 // context that bounds pool Acquire, the operation Module, and the pgx
 // catalog read, no retry occurs anywhere, and every failure maps to the
-// ISSUE-004 or ISSUE-005 stable status, code, and optional field.
-// Structured request logs are emitted through the injected logger (slog
-// JSON in production) with request ID, method, route template, status,
-// duration, stable error code, and internal cause, excluding query text,
-// quantities, request bodies, SQL parameters, credentials, and stack
-// details.
+// ISSUE-004 or ISSUE-005 stable status, code, and optional field. The
+// substitute search route enforces a pre-read 4 KiB request-body ingress
+// limit through the fasthttp HeaderReceived hook (ARCH-008, ISSUE-005), so
+// an oversized body is rejected while the request is read, before any
+// Fiber handler runs and before the body is buffered. Structured request
+// logs are emitted through the injected logger (slog JSON in production)
+// with request ID, method, route template, status, duration, stable error
+// code, and internal cause, excluding query text, quantities, request
+// bodies, SQL parameters, credentials, and stack details.
 package server
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/valyala/fasthttp"
 )
 
 // DefaultListenAddr is the ISSUE-004-resolved loopback address
@@ -88,6 +93,30 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 	app.Get("/health", healthHandler(pool))
 	app.Get("/api/v1/food-suggestions", suggestionsHandler(pool))
 	app.Post("/api/v1/substitutes/search", substitutesHandler(pool))
+
+	// Route-aware pre-read request-body ingress limit (ARCH-008, ISSUE-005,
+	// task 20): fasthttp reads the request body into memory before any Fiber
+	// handler runs, so a handler-level byte check alone would let a client
+	// stream a body up to the server-wide BodyLimit (4 MiB default) into
+	// memory. The HeaderReceived hook runs after the headers are parsed and
+	// before the body is read: it caps the substitute search route at
+	// maxRequestBodyBytes, so a request whose Content-Length exceeds the
+	// limit is rejected with ErrBodyTooLarge before any body byte is read,
+	// and a chunked body is rejected as soon as its declared chunk would
+	// cross the limit. Every other route keeps the server-wide default
+	// limit. The oversized request never reaches a handler: fasthttp's
+	// error path maps ErrBodyTooLarge to the Fiber 413 error, which the app
+	// error handler answers with the exact stable REQUEST_BODY_TOO_LARGE
+	// response and log record (errorHandler).
+	app.Server().HeaderReceived = func(h *fasthttp.RequestHeader) fasthttp.RequestConfig {
+		requestURI := h.RequestURI()
+		path, _, _ := bytes.Cut(requestURI, []byte{'?'})
+		if bytes.Equal(path, []byte("/api/v1/substitutes/search")) {
+			return fasthttp.RequestConfig{MaxRequestBodySize: maxRequestBodyBytes}
+		}
+		return fasthttp.RequestConfig{}
+	}
+
 	return app, pool, nil
 }
 
