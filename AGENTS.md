@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+## Language
+
+Use ASD-STE100.
+
 ## Project Structure & Module Organization
 
 This repository is currently organized around requirements, architecture, design specs, and helper scripts. Requirements live in `docs/requirements/`, architecture decisions in `docs/architecture/`, and implementation planning in `docs/implementation/`. Utility scripts are in `scripts/`.
@@ -45,7 +49,7 @@ For frontend, every hand-written exported type, interface, class, function, and 
 
 Current test commands:
 
-- Complete CI check: run `python3 scripts/ci_check.py` from the repository root. It validates phase planning, starts an isolated disposable PostgreSQL container, runs the complete backend test suite, and removes the container.
+- Complete CI check: run `python3 scripts/ci_check.py` from the repository root. It validates phase planning, generates the Go and TypeScript OpenAPI boundaries, compiles the generated frontend client, starts an isolated disposable PostgreSQL container, runs the complete backend test suite, and removes the container.
 - PostgreSQL for integration tests: in a separate terminal, run `docker run --rm --name obiad-test-postgres -e POSTGRES_PASSWORD=obiad_test -p 127.0.0.1:5432:5432 postgres:17-alpine` and wait until it reports that it is ready to accept connections.
 - Backend suite: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test ./...` from `backend/`.
 - PostgreSQL integration suite with individual pass/skip output: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test -v ./internal/dbsetup` from `backend/`.
