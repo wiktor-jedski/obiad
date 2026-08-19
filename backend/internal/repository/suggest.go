@@ -35,8 +35,8 @@ const (
 	LanguagePolish Language = "pl"
 )
 
-// LocalizedNames is the English and Polish name pair of one suggested Food
-// Object (ARCH-004). Both required names are always present.
+// LocalizedNames is the required English and Polish name pair of one Food
+// Object (ARCH-004, ARCH-013).
 type LocalizedNames struct {
 	En string
 	Pl string
@@ -121,8 +121,8 @@ func (e *Error) Unwrap() error { return e.cause }
 // Run operation accepts a raw Search Query and an Interface Language and
 // returns exactly five distinct suggestions or one stable failure. The
 // Module ranks the request-local catalog snapshot loaded through the private
-// Catalog Loader (ARCH-006): one fresh embedded parameterized SELECT per
-// operation, no runtime cache, no retry. The Module exposes no Go interface,
+// Catalog Loader (ARCH-006): one fresh embedded SELECT per operation, no
+// runtime cache, no retry. The Module exposes no Go interface,
 // repository port, ranking policy, or test Adapter, and no generated
 // transport value enters the Module.
 type Suggest struct {
@@ -271,9 +271,9 @@ func rank(objects []foodObject, query string, lang Language) []Suggestion {
 	q := []rune(query)
 	rankedList := make([]ranked, 0, len(objects))
 	for _, object := range objects {
-		name := object.names.en
+		name := object.names.En
 		if lang == LanguagePolish {
-			name = object.names.pl
+			name = object.names.Pl
 		}
 		normName := normalize(name)
 		rankedList = append(rankedList, ranked{
@@ -299,11 +299,8 @@ func rank(objects []foodObject, query string, lang Language) []Suggestion {
 	suggestions := make([]Suggestion, 0, 5)
 	for _, r := range rankedList[:count] {
 		suggestions = append(suggestions, Suggestion{
-			FoodObjectID: r.object.id,
-			Names: LocalizedNames{
-				En: r.object.names.en,
-				Pl: r.object.names.pl,
-			},
+			FoodObjectID:    r.object.id,
+			Names:           r.object.names,
 			DefaultQuantity: defaultQuantity(r.object),
 		})
 	}

@@ -1,9 +1,7 @@
 // Package repository implements the private concrete PostgreSQL Catalog
-// Loader (ARCH-006): one fresh embedded parameterized SELECT per operation,
-// executed through pgx from SQL colocated under
-// backend/internal/repository/sql/ and parameterized with a
-// semantics-neutral boolean predicate ($1::boolean) bound true, mapping
-// rows to private Food Object domain values, validating the ARCH-013
+// Loader (ARCH-006): one fresh embedded SELECT per operation, executed
+// through pgx from SQL colocated under backend/internal/repository/sql/,
+// mapping rows to private Food Object domain values, validating the ARCH-013
 // catalog invariants, and classifying failures as storage or
 // catalog-invariant. The concrete loader, its constructor and load
 // operation, the mapped catalog and domain values, the error classification
@@ -40,21 +38,6 @@ import (
 // catalogSelectPath is the embedded persistence SELECT the loader executes.
 const catalogSelectPath = "catalog/load_food_objects.sql"
 
-// allRows is the boolean value bound to the embedded catalog SELECT's
-// semantics-neutral predicate (WHERE $1::boolean). The predicate filters no
-// row, so every catalog row reaches Go-side invariant validation
-// (ARCH-006) while the statement stays a genuinely parameterized query
-// executed with one bound pgx argument.
-const allRows = true
-
-// localizedNames is the required English and Polish name pair of one Food
-// Object (ARCH-013, ADR 0001, REQ-006). Both names are nonempty string
-// values on the one stable Food Object ID.
-type localizedNames struct {
-	en string
-	pl string
-}
-
 // physicalState is the ARCH-013 Physical State of a Food Object: solid or
 // liquid. It determines the Nutrition Basis (REQ-007).
 type physicalState string
@@ -75,7 +58,7 @@ const (
 // rounded display values) are never stored and never loaded.
 type foodObject struct {
 	id            int32
-	names         localizedNames
+	names         LocalizedNames
 	physicalState physicalState
 	protein       float64
 	carbohydrate  float64
@@ -126,11 +109,11 @@ func (e *loadError) Error() string {
 func (e *loadError) Unwrap() error { return e.err }
 
 // loader is the private concrete PostgreSQL Catalog loader (ARCH-006). Each
-// load operation executes one fresh embedded parameterized SELECT through
-// pgx from SQL colocated under backend/internal/repository/sql/, maps rows
-// to private Food Object values, validates the ARCH-013 catalog invariants,
-// and classifies failures as storage or catalog-invariant. The loader holds
-// no runtime cache, performs no automatic retry, and never mutates.
+// load operation executes one fresh embedded SELECT through pgx from SQL
+// colocated under backend/internal/repository/sql/, maps rows to private Food
+// Object values, validates the ARCH-013 catalog invariants, and classifies
+// failures as storage or catalog-invariant. The loader holds no runtime
+// cache, performs no automatic retry, and never mutates.
 type loader struct {
 	conn      *pgx.Conn
 	selectSQL string
@@ -145,15 +128,13 @@ func newLoader(conn *pgx.Conn) (*loader, error) {
 	return &loader{conn: conn, selectSQL: sqlText}, nil
 }
 
-// load performs one fresh PostgreSQL read: it executes the embedded
-// parameterized SELECT exactly once, binding the all-rows boolean as its
-// one query argument, maps every row to a Food Object value, validates the
-// ARCH-013 catalog invariants, and returns the request-local snapshot in
-// ascending stable ID order. A failure is classified as storage or
-// catalog-invariant (loadError.kind). load never caches, never retries, and
-// never mutates.
+// load performs one fresh PostgreSQL read: it executes the embedded SELECT
+// exactly once, maps every row to a Food Object value, validates the ARCH-013
+// catalog invariants, and returns the request-local snapshot in ascending
+// stable ID order. A failure is classified as storage or catalog-invariant
+// (loadError.kind). load never caches, never retries, and never mutates.
 func (l *loader) load(ctx context.Context) ([]foodObject, error) {
-	rows, err := l.conn.Query(ctx, l.selectSQL, allRows)
+	rows, err := l.conn.Query(ctx, l.selectSQL)
 	if err != nil {
 		return nil, &loadError{kind: kindStorage, err: err}
 	}
@@ -207,12 +188,9 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	if err != nil {
 		return foodObject{}, fmt.Errorf("food object %d: %w", id, err)
 	}
-	var stateValue physicalState
-	switch physicalState(state) {
-	case stateSolid:
-		stateValue = stateSolid
-	case stateLiquid:
-		stateValue = stateLiquid
+	stateValue := physicalState(state)
+	switch stateValue {
+	case stateLiquid, stateSolid:
 	default:
 		return foodObject{}, fmt.Errorf("food object %d: Physical State %q must be %q or %q", id, state, stateSolid, stateLiquid)
 	}
@@ -245,29 +223,29 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 // must be a JSON object with nonempty string values for the required "en"
 // and "pl" keys, mirroring the migration-0001 btrim semantics (ADR 0001,
 // REQ-006). Additional language keys are permitted and ignored.
-func decodeNames(rawJSON []byte) (localizedNames, error) {
+func decodeNames(rawJSON []byte) (LocalizedNames, error) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(rawJSON, &m); err != nil {
-		return localizedNames{}, fmt.Errorf("localized names must be a JSON object: %w", err)
+		return LocalizedNames{}, fmt.Errorf("localized names must be a JSON object: %w", err)
 	}
-	var names localizedNames
+	var names LocalizedNames
 	for _, key := range []string{"en", "pl"} {
 		raw, ok := m[key]
 		if !ok {
-			return localizedNames{}, fmt.Errorf("localized names are missing the %q name", key)
+			return LocalizedNames{}, fmt.Errorf("localized names are missing the %q name", key)
 		}
 		var value string
 		if err := json.Unmarshal(raw, &value); err != nil {
-			return localizedNames{}, fmt.Errorf("localized name %q must be a string", key)
+			return LocalizedNames{}, fmt.Errorf("localized name %q must be a string", key)
 		}
 		if strings.Trim(value, " ") == "" {
-			return localizedNames{}, fmt.Errorf("localized name %q must be nonempty", key)
+			return LocalizedNames{}, fmt.Errorf("localized name %q must be nonempty", key)
 		}
 		switch key {
 		case "en":
-			names.en = value
+			names.En = value
 		case "pl":
-			names.pl = value
+			names.Pl = value
 		}
 	}
 	return names, nil

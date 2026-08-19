@@ -20,10 +20,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
-	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -44,20 +42,12 @@ const (
 	requestLogCauseKey = "obiad.request.error_cause"
 )
 
-// requestIDCounter is the fallback source of request IDs when crypto/rand is
-// unavailable. crypto/rand cannot fail on supported platforms, so the
-// fallback is defense in depth: the log never carries an empty or reused
-// request ID.
-var requestIDCounter atomic.Uint64
-
 // newRequestID returns a fresh unpredictable request ID: 16 bytes from
 // crypto/rand encoded as 32 hex characters (golang-security: crypto/rand, not
 // math/rand, for identifiers an attacker must not be able to predict).
 func newRequestID() string {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("%x-%d", time.Now().UnixNano(), requestIDCounter.Add(1))
-	}
+	rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 
@@ -173,13 +163,13 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 		switch {
 		case matched && fiberErr != nil && fiberErr.Code == fiber.StatusBadRequest:
 			logRequest(logger, requestID, c.Method(), route, fiber.StatusBadRequest, time.Since(start), codeInvalidRequest, sanitizeLogText(err.Error()))
-			return c.Status(fiber.StatusBadRequest).JSON(transportError(codeInvalidRequest, nil))
+			return c.Status(fiber.StatusBadRequest).JSON(transport.Error{Code: codeInvalidRequest})
 		case matched && fiberErr != nil && (fiberErr.Code == fiber.StatusNotFound || fiberErr.Code == fiber.StatusMethodNotAllowed):
 			logRequest(logger, requestID, c.Method(), route, fiberErr.Code, time.Since(start), "", sanitizeLogText(err.Error()))
 			return fiber.DefaultErrorHandler(c, err)
 		default:
 			logRequest(logger, requestID, c.Method(), route, fiber.StatusInternalServerError, time.Since(start), string(transport.INTERNALERROR), sanitizeLogText(err.Error()))
-			return c.Status(fiber.StatusInternalServerError).JSON(transportError(transport.INTERNALERROR, nil))
+			return c.Status(fiber.StatusInternalServerError).JSON(transport.Error{Code: transport.INTERNALERROR})
 		}
 	}
 }

@@ -32,14 +32,6 @@ import (
 // code, so it lives here rather than in the Module.
 const codeInvalidRequest = "INVALID_REQUEST"
 
-// transportError builds one generated stable error response (ARCH-008,
-// ISSUE-004): required code, optional field (only "query" or "language", and
-// only for client-parameter errors), no unknown fields, no localized prose,
-// SQL text, stack trace, or internal cause.
-func transportError(code transport.ErrorCode, field *transport.ErrorField) transport.Error {
-	return transport.Error{Code: code, Field: field}
-}
-
 // suggestionsHandler returns the Fiber handler for the versioned
 // GET /api/v1/food-suggestions route (ARCH-008). It maps the raw HTTP query
 // string parameters into the generated transport query type at the HTTP
@@ -216,7 +208,7 @@ func writeSuggestionError(c fiber.Ctx, status int, code transport.ErrorCode, fie
 	if cause != nil {
 		c.Locals(requestLogCauseKey, sanitizeLogText(cause.Error()))
 	}
-	return c.Status(status).JSON(transportError(code, field))
+	return c.Status(status).JSON(transport.Error{Code: code, Field: field})
 }
 
 // suggestionsResponse maps the domain suggestions returned by the Suggest

@@ -9,8 +9,8 @@ package repository
 // through the same embedded privilege SQL the local deployment setup applies,
 // and drives the real Suggest Module through the SELECT-only runtime
 // credential. A query tracer on the runtime connection proves that every Run
-// performs exactly one fresh embedded parameterized SELECT and that
-// validation failures never touch PostgreSQL. The admin connection comes from
+// performs exactly one fresh embedded SELECT and that validation failures
+// never touch PostgreSQL. The admin connection comes from
 // OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables; no
 // credential is committed and tests skip when no server is reachable.
 
@@ -144,8 +144,7 @@ func assertStableError(t *testing.T, err error, wantCode Code, wantField string)
 // equivalent (NFC/NFD) text; Polish-diacritic distance; raw-distance order;
 // active-language and ID tie order; the stable validation failures; the fresh
 // loader; and the storage-failure classification. Every successful Run
-// executes exactly one fresh embedded parameterized SELECT and no mutating
-// statement.
+// executes exactly one fresh embedded SELECT and no mutating statement.
 func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	db, suggest, tracer, wantSQL, owner := setupSuggestFixture(t)
 	ctx := context.Background()

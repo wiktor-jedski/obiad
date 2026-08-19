@@ -12,8 +12,8 @@ import "embed"
 
 // Catalog holds every persistence SELECT for the backend repository
 // (ARCH-006). The private concrete PostgreSQL Catalog Loader embeds these
-// statements and executes exactly one fresh parameterized SELECT per
-// operation; SQL is never placed inline in repository Go files.
+// statements and executes exactly one fresh SELECT per operation; SQL is
+// never placed inline in repository Go files.
 //
 //go:embed catalog/*.sql
 var Catalog embed.FS

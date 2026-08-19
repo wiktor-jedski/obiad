@@ -8,10 +8,10 @@ package repository
 // grants the runtime catalog read through the same embedded privilege SQL the
 // local deployment setup applies, and drives the real Loader through the
 // SELECT-only runtime credential. A query tracer on the runtime connection
-// proves that every load executes exactly one parameterized embedded SELECT —
-// $1::boolean bound true — and no mutating statement, and that a failing
-// load is not retried and a changed catalog is not cached. The admin
-// connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style
+// proves that every load executes exactly one embedded SELECT and no mutating
+// statement, and that a failing load is not retried and a changed catalog is
+// not cached. The admin connection comes from
+// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style
 // environment variables; no credential is committed and tests skip when no
 // server is reachable.
 
@@ -135,11 +135,9 @@ func (t *stmtTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx
 func (t *stmtTracer) reset() { t.stmts = nil }
 
 // assertSingleSelect verifies that exactly one statement was recorded since
-// the last reset, that it is the embedded load SELECT — a genuinely
-// parameterized statement whose $1 placeholder is cast to boolean and bound
-// to the all-rows value true — and that it is not a mutating statement. One
-// recorded statement per load also proves that a failing load is not
-// automatically retried.
+// the last reset, that it is the embedded load SELECT, and that it is not a
+// mutating statement. One recorded statement per load also proves that a
+// failing load is not automatically retried.
 func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	tb.Helper()
 	if len(t.stmts) != 1 {
@@ -155,12 +153,6 @@ func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	}
 	if t.stmts[0].SQL != wantSQL {
 		tb.Fatalf("loader executed unexpected SQL %q, want the embedded SELECT %q", t.stmts[0].SQL, wantSQL)
-	}
-	if !strings.Contains(t.stmts[0].SQL, "$1::boolean") {
-		tb.Fatalf("loader executed a statement whose $1 placeholder is not boolean-typed: %s", t.stmts[0].SQL)
-	}
-	if len(t.stmts[0].Args) != 1 || t.stmts[0].Args[0] != allRows {
-		tb.Fatalf("loader bound arguments %v, want exactly one argument with the all-rows boolean %v", t.stmts[0].Args, allRows)
 	}
 	for _, kw := range mutationKeywords {
 		if strings.Contains(strings.ToUpper(t.stmts[0].SQL), kw) {
@@ -271,7 +263,7 @@ func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 		if got.id != want.id {
 			t.Fatalf("Food Object %d: loader returned ID %d, want %d", i, got.id, want.id)
 		}
-		if got.names.en != want.en || got.names.pl != want.pl {
+		if got.names.En != want.en || got.names.Pl != want.pl {
 			t.Fatalf("Food Object %d: loader returned names %+v, want en=%q pl=%q", got.id, got.names, want.en, want.pl)
 		}
 		if got.physicalState != want.state {
@@ -353,11 +345,9 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	tracer.assertSingleSelect(t, wantSQL)
 
 	// Nonpositive-ID invariant failure: the schema owner drops the
-	// positive-ID constraint and inserts a row with ID 0. Because the
-	// embedded SELECT's predicate ($1::boolean bound true) is
-	// semantics-neutral and filters no row, the loader must read the
-	// nonpositive row, reach Go-side invariant validation, and classify the
-	// load as a catalog-invariant failure — never silently filter it out.
+	// positive-ID constraint and inserts a row with ID 0. The loader must read
+	// the nonpositive row, reach Go-side invariant validation, and classify
+	// the load as a catalog-invariant failure.
 	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_id_check"); err != nil {
 		t.Fatalf("drop positive-ID constraint: %v", err)
 	}
@@ -450,11 +440,11 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	if len(second) != 39 {
 		t.Fatalf("second load returned %d Food Objects, want 39 after the owner fixture change", len(second))
 	}
-	if second[0].names.en != "Pizza Margherita Fresca" || second[0].names.pl != "Pizza margherita" {
+	if second[0].names.En != "Pizza Margherita Fresca" || second[0].names.Pl != "Pizza margherita" {
 		t.Fatalf("second load did not observe the owner-updated localized names: got %+v", second[0].names)
 	}
 	added := second[38]
-	if added.id != 39 || added.names.en != "Cucumber" || added.names.pl != "Ogórek" ||
+	if added.id != 39 || added.names.En != "Cucumber" || added.names.Pl != "Ogórek" ||
 		added.physicalState != stateSolid || added.protein != 0.4 || added.carbohydrate != 3 ||
 		added.fat != 0.1 || added.serving == nil || *added.serving != 100 ||
 		added.foodFamilyID != nil || added.imageKey != nil {

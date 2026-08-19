@@ -102,7 +102,7 @@ Each item contains the stable Food Object ID, English and Polish names, optional
 
 **Responsibility:** Load and validate one request-local Food Catalog snapshot.
 
-**Contract:** This private concrete Module executes embedded parameterized SQL through pgx. Its SQL is colocated under `backend/internal/repository/sql/`. Each suggestion or Substitution Search performs one fresh PostgreSQL read. The Module maps rows to private Food Object values and reports storage or catalog-invariant failures.
+**Contract:** This private concrete Module executes embedded SQL through pgx. Its SQL is colocated under `backend/internal/repository/sql/`. It binds all dynamic SQL values through pgx parameters and never interpolates them into statement text; a statement with no dynamic values has no parameters. Each suggestion or Substitution Search performs one fresh PostgreSQL read. The Module maps rows to private Food Object values and reports storage or catalog-invariant failures.
 
 The Module has no exported repository interface, fake Adapter, runtime cache, SQL ranking, automatic retry, or derived-value persistence.
 
