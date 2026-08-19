@@ -1,28 +1,23 @@
 // Package-level file for the Fiber Adapter of the versioned
-// POST /api/v1/substitutes/search route (task 19; ARCH-005, ARCH-008,
-// ARCH-016, ARCH-019, ARCH-022). The adapter accepts only the
-// application/json Content-Type, strictly decodes one closed generated
+// POST /api/v1/substitutes/search route (tasks 19 and 20; ARCH-005,
+// ARCH-008, ARCH-016, ARCH-019, ARCH-022). The adapter enforces the
+// 4 KiB request-body limit, accepts only the application/json
+// Content-Type, strictly decodes one closed generated
 // SubstituteSearchRequest object at the HTTP boundary — rejecting empty,
 // malformed, or trailing JSON, unknown keys, and duplicate keys at every
-// nesting level — maps the valid generated values to the concrete Find
-// Substitute Page domain input, calls the concrete Run operation, and
-// serializes the exact generated page-0 SubstituteSearchResponse envelope
-// with omitted-not-null optional image keys. Generated transport values
-// never enter the Module, and Module domain values never reach the wire
-// un-mapped (ISSUE-005).
-//
-// Task-19 scope boundary: the 4 KiB request-body limit, the 450 ms request
-// deadline, and the stable ISSUE-005 mapping of Module failures (404
-// FOOD_OBJECT_NOT_FOUND, the 422 semantic quantity, unit, Serving, range,
-// and page codes, 503 CATALOG_UNAVAILABLE, 504 SEARCH_TIMEOUT) are owned
-// by task 20. Until then every failure the strict decoder does not already
-// classify is answered with the generic 500 INTERNAL_ERROR fallback and
-// the sanitized internal cause reaches only the request log (ARCH-019).
+// nesting level — derives one 450 ms request context (ARCH-019) and passes
+// it through pool Acquire and the concrete Find Substitute Page Run
+// operation to pgx, maps every failure to the ISSUE-005-resolved stable
+// HTTP status, code, and optional field, and serializes the exact
+// generated page-0 SubstituteSearchResponse envelope with omitted-not-null
+// optional image keys. Generated transport values never enter the Module,
+// and Module domain values never reach the wire un-mapped (ISSUE-005).
 
 package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,18 +31,44 @@ import (
 	"obiad/backend/internal/transport"
 )
 
+// maxRequestBodyBytes is the request-body limit of POST
+// /api/v1/substitutes/search (ARCH-008, ISSUE-005): a body over 4 KiB
+// (4096 bytes) is rejected with the stable 413 REQUEST_BODY_TOO_LARGE
+// response without a field, and a body of exactly 4 KiB is accepted. The
+// limit is enforced as a pre-read ingress cap through the fasthttp
+// HeaderReceived hook in Compose, so an oversized body is rejected while
+// the request is read, before any handler runs and before the body is
+// buffered. This constant is the single source of the 4 KiB value for both
+// the ingress cap and the handler-level backstop below.
+const maxRequestBodyBytes = 4096
+
 // substitutesHandler returns the Fiber handler for the versioned
-// POST /api/v1/substitutes/search route (ARCH-008). It enforces the
-// application/json Content-Type, strictly decodes one closed generated
-// request object (ISSUE-005: empty, malformed, or trailing JSON, unknown
-// keys, and duplicate keys at every nesting level are rejected; a missing,
-// duplicate, null, or wrong-typed known field carries its ISSUE-005 field
-// path), maps the valid generated values to the concrete Find Substitute
-// Page domain input, calls the concrete Run operation, and serializes the
-// exact generated page-0 envelope with omitted-not-null optional image
-// keys. Generated transport values never enter the Module (ARCH-008).
+// POST /api/v1/substitutes/search route (ARCH-008). It enforces the 4 KiB
+// request-body limit (413 REQUEST_BODY_TOO_LARGE without a field before any
+// body processing), accepts only the application/json Content-Type,
+// strictly decodes one closed generated request object (ISSUE-005: empty,
+// malformed, or trailing JSON, unknown keys, and duplicate keys at every
+// nesting level are rejected; a missing, duplicate, null, or wrong-typed
+// known field carries its ISSUE-005 field path), derives one 450 ms request
+// context (ARCH-019) and passes it through pool Acquire and the concrete
+// Find Substitute Page Run operation to pgx, maps every failure to the
+// ISSUE-005-resolved stable status, code, and optional field, and
+// serializes the exact generated page-0 envelope with omitted-not-null
+// optional image keys. Generated transport values never enter the Module
+// (ARCH-008).
 func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		// The 4 KiB request-body limit is enforced pre-read by the fasthttp
+		// HeaderReceived ingress cap in Compose, so a body over 4096 bytes
+		// is rejected before this handler runs. This byte check is the
+		// handler-level backstop: if the ingress cap ever did not apply, the
+		// request still fails with the exact stable 413 REQUEST_BODY_TOO_LARGE
+		// response, without a field, before any JSON processing (ARCH-008,
+		// ISSUE-005).
+		if len(c.Body()) > maxRequestBodyBytes {
+			return writeError(c, fiber.StatusRequestEntityTooLarge, transport.REQUESTBODYTOOLARGE, nil, errors.New("request body exceeds the 4 KiB limit"))
+		}
+
 		req, field, err := decodeSubstituteRequest(c)
 		if err != nil {
 			// A missing or non-JSON Content-Type, empty, malformed, or
@@ -58,23 +79,35 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			return writeError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err)
 		}
 
-		// The concrete Find Substitute Page operation (ARCH-005) runs over
-		// one request-local catalog snapshot read through the SELECT-only
-		// runtime pool (ARCH-016). The task-20 request control derives the
-		// 450 ms deadline here; the Fiber request context already bounds
-		// the read for now.
-		poolConn, err := pool.Acquire(c.Context())
+		// ARCH-019: one 450 ms context bounds the whole substitute request —
+		// pool Acquire, Find Substitute Page Run, and the pgx catalog read.
+		// No retry occurs anywhere in the chain; when the deadline fires,
+		// the context cancels pgx and the request fails with the stable
+		// SEARCH_TIMEOUT code (ISSUE-005).
+		ctx, cancel := context.WithTimeout(c.Context(), requestDeadline)
+		defer cancel()
+
+		poolConn, err := pool.Acquire(ctx)
 		if err != nil {
-			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err)
+			// Acquire blocks while the four-connection pool is exhausted and
+			// fails when no connection can serve the read (ARCH-016). A
+			// deadline expiry is SEARCH_TIMEOUT; every other acquire failure
+			// means the catalog storage is unavailable (ISSUE-005).
+			if errors.Is(err, context.DeadlineExceeded) {
+				return writeError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err)
+			}
+			return writeError(c, fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err)
 		}
 		defer poolConn.Release()
 
 		find, err := repository.NewFindSubstitutePage(poolConn.Conn())
 		if err != nil {
+			// The embedded catalog SELECT cannot be read: an unexpected
+			// internal failure, never a client error.
 			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err)
 		}
 
-		page, err := find.Run(c.Context(), repository.SubstituteInput{
+		page, err := find.Run(ctx, repository.SubstituteInput{
 			FoodObjectID: req.FoodObjectId,
 			Quantity: repository.FoodQuantity{
 				Value: req.Quantity.Value,
@@ -82,16 +115,79 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			},
 		}, req.PageIndex)
 		if err != nil {
-			// Task 20 owns the stable ISSUE-005 mapping of Module failures
-			// (404 FOOD_OBJECT_NOT_FOUND, the 422 semantic codes, 503
-			// CATALOG_UNAVAILABLE, 504 SEARCH_TIMEOUT). Until then every
-			// Module failure falls back to the generic 500 INTERNAL_ERROR
-			// and the sanitized internal cause reaches only the request
-			// log (ARCH-019).
-			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err)
+			status, code, field, logCause := substituteRunError(err)
+			return writeStableError(c, status, code, field, logCause)
 		}
 		return c.JSON(substituteResponse(page))
 	}
+}
+
+// deadlineLogCause is the fixed internal cause text of a substitute request
+// whose 450 ms deadline expired while reading the catalog (ARCH-019). The
+// fixed text keeps the request log free of any pgx or query detail.
+const deadlineLogCause = "request deadline expired while reading the catalog"
+
+// safeSubstituteCause returns the stable internal cause text of one
+// substitute client failure: a fixed description and the fixed ISSUE-005
+// field path. It never contains client values (Food Quantities, units,
+// Food Object IDs, page indexes) or request body text (ARCH-019,
+// golang-security logging guidance).
+func safeSubstituteCause(description, field string) string {
+	if field == "" {
+		return description
+	}
+	return description + " (field " + field + ")"
+}
+
+// substituteRunError maps one Find Substitute Page Module failure to the
+// ISSUE-005-resolved stable HTTP status, code, optional field, and the safe
+// internal cause text for the request log. Deadline expiry (the 450 ms
+// request context reached pgx) is SEARCH_TIMEOUT no matter how the failure
+// surfaces from the Module. Client failures derive the log cause only from
+// the stable code and the fixed ISSUE-005 field path: the Module cause text
+// contains the client Food Quantity values, units, Food Object IDs, and
+// page indexes, which must never reach the log (ARCH-019). Server failures
+// (storage, invariant, unexpected) keep the server-generated pgx or
+// catalog-invariant cause, which contains no client input. Client failures
+// carry their field; server failures carry none and expose no internal
+// cause in the response.
+func substituteRunError(err error) (status int, code transport.ErrorCode, field *transport.ErrorField, logCause string) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, deadlineLogCause
+	}
+	var moduleErr *repository.Error
+	if errors.As(err, &moduleErr) {
+		switch moduleErr.Code {
+		case repository.CodeInvalidRequest:
+			// A nonpositive Food Object ID (ISSUE-005: 400 INVALID_REQUEST
+			// with field foodObjectId). The strict decoder already
+			// classifies every structural foodObjectId failure.
+			return fiber.StatusBadRequest, transport.INVALIDREQUEST, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute request", moduleErr.Field)
+		case repository.CodeFoodObjectNotFound:
+			return fiber.StatusNotFound, transport.FOODOBJECTNOTFOUND, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object is absent from the catalog", moduleErr.Field)
+		case repository.CodeInvalidQuantity:
+			// The Module reports the exact ISSUE-005 field: quantity.value
+			// for a nonpositive or nonintegral direct value or a
+			// nonpositive Serving count, quantity.unit for an unsupported
+			// unit.
+			return fiber.StatusUnprocessableEntity, transport.INVALIDQUANTITY, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute quantity", moduleErr.Field)
+		case repository.CodeQuantityUnitMismatch:
+			return fiber.StatusUnprocessableEntity, transport.QUANTITYUNITMISMATCH, fieldPathOf(moduleErr.Field), safeSubstituteCause("quantity unit does not match the food object physical state", moduleErr.Field)
+		case repository.CodeServingUnavailable:
+			return fiber.StatusUnprocessableEntity, transport.SERVINGUNAVAILABLE, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object has no stored serving", moduleErr.Field)
+		case repository.CodeQuantityOutOfRange:
+			return fiber.StatusUnprocessableEntity, transport.QUANTITYOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("converted quantity exceeds the base-unit limit", moduleErr.Field)
+		case repository.CodeInvalidPageIndex:
+			return fiber.StatusUnprocessableEntity, transport.INVALIDPAGEINDEX, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is negative", moduleErr.Field)
+		case repository.CodePageOutOfRange:
+			return fiber.StatusUnprocessableEntity, transport.PAGEOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is out of range: only page 0 exists until Phase 11", moduleErr.Field)
+		case repository.CodeCatalogUnavailable:
+			return fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err.Error()
+		case repository.CodeInternalError:
+			return fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error()
+		}
+	}
+	return fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error()
 }
 
 // valueKind enumerates the JSON value kinds the strict request decoder
@@ -155,7 +251,9 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	var req transport.SubstituteSearchRequest
 	mediaType, _, err := mime.ParseMediaType(c.Get(fiber.HeaderContentType))
 	if err != nil || mediaType != "application/json" {
-		return req, nil, fmt.Errorf("Content-Type %q is not application/json", c.Get(fiber.HeaderContentType))
+		// The cause is fixed text: the client-supplied Content-Type header
+		// value never reaches the request log (ARCH-019).
+		return req, nil, errors.New("Content-Type is not application/json")
 	}
 
 	body := c.Body()
@@ -246,8 +344,9 @@ func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *tr
 		field, known := byKey[key]
 		if !known {
 			// An unknown key is a closed-object violation without a field
-			// (ISSUE-005).
-			return nil, nil, fmt.Errorf("unknown field %q", key)
+			// (ISSUE-005). The cause is fixed text: the client-supplied key
+			// name never reaches the request log (ARCH-019).
+			return nil, nil, errors.New("request body contains an unknown field")
 		}
 		if seen[key] {
 			return nil, fieldPathOf(field.path), fmt.Errorf("field %q is duplicated", key)
@@ -314,11 +413,12 @@ func fieldPathOf(path string) *transport.ErrorField {
 // strictInt32 converts a validated JSON number token to the int32 of one
 // generated request field, rejecting non-integral values and values outside
 // the int32 range with the field's ISSUE-005 path (a generated int32 decode
-// failure).
+// failure). The cause names only the fixed known field: the client-supplied
+// numeric token never reaches the request log (ARCH-019).
 func strictInt32(number json.Number, field string) (int32, error) {
 	v, err := strconv.ParseInt(number.String(), 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("field %q value %s is not an int32", field, number)
+		return 0, fmt.Errorf("field %s is not a valid int32", field)
 	}
 	return int32(v), nil
 }
@@ -326,11 +426,12 @@ func strictInt32(number json.Number, field string) (int32, error) {
 // strictFloat64 converts a validated JSON number token to the float64 of
 // one generated request field, rejecting values that do not fit the double
 // range with the field's ISSUE-005 path (a generated double decode
-// failure).
+// failure). The cause names only the fixed known field: the client-supplied
+// numeric token never reaches the request log (ARCH-019).
 func strictFloat64(number json.Number, field string) (float64, error) {
 	v, err := strconv.ParseFloat(number.String(), 64)
 	if err != nil {
-		return 0, fmt.Errorf("field %q value %s is not a finite double", field, number)
+		return 0, fmt.Errorf("field %s is not a valid double", field)
 	}
 	return v, nil
 }

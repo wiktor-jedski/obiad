@@ -204,10 +204,30 @@ func fieldLanguage() *transport.ErrorField {
 // the Fiber context so the request-log middleware emits them server-side
 // (ARCH-019); the cause never reaches the response (ARCH-008,
 // golang-security: log details server-side, return generic messages).
+//
+// The cause text reaches the log sanitized against log injection, so the
+// caller must ensure it contains no client-controlled values: suggestion
+// causes never echo query text, and substitute decoder causes are fixed
+// text. Substitute Module failures carry client quantity values and units
+// in their raw text; the substitute adapter passes a safe cause derived
+// from the stable code and field through writeStableError instead.
 func writeError(c fiber.Ctx, status int, code transport.ErrorCode, field *transport.ErrorField, cause error) error {
-	c.Locals(requestLogCodeKey, string(code))
+	var causeText string
 	if cause != nil {
-		c.Locals(requestLogCauseKey, sanitizeLogText(cause.Error()))
+		causeText = cause.Error()
+	}
+	return writeStableError(c, status, code, field, causeText)
+}
+
+// writeStableError writes one stable error response and records causeText
+// as the sanitized internal cause on the request log. causeText must
+// already be safe for the log: fixed text or a server-generated cause that
+// contains no client values, request bodies, SQL parameters, credentials,
+// or stack details (ARCH-019). The cause never reaches the response.
+func writeStableError(c fiber.Ctx, status int, code transport.ErrorCode, field *transport.ErrorField, causeText string) error {
+	c.Locals(requestLogCodeKey, string(code))
+	if causeText != "" {
+		c.Locals(requestLogCauseKey, sanitizeLogText(causeText))
 	}
 	return c.Status(status).JSON(transport.Error{Code: code, Field: field})
 }
