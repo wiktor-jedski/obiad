@@ -114,6 +114,121 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/substitutes/search:
+    post:
+      operationId: searchSubstitutes
+      summary: Search Substitutes
+      description: >
+        Return the first page of display-ready Substitutes for a Substitution
+        Input. The backend converts the Food Quantity to its base unit,
+        derives the input calories as 4 × protein + 4 × carbohydrate + 9 ×
+        fat, calculates the Nutritional Similarity as the cosine similarity of
+        the input and candidate Macro Profiles, excludes the input Food Object
+        and every other member of its Food Family, orders the eligible
+        Substitutes by decreasing unrounded similarity, pinned English-name
+        collation, and stable Food Object ID, and returns zero to three unique
+        items. The request body and the response envelope are closed JSON
+        objects with no unknown fields.
+      requestBody:
+        required: true
+        description: >
+          The Substitution Input and the requested page index. The
+          Content-Type must be `application/json`. The body must be valid JSON
+          with no trailing content, no unknown keys, and no duplicate keys at
+          any nesting level. The body limit is 4 KiB.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubstituteSearchRequest"
+      responses:
+        "200":
+          description: >
+            The first page of display-ready Substitutes: the echoed page
+            index, the total number of eligible Substitutes, whether a later
+            page exists, and zero to three unique items with stable Food
+            Object IDs, both localized names, the optional image key, the
+            whole Matched Quantity, the scaled macronutrients, and the whole
+            similarity percentage. The envelope has no unknown fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstituteSearchResponse"
+        "400":
+          description: >
+            The request body is structurally invalid: empty, malformed, or
+            trailing JSON, an unknown key, a missing or non-JSON
+            Content-Type, or a missing, duplicate, `null`, or wrong-typed
+            known field. A nonpositive `foodObjectId` also returns
+            `INVALID_REQUEST` with `field` `foodObjectId`. The response is
+            the stable Error schema and never exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            The positive `foodObjectId` does not identify a Food Object in
+            the catalog. The response has the stable `code`
+            `FOOD_OBJECT_NOT_FOUND` with `field` `foodObjectId` and never
+            exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: >
+            The request body is larger than 4 KiB. The response has the
+            stable `code` `REQUEST_BODY_TOO_LARGE` and no `field`, and never
+            exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            The Substitution Input or the page index is semantically invalid:
+            a nonpositive or nonintegral direct base quantity returns
+            `INVALID_QUANTITY` with `field` `quantity.value`; an unsupported
+            unit returns `INVALID_QUANTITY` with `field` `quantity.unit`; a
+            Physical State mismatch returns `QUANTITY_UNIT_MISMATCH` with
+            `field` `quantity.unit`; an unavailable Serving returns
+            `SERVING_UNAVAILABLE` with `field` `quantity.unit`; a converted
+            quantity over 100,000 g or 100,000 ml returns
+            `QUANTITY_OUT_OF_RANGE` with `field` `quantity.value`; a negative
+            page returns `INVALID_PAGE_INDEX` with `field` `pageIndex`; and
+            every page after page 0 returns `PAGE_OUT_OF_RANGE` with `field`
+            `pageIndex` until Phase 11.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            The Food Catalog is unavailable. The response has the stable `code`
+            `CATALOG_UNAVAILABLE` and no `field`, and never exposes an internal
+            cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "504":
+          description: >
+            The request deadline expired. The response has the stable `code`
+            `SEARCH_TIMEOUT` and no `field`, and never exposes an internal
+            cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: >
+            A catalog-invariant or unexpected server failure. The response has
+            the stable `code` `INTERNAL_ERROR` and no `field`, and never
+            exposes an internal cause.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     FoodSuggestionsResponse:
@@ -195,11 +310,206 @@ components:
             - serving
             - g
             - ml
+    SubstituteSearchRequest:
+      description: >
+        The closed Substitution Search request: the positive Food Object ID of
+        the Substitution Input, the Food Quantity, and the zero-based page
+        index. The generated shape carries the JSON types only; the Module
+        enforces the semantic quantity, unit, Physical State, and Serving
+        rules (ISSUE-005).
+      type: object
+      required:
+        - foodObjectId
+        - quantity
+        - pageIndex
+      additionalProperties: false
+      properties:
+        foodObjectId:
+          description: >
+            The stable positive Food Object ID of the Substitution Input. A
+            nonpositive value returns `INVALID_REQUEST`; a positive value that
+            does not identify a catalog Food Object returns
+            `FOOD_OBJECT_NOT_FOUND`.
+          type: integer
+          format: int32
+          minimum: 1
+        quantity:
+          description: >
+            The Substitution Input Food Quantity. The Module accepts only
+            positive integer grams or millilitres and positive fractional
+            Serving counts and applies the Physical State and Serving rules;
+            the generated shape does not encode those conditional rules
+            (ISSUE-005).
+          $ref: "#/components/schemas/SubstitutionQuantity"
+        pageIndex:
+          description: >
+            The zero-based page index. Only page 0 is valid; every page after
+            page 0 is out of range until Phase 11.
+          type: integer
+          format: int32
+          minimum: 0
+    SubstitutionQuantity:
+      description: >
+        A Food Quantity supplied to a Substitution Search: a JSON number and
+        a unit. The Module enforces the semantic rules: the direct grams or
+        millilitres must be a positive integer, the Serving count must be a
+        positive fractional number, the direct unit must match the Physical
+        State, a Serving must be stored for the `serving` unit, and the
+        converted base quantity must be at most 100,000 g or 100,000 ml.
+      type: object
+      required:
+        - value
+        - unit
+      additionalProperties: false
+      properties:
+        value:
+          description: >
+            The numeric Food Quantity. The generated shape does not attempt
+            conditional base-unit integrality or Physical State compatibility;
+            the Module validates the value (ISSUE-005).
+          type: number
+          format: double
+        unit:
+          description: "The Food Quantity unit: `serving`, `g`, or `ml`."
+          type: string
+          enum:
+            - serving
+            - g
+            - ml
+    SubstituteSearchResponse:
+      description: >
+        The closed page-0 response: the echoed page index, the total number of
+        eligible Substitutes, whether a later page exists, and zero to three
+        unique display-ready items. The envelope has no unknown fields.
+      type: object
+      required:
+        - pageIndex
+        - totalEligibleCount
+        - hasMore
+        - items
+      additionalProperties: false
+      properties:
+        pageIndex:
+          description: The echoed zero-based page index. Nonnegative 32-bit integer.
+          type: integer
+          format: int32
+          minimum: 0
+        totalEligibleCount:
+          description: >
+            The total number of eligible Substitutes for the Substitution
+            Input. Nonnegative 32-bit integer.
+          type: integer
+          format: int32
+          minimum: 0
+        hasMore:
+          description: >
+            Whether a page after page 0 exists. True only when more than three
+            Substitutes are eligible.
+          type: boolean
+        items:
+          description: The first page of zero to three unique display-ready Substitutes.
+          type: array
+          minItems: 0
+          maxItems: 3
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SubstituteItem"
+    SubstituteItem:
+      description: >
+        One display-ready Substitute: the stable Food Object ID, both localized
+        names, the optional image key, the whole Matched Quantity, the scaled
+        macronutrients, and the whole similarity percentage. The item has no
+        unknown fields.
+      type: object
+      required:
+        - foodObjectId
+        - names
+        - matchedQuantity
+        - macronutrients
+        - similarityPercent
+      additionalProperties: false
+      properties:
+        foodObjectId:
+          description: The stable positive Food Object ID. Positive 32-bit integer.
+          type: integer
+          format: int32
+          minimum: 1
+        names:
+          $ref: "#/components/schemas/LocalizedNames"
+        imageKey:
+          description: >
+            The opaque frontend image key. The key is omitted when the Food
+            Object has no image and is never `null`.
+          type: string
+          minLength: 1
+        matchedQuantity:
+          $ref: "#/components/schemas/MatchedQuantity"
+        macronutrients:
+          $ref: "#/components/schemas/Macronutrients"
+        similarityPercent:
+          description: >
+            The Macro similarity of the candidate to the input, rounded to a
+            whole percentage from 0 through 100.
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+    MatchedQuantity:
+      description: >
+        The amount of the Substitute with the same derived calories as the
+        Substitution Input, rounded to a whole candidate base unit.
+      type: object
+      required:
+        - value
+        - unit
+      additionalProperties: false
+      properties:
+        value:
+          description: >
+            The whole nonnegative Matched Quantity in the candidate base unit.
+            64-bit integer.
+          type: integer
+          format: int64
+          minimum: 0
+        unit:
+          description: "The candidate base unit: `g` or `ml`."
+          type: string
+          enum:
+            - g
+            - ml
+    Macronutrients:
+      description: >
+        The protein, carbohydrate, and fat of the Substitute scaled to the
+        Matched Quantity and rounded to 0.1 g. Every value is nonnegative.
+      type: object
+      required:
+        - protein
+        - carbohydrate
+        - fat
+      additionalProperties: false
+      properties:
+        protein:
+          description: The scaled protein amount in grams. Nonnegative double.
+          type: number
+          format: double
+          minimum: 0
+        carbohydrate:
+          description: The scaled carbohydrate amount in grams. Nonnegative double.
+          type: number
+          format: double
+          minimum: 0
+        fat:
+          description: The scaled fat amount in grams. Nonnegative double.
+          type: number
+          format: double
+          minimum: 0
     Error:
       description: >
         A stable error response. The `code` is always present and stable; the
-        optional `field` is present only for client-parameter errors and is
-        limited to `query` or `language`. The response never contains localized
+        optional `field` is present only for client-parameter errors. The
+        suggestion operation permits `query` and `language`; the substitute
+        search operation permits `foodObjectId`, `quantity`, `quantity.value`,
+        `quantity.unit`, and `pageIndex`. The response never contains localized
         prose, SQL text, a stack trace, or an internal cause, and has no
         unknown fields.
       type: object
@@ -209,13 +519,21 @@ components:
       properties:
         code:
           description: >
-            The stable error code. `INVALID_REQUEST` for a missing or
-            duplicated parameter or malformed query encoding; `INVALID_SEARCH_QUERY`
-            for a normalized-empty or invalid-UTF-8 Search Query;
-            `QUERY_TOO_LONG` for a normalized Search Query over 128 Unicode
-            code points; `UNSUPPORTED_LANGUAGE` for a `language` other than
-            exact `en` or `pl`; `CATALOG_UNAVAILABLE` for a storage failure;
-            `SEARCH_TIMEOUT` for deadline expiry; `INTERNAL_ERROR` for
+            The stable error code. The suggestion operation uses
+            `INVALID_REQUEST` for a missing or duplicated parameter or
+            malformed query encoding, `INVALID_SEARCH_QUERY` for a
+            normalized-empty or invalid-UTF-8 Search Query, `QUERY_TOO_LONG`
+            for a normalized Search Query over 128 Unicode code points, and
+            `UNSUPPORTED_LANGUAGE` for a `language` other than exact `en` or
+            `pl`. The substitute search operation uses `INVALID_REQUEST` for
+            structural request failures, `FOOD_OBJECT_NOT_FOUND` for an
+            absent positive Food Object ID, `REQUEST_BODY_TOO_LARGE` for a
+            body over 4 KiB, and `INVALID_QUANTITY`, `QUANTITY_UNIT_MISMATCH`,
+            `SERVING_UNAVAILABLE`, `QUANTITY_OUT_OF_RANGE`,
+            `INVALID_PAGE_INDEX`, and `PAGE_OUT_OF_RANGE` for semantic
+            quantity, unit, Serving, range, and page failures. Both operations
+            share `CATALOG_UNAVAILABLE` for a storage failure,
+            `SEARCH_TIMEOUT` for deadline expiry, and `INTERNAL_ERROR` for
             catalog-invariant and unexpected failures.
           type: string
           enum:
@@ -223,15 +541,30 @@ components:
             - INVALID_SEARCH_QUERY
             - QUERY_TOO_LONG
             - UNSUPPORTED_LANGUAGE
+            - FOOD_OBJECT_NOT_FOUND
+            - REQUEST_BODY_TOO_LARGE
+            - INVALID_QUANTITY
+            - QUANTITY_UNIT_MISMATCH
+            - SERVING_UNAVAILABLE
+            - QUANTITY_OUT_OF_RANGE
+            - INVALID_PAGE_INDEX
+            - PAGE_OUT_OF_RANGE
             - CATALOG_UNAVAILABLE
             - SEARCH_TIMEOUT
             - INTERNAL_ERROR
         field:
           description: >
             The offending request parameter when the failure is a
-            client-parameter error. Only `query` and `language` are permitted;
-            server failures omit this field.
+            client-parameter error. The suggestion operation permits `query`
+            and `language`; the substitute search operation permits
+            `foodObjectId`, `quantity`, `quantity.value`, `quantity.unit`,
+            and `pageIndex`. Server failures omit this field.
           type: string
           enum:
             - query
             - language
+            - foodObjectId
+            - quantity
+            - quantity.value
+            - quantity.unit
+            - pageIndex
