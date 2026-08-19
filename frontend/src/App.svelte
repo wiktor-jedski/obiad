@@ -1,6 +1,7 @@
 <script lang="ts">
   import { QueryClientProvider } from '@tanstack/svelte-query';
   import { queryClient } from './lib/queryClient';
+  import { foodPlaceholderUrl } from './lib/assets';
 </script>
 
 <!--
@@ -11,7 +12,12 @@
   are rendered: no Interface Language control, no suggestions, no selected
   input, no result cards, and no result state. The Search control and the
   primary content column arrive with task 24.
+
+  The `data-placeholder-url` attribute (task 23, ARCH-015, ISSUE-006) exposes
+  the resolved bundled placeholder URL to the real-stack presentation spec
+  so it can fetch the asset from the Vite origin; later cards consume the
+  same URL through `src/lib/assets`. No card or image is rendered here.
 -->
 <QueryClientProvider client={queryClient}>
-  <main></main>
+  <main data-placeholder-url={foodPlaceholderUrl}></main>
 </QueryClientProvider>
