@@ -16,6 +16,10 @@ import (
 // (ARCH-005, ARCH-018): pages slice the eligible list in groups of three.
 const pageSize = 3
 
+// maxBaseQuantity is the largest accepted converted base-unit quantity of a
+// Substitution Input (ARCH-018): at most 100,000 g or 100,000 ml.
+const maxBaseQuantity = 100000
+
 // Code values specific to the concrete Find Substitute Page Module
 // (ARCH-005). The stable codes map to the ISSUE-005-resolved HTTP error
 // responses; the Fiber Adapter never exposes an internal cause. The
@@ -24,15 +28,37 @@ const pageSize = 3
 // catalog codes (CodeCatalogUnavailable, CodeInternalError) serve both
 // operations.
 const (
+	// CodeInvalidRequest reports a nonpositive input Food Object ID
+	// (ISSUE-005: 400 INVALID_REQUEST with field foodObjectId).
+	CodeInvalidRequest Code = "INVALID_REQUEST"
+	// CodeInvalidQuantity reports a nonpositive or nonintegral direct gram
+	// or millilitre value or a nonpositive Serving count (field
+	// quantity.value) or an unsupported unit (field quantity.unit)
+	// (ISSUE-005: 422 INVALID_QUANTITY).
+	CodeInvalidQuantity Code = "INVALID_QUANTITY"
+	// CodeQuantityUnitMismatch reports a direct gram or millilitre unit
+	// that does not match the input Food Object Physical State (ISSUE-005:
+	// 422 QUANTITY_UNIT_MISMATCH with field quantity.unit).
+	CodeQuantityUnitMismatch Code = "QUANTITY_UNIT_MISMATCH"
+	// CodeServingUnavailable reports a Serving count for a Food Object that
+	// has no stored Serving (ISSUE-005: 422 SERVING_UNAVAILABLE with field
+	// quantity.unit).
+	CodeServingUnavailable Code = "SERVING_UNAVAILABLE"
+	// CodeQuantityOutOfRange reports a converted base quantity over
+	// 100,000 g or 100,000 ml (ISSUE-005: 422 QUANTITY_OUT_OF_RANGE with
+	// field quantity.value).
+	CodeQuantityOutOfRange Code = "QUANTITY_OUT_OF_RANGE"
+	// CodeInvalidPageIndex reports a negative page index (ISSUE-005: 422
+	// INVALID_PAGE_INDEX with field pageIndex).
+	CodeInvalidPageIndex Code = "INVALID_PAGE_INDEX"
 	// CodeFoodObjectNotFound reports an input Food Object ID that is absent
 	// from the catalog (ISSUE-005: 404 FOOD_OBJECT_NOT_FOUND with field
 	// foodObjectId).
 	CodeFoodObjectNotFound Code = "FOOD_OBJECT_NOT_FOUND"
-	// CodePageOutOfRange reports a page index outside the supported page-0
-	// range. Every nonzero page is out of range until Phase 11 adds valid
-	// later-page behavior (ISSUE-005: 422 PAGE_OUT_OF_RANGE with field
-	// pageIndex); Phase 4 task 18 completes the page classification by
-	// distinguishing negative pages as INVALID_PAGE_INDEX.
+	// CodePageOutOfRange reports a nonzero page index. Every nonzero page
+	// is out of range until Phase 11 adds valid later-page behavior
+	// (ISSUE-005: 422 PAGE_OUT_OF_RANGE with field pageIndex); a negative
+	// page is the separate CodeInvalidPageIndex failure.
 	CodePageOutOfRange Code = "PAGE_OUT_OF_RANGE"
 )
 
@@ -136,25 +162,141 @@ func isFiniteDerived(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
-// baseQuantity converts one Substitution Input Food Quantity to its base
-// unit (ARCH-018): a direct gram or millilitre value is used as-is, and a
-// Serving count multiplies the Food Object's Serving base quantity. The
-// request is assumed valid; Phase 4 task 18 completes the validation gates
-// (positive direct integers, unit-to-Physical-State match, available
-// Serving, and the 100,000 g / 100,000 ml converted-value limit). The
-// conversion is defensive and reports an error instead of panicking when
-// the catalog lacks the Serving a Serving count requires.
+// validateQuantityValue enforces the catalog-independent Food Quantity
+// syntax rules of the Find Substitute Page Module (ARCH-018, REQ-025): the
+// unit must be g, ml, or serving; a direct gram or millilitre value must be
+// a positive integer; and a Serving count must be positive and may be
+// fractional. Failures are the ISSUE-005 stable INVALID_QUANTITY code with
+// field quantity.value for a nonpositive or nonintegral direct value or a
+// nonpositive Serving count, and field quantity.unit for an unsupported
+// unit. The unit-to-Physical-State match, the stored-Serving requirement,
+// and the converted-value limit depend on the catalog Food Object and are
+// enforced by baseQuantity after the single catalog read.
+func validateQuantityValue(q FoodQuantity) error {
+	switch q.Unit {
+	case UnitGram, UnitMillilitre:
+		if !isPositiveInteger(q.Value) {
+			return &Error{
+				Code:  CodeInvalidQuantity,
+				Field: "quantity.value",
+				cause: fmt.Errorf("direct %s quantity %v must be a positive integer", q.Unit, q.Value),
+			}
+		}
+	case UnitServing:
+		if !isPositiveFinite(q.Value) {
+			return &Error{
+				Code:  CodeInvalidQuantity,
+				Field: "quantity.value",
+				cause: fmt.Errorf("serving count %v must be positive", q.Value),
+			}
+		}
+	default:
+		return &Error{
+			Code:  CodeInvalidQuantity,
+			Field: "quantity.unit",
+			cause: fmt.Errorf("food quantity unit %q is not g, ml, or serving", q.Unit),
+		}
+	}
+	return nil
+}
+
+// isPositiveInteger reports whether v is a positive finite whole number: a
+// direct gram or millilitre value must satisfy it (ARCH-018, REQ-025). NaN
+// and infinities are rejected because they are neither positive nor whole.
+func isPositiveInteger(v float64) bool {
+	return isPositiveFinite(v) && v == math.Trunc(v)
+}
+
+// baseQuantity validates one Substitution Input Food Quantity against the
+// input Food Object and converts it to its base unit (ARCH-018): a direct
+// gram or millilitre unit must match the Food Object Physical State (g for
+// a solid, ml for a liquid), a Serving count requires a stored Serving and
+// multiplies its base quantity, and the converted base quantity must be
+// strictly positive and finite and at most 100,000 g or 100,000 ml.
+// Failures are the ISSUE-005 stable errors: QUANTITY_UNIT_MISMATCH with
+// field quantity.unit for a direct unit that does not match the Physical
+// State, SERVING_UNAVAILABLE with field quantity.unit for a Serving count
+// without a stored Serving, INVALID_QUANTITY with field quantity.value for
+// a converted base quantity that is not a positive finite number (a
+// subnormal Serving count times a subnormal stored Serving can underflow to
+// exactly zero), and QUANTITY_OUT_OF_RANGE with field quantity.value for a
+// converted base quantity over the 100,000 limit. Run validates the page
+// index, the Food Object ID, and the catalog-independent quantity syntax
+// before the single catalog read, so the default branch below is
+// unreachable for a request that passed validateQuantityValue; it still
+// returns a stable error instead of panicking.
 func baseQuantity(object foodObject, q FoodQuantity) (float64, error) {
 	switch q.Unit {
 	case UnitServing:
 		if object.serving == nil {
-			return 0, fmt.Errorf("food object %d has no Serving for a serving-count quantity", object.id)
+			return 0, &Error{
+				Code:  CodeServingUnavailable,
+				Field: "quantity.unit",
+				cause: fmt.Errorf("food object %d has no stored Serving for a Serving-count quantity", object.id),
+			}
 		}
-		return q.Value * *object.serving, nil
-	case UnitGram, UnitMillilitre:
+		converted := q.Value * *object.serving
+		if converted <= 0 || math.IsNaN(converted) {
+			// ARCH-018 requires the converted base quantity to be strictly
+			// greater than zero. Both factors are positive finite by the
+			// pre-load and catalog invariants, so a nonpositive product can
+			// only be the exact zero of a subnormal Serving count times a
+			// subnormal stored Serving; it must not reach the page as a
+			// false successful zero-quantity result. ISSUE-005 classifies a
+			// nonpositive base quantity as INVALID_QUANTITY with field
+			// quantity.value.
+			return 0, &Error{
+				Code:  CodeInvalidQuantity,
+				Field: "quantity.value",
+				cause: fmt.Errorf("converted base quantity %v is not a positive finite number", converted),
+			}
+		}
+		if converted > maxBaseQuantity {
+			return 0, &Error{
+				Code:  CodeQuantityOutOfRange,
+				Field: "quantity.value",
+				cause: fmt.Errorf("converted base quantity %v exceeds the %d base-unit limit", converted, maxBaseQuantity),
+			}
+		}
+		return converted, nil
+	case UnitGram:
+		if object.physicalState != stateSolid {
+			return 0, &Error{
+				Code:  CodeQuantityUnitMismatch,
+				Field: "quantity.unit",
+				cause: fmt.Errorf("gram quantity for food object %d whose Physical State is %q", object.id, object.physicalState),
+			}
+		}
+		if q.Value > maxBaseQuantity {
+			return 0, &Error{
+				Code:  CodeQuantityOutOfRange,
+				Field: "quantity.value",
+				cause: fmt.Errorf("direct %s quantity %v exceeds the %d g limit", q.Unit, q.Value, maxBaseQuantity),
+			}
+		}
+		return q.Value, nil
+	case UnitMillilitre:
+		if object.physicalState != stateLiquid {
+			return 0, &Error{
+				Code:  CodeQuantityUnitMismatch,
+				Field: "quantity.unit",
+				cause: fmt.Errorf("millilitre quantity for food object %d whose Physical State is %q", object.id, object.physicalState),
+			}
+		}
+		if q.Value > maxBaseQuantity {
+			return 0, &Error{
+				Code:  CodeQuantityOutOfRange,
+				Field: "quantity.value",
+				cause: fmt.Errorf("direct %s quantity %v exceeds the %d ml limit", q.Unit, q.Value, maxBaseQuantity),
+			}
+		}
 		return q.Value, nil
 	default:
-		return 0, fmt.Errorf("food quantity unit %q is not g, ml, or serving", q.Unit)
+		return 0, &Error{
+			Code:  CodeInvalidQuantity,
+			Field: "quantity.unit",
+			cause: fmt.Errorf("food quantity unit %q is not g, ml, or serving", q.Unit),
+		}
 	}
 }
 
@@ -243,27 +385,51 @@ func NewFindSubstitutePage(conn *pgx.Conn) (*FindSubstitutePage, error) {
 	return &FindSubstitutePage{loader: l}, nil
 }
 
-// Run implements the Find Substitute Page operation (ARCH-005, ARCH-018)
-// for a valid page-0 request: it converts the Substitution Input Food
-// Quantity to its base unit, derives the input calories as 4p + 4c + 9f,
-// performs one fresh catalog read through the Catalog Loader, excludes the
-// input and its Food Family, orders the eligible Substitutes by decreasing
-// unrounded Nutritional Similarity, the pinned English collation of the
-// stored English names, and stable Food Object ID, and returns the total
-// eligible count, hasMore, and the first zero to three unique items. Every
-// calculation stays in float64 until Phase 4 task 17 completes the display
-// projection. A schema-valid finite Macro Profile whose derived calories,
-// similarity, Matched Quantity, or scaled macronutrients are not finite is
-// classified as an internal failure at the Module boundary instead of
-// reaching a page or the ranking order. Failures are stable Error values
-// with a Code and an optional Field.
+// Run implements the Find Substitute Page operation (ARCH-005, ARCH-018):
+// it validates the Food Object ID, the page index, and the catalog-
+// independent Food Quantity syntax, performs one fresh catalog read through
+// the Catalog Loader, resolves the Substitution Input Food Object, enforces
+// the unit-to-Physical-State match, the stored-Serving requirement, and the
+// 100,000 g / 100,000 ml converted-value limit, converts the Food Quantity
+// to its base unit, derives the input calories as 4p + 4c + 9f, excludes
+// the input and its Food Family, orders the eligible Substitutes by
+// decreasing unrounded Nutritional Similarity, the pinned English collation
+// of the stored English names, and stable Food Object ID, and returns the
+// total eligible count, hasMore, and the first zero to three unique items.
+// Every calculation stays in float64 until Phase 4 task 17 completes the
+// display projection. A schema-valid finite Macro Profile whose derived
+// calories, similarity, Matched Quantity, or scaled macronutrients are not
+// finite is classified as an internal failure at the Module boundary instead
+// of reaching a page or the ranking order. Failures are stable Error values
+// with a Code and an optional Field. Catalog-independent request failures
+// (page index, Food Object ID, quantity value or unit) are rejected before
+// the single catalog read, and object-dependent failures (absent ID, unit
+// mismatch, unavailable Serving, converted-value limit) after it, so Run
+// never reads the catalog twice and never retries.
 func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pageIndex int32) (*Page, error) {
+	if input.FoodObjectID <= 0 {
+		return nil, &Error{
+			Code:  CodeInvalidRequest,
+			Field: "foodObjectId",
+			cause: fmt.Errorf("food object ID %d must be positive", input.FoodObjectID),
+		}
+	}
+	if pageIndex < 0 {
+		return nil, &Error{
+			Code:  CodeInvalidPageIndex,
+			Field: "pageIndex",
+			cause: fmt.Errorf("page index %d must be nonnegative", pageIndex),
+		}
+	}
 	if pageIndex != 0 {
 		return nil, &Error{
 			Code:  CodePageOutOfRange,
 			Field: "pageIndex",
 			cause: fmt.Errorf("page index %d is out of range: only page 0 exists until Phase 11", pageIndex),
 		}
+	}
+	if err := validateQuantityValue(input.Quantity); err != nil {
+		return nil, err
 	}
 	objects, err := f.loader.load(ctx)
 	if err != nil {
@@ -290,7 +456,7 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 	}
 	baseQty, err := baseQuantity(*inputObject, input.Quantity)
 	if err != nil {
-		return nil, &Error{Code: CodeInternalError, cause: err}
+		return nil, err
 	}
 
 	inputProfile := macroProfile{protein: inputObject.protein, carbohydrate: inputObject.carbohydrate, fat: inputObject.fat}
