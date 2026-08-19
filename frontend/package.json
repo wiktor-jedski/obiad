@@ -3,13 +3,26 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Minimal Bun package that compiles the generated TypeScript API client. No Svelte, Vite, /api proxy, or interaction code (ISSUE-004).",
+  "description": "Runnable client-only Svelte 5 and Vite application foundation that preserves the generated TypeScript API client. No /api proxy, Interface Language control, suggestions, selected input, result cards, or result state yet (task 21, ARCH-001, ARCH-008, ARCH-016).",
   "scripts": {
     "generate:api": "openapi-ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@tanstack/svelte-query": "6.1.38"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",
-    "typescript": "^5.9.3"
+    "@playwright/test": "1.62.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "@tailwindcss/vite": "4.3.3",
+    "svelte": "5.56.9",
+    "svelte-check": "4.7.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "8.2.1"
   }
 }
