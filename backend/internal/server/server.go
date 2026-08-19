@@ -14,13 +14,15 @@
 // 127.0.0.1:0 instead (ISSUE-004).
 //
 // Every request is bounded by the request control and failure mechanism
-// (ARCH-019): suggestion requests derive a 450 ms context that bounds pool
-// Acquire, the Suggest operation, and the pgx catalog read, no retry occurs
-// anywhere, and every failure maps to the ISSUE-004 stable status, code, and
-// optional field. Structured request logs are emitted through the injected
-// logger (slog JSON in production) with request ID, method, route template,
-// status, duration, stable error code, and internal cause, excluding query
-// text, SQL parameters, credentials, and stack details.
+// (ARCH-019): suggestion and substitute search requests derive a 450 ms
+// context that bounds pool Acquire, the operation Module, and the pgx
+// catalog read, no retry occurs anywhere, and every failure maps to the
+// ISSUE-004 or ISSUE-005 stable status, code, and optional field.
+// Structured request logs are emitted through the injected logger (slog
+// JSON in production) with request ID, method, route template, status,
+// duration, stable error code, and internal cause, excluding query text,
+// quantities, request bodies, SQL parameters, credentials, and stack
+// details.
 package server
 
 import (
@@ -42,12 +44,12 @@ const DefaultListenAddr = "127.0.0.1:8080"
 // readiness check can never hang on an unresponsive server (ARCH-009).
 const healthPingTimeout = time.Second
 
-// requestDeadline is the end-to-end bound on one suggestion request
-// (ARCH-019): the Fiber handler derives a 450 ms context and passes it
-// through pool Acquire, the Suggest Food Objects Run operation, and the pgx
-// catalog read. No retry happens anywhere; when the deadline fires, the
-// context cancels pgx and the request fails with the stable SEARCH_TIMEOUT
-// code (ISSUE-004).
+// requestDeadline is the end-to-end bound on one suggestion or substitute
+// search request (ARCH-019): the Fiber handler derives a 450 ms context and
+// passes it through pool Acquire, the operation Run, and the pgx catalog
+// read. No retry happens anywhere; when the deadline fires, the context
+// cancels pgx and the request fails with the stable SEARCH_TIMEOUT code
+// (ISSUE-004, ISSUE-005).
 const requestDeadline = 450 * time.Millisecond
 
 // healthStatus is the exact JSON body of the readiness endpoint: one status
