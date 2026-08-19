@@ -54,5 +54,7 @@
 @layer base {
   body {
     font-family: var(--font-ui);
+    /* style.md: Background #0A0F0A is the primary app background. */
+    background-color: var(--color-dark-background);
   }
 }
