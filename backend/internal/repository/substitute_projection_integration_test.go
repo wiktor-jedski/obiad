@@ -355,9 +355,9 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		t.Fatalf("adversary full-precision display is %+v, want {437 g, 0.3 g}", fullDisplay)
 	}
 	naivePipelines := map[string]float64{
-		"input calories rounded to a whole":  matchedQuantity(roundHalfUp(inputCal), candCal),
-		"candidate calories rounded to 0.1":  matchedQuantity(inputCal, roundHalfUp(candCal*10)/10),
-		"Matched Quantity rounded to 0.1":    roundHalfUp(mqFull*10) / 10,
+		"input calories rounded to a whole": matchedQuantity(roundHalfUp(inputCal), candCal),
+		"candidate calories rounded to 0.1": matchedQuantity(inputCal, roundHalfUp(candCal*10)/10),
+		"Matched Quantity rounded to 0.1":   roundHalfUp(mqFull*10) / 10,
 	}
 	for name, naiveMQ := range naivePipelines {
 		if naiveDisplay := displayOf(naiveMQ, adversary.protein); naiveDisplay == fullDisplay {

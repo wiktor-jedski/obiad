@@ -158,7 +158,7 @@ func roundHalfUp(v float64) float64 {
 func projectMatchedQuantity(mq float64, state physicalState) (MatchedQuantity, error) {
 	whole := roundHalfUp(mq)
 	if whole >= float64(math.MaxInt64) {
-		return MatchedQuantity{}, fmt.Errorf("Matched Quantity %v exceeds the whole int64 display range", mq)
+		return MatchedQuantity{}, fmt.Errorf("whole Matched Quantity %v exceeds the int64 display range", mq)
 	}
 	unit := UnitGram
 	if state == stateLiquid {
