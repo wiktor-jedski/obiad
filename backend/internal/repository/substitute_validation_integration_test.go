@@ -33,6 +33,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -105,8 +106,9 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 	// Catalog-independent failures: rejected before the single catalog read,
 	// recording zero statements (no read at all, no retry). These cover the
 	// nonpositive Food Object ID, negative page, every nonzero page, and
-	// the value/unit rules that need no catalog data: nonpositive or
-	// fractional direct base values, unsupported units, and invalid Serving
+	// the value/unit rules that need no catalog data: nonpositive,
+	// fractional, or nonfinite (NaN, +Inf, -Inf) direct base values,
+	// unsupported units, and invalid (nonpositive or nonfinite) Serving
 	// values.
 	preLoad := []struct {
 		name      string
@@ -124,6 +126,14 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		{"unsupported unit", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: "kg"}}, 0, CodeInvalidQuantity, "quantity.unit"},
 		{"zero Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 0, Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
 		{"negative Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: -1.5, Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"NaN direct grams", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: math.NaN(), Unit: UnitGram}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"positive infinity direct grams", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: math.Inf(1), Unit: UnitGram}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"negative infinity direct grams", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: math.Inf(-1), Unit: UnitGram}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"NaN direct millilitres", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: math.NaN(), Unit: UnitMillilitre}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"positive infinity direct millilitres", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: math.Inf(1), Unit: UnitMillilitre}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"NaN Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: math.NaN(), Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"positive infinity Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: math.Inf(1), Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
+		{"negative infinity Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: math.Inf(-1), Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
 		{"negative page index", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, -1, CodeInvalidPageIndex, "pageIndex"},
 		{"nonzero page index one", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 1, CodePageOutOfRange, "pageIndex"},
 		{"nonzero page index two", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 2, CodePageOutOfRange, "pageIndex"},

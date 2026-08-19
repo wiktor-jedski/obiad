@@ -187,7 +187,7 @@ func validateQuantityValue(q FoodQuantity) error {
 			return &Error{
 				Code:  CodeInvalidQuantity,
 				Field: "quantity.value",
-				cause: fmt.Errorf("Serving count %v must be positive", q.Value),
+				cause: fmt.Errorf("serving count %v must be positive", q.Value),
 			}
 		}
 	default:
