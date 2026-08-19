@@ -5,9 +5,9 @@
  * The launcher owns one complete disposable Obiad stack and tears it down
  * after success, failure, or interruption:
  *
- *   1. preflights the required binaries and the fixed loopback application
- *      ports (127.0.0.1:8080 and 127.0.0.1:4173), failing clearly when either
- *      is occupied;
+ *   1. preflights the directly required binaries (docker, go, bun, bash) and
+ *      the fixed loopback application ports (127.0.0.1:8080 and
+ *      127.0.0.1:4173), failing clearly when either is occupied;
  *   2. snapshots any pre-existing generated outputs (the TypeScript client,
  *      the Go transport models, and Playwright output) so cleanup restores
  *      prior state instead of deleting output another run created;
@@ -28,17 +28,30 @@
  *      owned build output, proxying same-origin `/api` to Fiber;
  *   9. installs the pinned Playwright Chromium when missing and runs the
  *      real-stack Playwright scenario, whose status becomes the exit status;
- *  10. cleans up every owned process group (including in-flight step
- *      children), container, temporary credential file, generated output,
- *      build output, and test artifact through one serialized path, verifies
- *      that nothing owned remains, and exits nonzero when any lifecycle step
- *      failed, an owned process was unhealthy, or cleanup itself failed.
+ *  10. cleans up every owned process group (including in-flight step and
+ *      bounded command children), container, temporary credential file,
+ *      generated output, build output, and test artifact through one
+ *      serialized path, verifies that nothing owned remains, and exits
+ *      nonzero when any lifecycle step failed, an owned process was
+ *      unhealthy, or cleanup itself failed.
  *
  * Lifecycle ownership rules:
  *
  *   - Every spawned child runs in its own process group (`detached: true`)
  *     and is registered by group id, so cleanup can signal the group even
- *     after its leader has exited and descendants survive.
+ *     after its leader has exited and descendants survive. This includes
+ *     the bounded one-shot command children (every Docker CLI invocation,
+ *     tool checks): they are registered on spawn, deregistered on exit, and
+ *     stopped by cleanup if a shutdown arrives while they are in flight.
+ *   - Every Docker CLI operation and tool check runs through runBounded
+ *     with a per-process AbortController timeout plus a SIGKILL escalation,
+ *     so a hung Docker daemon can never block startup, readiness, cleanup,
+ *     or SIGINT handling indefinitely; a shutdown is handled while bounded
+ *     children are in flight, and cleanup stops them.
+ *   - Spawn failures are handled safely: spawnOwned consumes the child
+ *     `error` event (logging and deregistering the group) so no unhandled
+ *     rejection can occur, runStep rejects its awaiting promise, and
+ *     long-lived children are checked for a missing pid after spawn.
  *   - Signals (SIGINT, SIGTERM) only request shutdown: they set the
  *     shutdown flag and start the single memoized cleanup promise. The main
  *     flow stops starting work at its next checkpoint and awaits the same
@@ -60,7 +73,7 @@
  * inside the temporary credential file, which cleanup removes together with
  * its directory.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -89,6 +102,12 @@ const STOP_GRACE_MS = 3_000;
 const STOP_HARD_MS = 1_000;
 const HEALTH_PROBE_TIMEOUT_MS = 2_000;
 const CONTAINER_RM_RETRIES = 3;
+/** Bound for one Docker CLI operation (run, port, logs, rm). */
+const DOCKER_OP_TIMEOUT_MS = 15_000;
+/** Bound for one Docker readiness probe (exec pg_isready, inspect). */
+const DOCKER_PROBE_TIMEOUT_MS = 5_000;
+/** Bound for one tool availability check in preflight. */
+const TOOL_CHECK_TIMEOUT_MS = 10_000;
 
 /** Gitignored generated output owned by this launcher run when this run creates it. */
 const GENERATED_CLIENT_DIR = join(FRONTEND, 'src', 'client');
@@ -117,6 +136,14 @@ interface OwnedResources {
   groups: Map<number, ProcessGroup>;
   /** Snapshot ownership of managed generated outputs. */
   outputs: ManagedOutput[];
+}
+
+/** Result of one bounded command invocation. */
+interface BoundedResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
 }
 
 /** One serialized shutdown: the first signal wins and cleanup runs exactly once. */
@@ -185,21 +212,29 @@ function tcpPortInUse(port: number): Promise<boolean> {
 }
 
 /**
- * Spawns a detached child in its own process group and registers the group
- * for cleanup. Every lifecycle child — step commands, Fiber, and the Vite
- * preview — is registered here, so cleanup owns every spawned process group.
+ * Spawns a detached child in its own process group, registers the group for
+ * cleanup, and consumes the spawn `error` event so a failed spawn can never
+ * produce an unhandled rejection. Every lifecycle child — step commands,
+ * Fiber, the Vite preview, and every bounded one-shot command — is
+ * registered here, so cleanup owns every spawned process group.
  */
 function spawnOwned(
   resources: OwnedResources,
   command: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; stdio?: 'inherit' | 'pipe' } = {},
 ): ChildProcess {
   const child = spawn(command, args, {
     cwd: options.cwd ?? REPO,
     env: options.env ?? process.env,
-    stdio: 'inherit',
+    stdio: options.stdio === 'pipe' ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     detached: true,
+  });
+  child.once('error', (error: Error) => {
+    log(`error: failed to spawn '${command}': ${error.message}`);
+    if (child.pid !== undefined) {
+      resources.groups.delete(child.pid);
+    }
   });
   if (child.pid !== undefined) {
     resources.groups.set(child.pid, { label: `${command} ${args.join(' ')}`, leader: child });
@@ -219,6 +254,104 @@ async function runStep(
   const { promise, resolve, reject } = Promise.withResolvers<number>();
   child.once('error', reject);
   child.once('exit', (code) => resolve(code ?? 1));
+  return promise;
+}
+
+/**
+ * Runs one bounded one-shot command (every Docker CLI invocation and tool
+ * check): the child is registered as a process group, killed through an
+ * AbortController when the per-process timeout expires, escalated to a
+ * group SIGKILL shortly after, and deregistered only once the whole group
+ * is gone. A hung Docker daemon therefore can never block the launcher,
+ * readiness, cleanup, or SIGINT handling indefinitely, and no group member
+ * can outlive the launcher.
+ */
+async function runBounded(
+  resources: OwnedResources,
+  command: string,
+  args: string[],
+  options: { timeoutMs?: number; env?: NodeJS.ProcessEnv; inheritStdout?: boolean } = {},
+): Promise<BoundedResult> {
+  const timeoutMs = options.timeoutMs ?? DOCKER_OP_TIMEOUT_MS;
+  const { promise, resolve } = Promise.withResolvers<BoundedResult>();
+  let stdout = '';
+  let stderr = '';
+  let timedOut = false;
+  const controller = new AbortController();
+  const child = spawn(command, args, {
+    cwd: REPO,
+    env: options.env ?? process.env,
+    stdio: ['ignore', options.inheritStdout ? 'inherit' : 'pipe', options.inheritStdout ? 'inherit' : 'pipe'],
+    detached: true,
+    signal: controller.signal,
+  });
+  const pgid = child.pid;
+  child.once('error', (error: Error) => {
+    finish({ status: null, stdout, stderr: stderr || error.message, timedOut });
+  });
+  if (pgid !== undefined) {
+    resources.groups.set(pgid, { label: `${command} ${args.join(' ')}`, leader: child });
+  }
+
+  /** Kills the whole group after abort and deregisters it once it is gone. */
+  async function drainGroupAfterTimeout(): Promise<void> {
+    if (pgid === undefined) {
+      return;
+    }
+    controller.abort();
+    try {
+      process.kill(-pgid, 'SIGTERM');
+    } catch {
+      // group already gone
+    }
+    const grace = Date.now() + STOP_GRACE_MS;
+    while (Date.now() < grace && groupAlive(pgid)) {
+      await sleep(50);
+    }
+    if (groupAlive(pgid)) {
+      try {
+        process.kill(-pgid, 'SIGKILL');
+      } catch {
+        // group vanished between the check and the kill
+      }
+      const hardDeadline = Date.now() + STOP_HARD_MS;
+      while (Date.now() < hardDeadline && groupAlive(pgid)) {
+        await sleep(50);
+      }
+    }
+    resources.groups.delete(pgid);
+  }
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void drainGroupAfterTimeout();
+  }, timeoutMs);
+
+  if (!options.inheritStdout) {
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+  }
+  function finish(result: BoundedResult): void {
+    clearTimeout(timer);
+    if (pgid !== undefined && groupAlive(pgid)) {
+      // The leader exited but the group still has members; keep the
+      // registration so the cleanup drain loop stops them, and let the
+      // timeout drain finish the escalation.
+      resolve(result);
+      return;
+    }
+    if (pgid !== undefined) {
+      resources.groups.delete(pgid);
+    }
+    resolve(result);
+  }
+  child.once('exit', (code) => {
+    finish({ status: code, stdout, stderr, timedOut });
+  });
   return promise;
 }
 
@@ -263,16 +396,19 @@ async function stopProcessGroup(resources: OwnedResources, pgid: number): Promis
   return true;
 }
 
-function preflight(): void {
+/** Validates that every directly required executable is available and runs. */
+async function preflight(resources: OwnedResources): Promise<void> {
   for (const [command, args, label] of [
     ['docker', ['--version'], 'docker'],
     ['go', ['version'], 'go'],
     ['bun', ['--version'], 'bun'],
     ['bash', ['--version'], 'bash'],
   ] as const) {
-    const result = spawnSync(command, args, { stdio: 'ignore' });
-    if (result.error) {
-      throw new Error(`required binary ${label} is not available: ${result.error.message}`);
+    const result = await runBounded(resources, command, args, { timeoutMs: TOOL_CHECK_TIMEOUT_MS });
+    if (result.status !== 0) {
+      throw new Error(
+        `required binary ${label} is not available (${result.stderr.trim() || `status ${result.status}`}${result.timedOut ? ', timed out' : ''})`,
+      );
     }
   }
 }
@@ -287,41 +423,49 @@ async function preflightPorts(): Promise<void> {
   }
 }
 
-async function waitForPostgresReady(containerName: string): Promise<void> {
+async function waitForPostgresReady(resources: OwnedResources, containerName: string): Promise<void> {
   const deadline = Date.now() + POSTGRES_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const probe = spawnSync(
+    assertRunning();
+    const probe = await runBounded(
+      resources,
       'docker',
       ['exec', containerName, 'pg_isready', '--host=127.0.0.1', '--username=postgres', '--dbname=postgres'],
-      { stdio: 'ignore' },
+      { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
     );
     if (probe.status === 0) {
       return;
     }
-    const running = spawnSync('docker', ['inspect', '--format={{.State.Running}}', containerName], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    if (running.status !== 0 || running.stdout.toString().trim() !== 'true') {
+    const running = await runBounded(
+      resources,
+      'docker',
+      ['inspect', '--format={{.State.Running}}', containerName],
+      { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
+    );
+    if (running.status !== 0 || running.stdout.trim() !== 'true') {
       break;
     }
     await sleep(250);
   }
-  spawnSync('docker', ['logs', containerName], { stdio: 'inherit' });
+  await runBounded(resources, 'docker', ['logs', containerName], {
+    timeoutMs: DOCKER_OP_TIMEOUT_MS,
+    inheritStdout: true,
+  });
   throw new Error(
     `PostgreSQL container ${containerName} did not become ready within ${POSTGRES_START_TIMEOUT_MS} ms`,
   );
 }
 
-function dockerPublishedPort(containerName: string): number {
-  const result = spawnSync('docker', ['port', containerName, '5432/tcp'], {
-    stdio: ['ignore', 'pipe', 'inherit'],
+async function dockerPublishedPort(resources: OwnedResources, containerName: string): Promise<number> {
+  const result = await runBounded(resources, 'docker', ['port', containerName, '5432/tcp'], {
+    timeoutMs: DOCKER_OP_TIMEOUT_MS,
   });
   if (result.status !== 0) {
     throw new Error(`failed to read the PostgreSQL port mapping for ${containerName}`);
   }
-  const lines = result.stdout.toString().trim().split('\n').filter((line) => line.length > 0);
+  const lines = result.stdout.trim().split('\n').filter((line) => line.length > 0);
   if (lines.length !== 1) {
-    throw new Error(`expected one PostgreSQL port mapping, got ${result.stdout.toString().trim()}`);
+    throw new Error(`expected one PostgreSQL port mapping, got ${result.stdout.trim()}`);
   }
   const match = /^127\.0\.0\.1:(\d+)$/.exec(lines[0].trim());
   if (!match) {
@@ -399,7 +543,7 @@ function readCredentialLine(content: string, key: string): string {
 /**
  * Polls an HTTP URL with a bounded per-request timeout until the predicate
  * accepts the status, body, and content type, or the owned process exits,
- * or the overall deadline expires.
+ * or a shutdown is requested, or the overall deadline expires.
  */
 async function waitForService(
   url: string,
@@ -410,6 +554,7 @@ async function waitForService(
   const deadline = Date.now() + PROCESS_START_TIMEOUT_MS;
   let lastProbe = 'no response';
   while (Date.now() < deadline) {
+    assertRunning();
     if (!alive()) {
       throw new Error(`${label}: owned process exited before becoming ready (last probe: ${lastProbe})`);
     }
@@ -453,21 +598,26 @@ function fiberReady(status: number, body: string, contentType: string): boolean 
 
 /**
  * Removes the owned PostgreSQL container, retrying on failure. Returns true
- * when the container is confirmed gone (removed or already absent).
+ * when the container is confirmed gone (removed or already absent). Every
+ * attempt is bounded so a hung Docker daemon cannot block cleanup forever.
  */
-async function removeContainer(name: string): Promise<boolean> {
+async function removeContainer(resources: OwnedResources, name: string): Promise<boolean> {
   for (let attempt = 1; attempt <= CONTAINER_RM_RETRIES; attempt++) {
-    const result = spawnSync('docker', ['rm', '--force', name], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const result = await runBounded(resources, 'docker', ['rm', '--force', name], {
+      timeoutMs: DOCKER_OP_TIMEOUT_MS,
+    });
     if (result.status === 0) {
       log(`removed PostgreSQL container ${name}`);
       return true;
     }
-    const stderr = (result.stderr?.toString() ?? '').trim();
+    const stderr = result.stderr.trim();
     if (/no such container/i.test(stderr)) {
       log(`PostgreSQL container ${name} is already gone`);
       return true;
     }
-    log(`docker rm --force ${name} failed (attempt ${attempt}/${CONTAINER_RM_RETRIES}): ${stderr || `status ${result.status}`}`);
+    log(
+      `docker rm --force ${name} failed (attempt ${attempt}/${CONTAINER_RM_RETRIES}): ${stderr || `status ${result.status}${result.timedOut ? ' (timed out)' : ''}`}`,
+    );
     await sleep(1_000);
   }
   return false;
@@ -502,24 +652,27 @@ function snapshotOutputs(resources: OwnedResources): void {
 
 /**
  * The single cleanup path: stops every owned process group (including
- * in-flight step children), removes the owned container (retrying and
- * keeping ownership until removal is confirmed), restores or removes the
- * managed generated outputs, and removes the owned temporary directory.
- * It never throws; every problem is returned for the caller to force a
- * nonzero exit.
+ * in-flight step children and bounded command children), removes the owned
+ * container (retrying and keeping ownership until removal is confirmed),
+ * restores or removes the managed generated outputs, and removes the owned
+ * temporary directory. It never throws; every problem is returned for the
+ * caller to force a nonzero exit.
  */
 async function cleanup(resources: OwnedResources): Promise<string[]> {
   const problems: string[] = [];
 
-  for (const pgid of [...resources.groups.keys()]) {
-    if (!(await stopProcessGroup(resources, pgid))) {
-      problems.push(`process group ${pgid} could not be terminated`);
+  while (resources.groups.size > 0) {
+    const pgids = [...resources.groups.keys()];
+    for (const pgid of pgids) {
+      if (!(await stopProcessGroup(resources, pgid))) {
+        problems.push(`process group ${pgid} could not be terminated`);
+      }
     }
   }
 
   if (resources.containerName) {
     const name = resources.containerName;
-    if (await removeContainer(name)) {
+    if (await removeContainer(resources, name)) {
       resources.containerName = null;
     } else {
       problems.push(`container ${name} could not be removed and is still owned`);
@@ -537,7 +690,7 @@ async function cleanup(resources: OwnedResources): Promise<string[]> {
         log(`removed invocation-created ${output.label} at ${output.path}`);
       }
     } catch (error) {
-      problems.push(`failed to ${output.preExisted ? 'restore' : 'remove'} ${output.label} output at ${output.path}: ${String(error)}`);
+      problems.push(`failed to ${output.preExisted ? 'restore' : 'remove'} ${output.label} at ${output.path}: ${String(error)}`);
     }
   }
 
@@ -582,9 +735,12 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
     }
   }
   if (resources.containerName) {
-    const inspect = spawnSync('docker', ['inspect', '--format={{.State.Running}}', resources.containerName], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
+    const inspect = await runBounded(
+      resources,
+      'docker',
+      ['inspect', '--format={{.State.Running}}', resources.containerName],
+      { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
+    );
     if (inspect.status === 0) {
       problems.push(`container ${resources.containerName} is still present after cleanup`);
     }
@@ -592,10 +748,10 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
   for (const output of resources.outputs) {
     const present = existsSync(output.path);
     if (output.preExisted && !present) {
-      problems.push(`${output.label} output was pre-existing but is missing after cleanup`);
+      problems.push(`${output.label} was pre-existing but is missing after cleanup`);
     }
     if (!output.preExisted && present) {
-      problems.push(`${output.label} output still exists after cleanup`);
+      problems.push(`${output.label} still exists after cleanup`);
     }
   }
   if (resources.tempDir && existsSync(resources.tempDir)) {
@@ -625,7 +781,7 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
 
 async function runStack(resources: OwnedResources): Promise<number> {
   assertRunning();
-  preflight();
+  await preflight(resources);
   await preflightPorts();
   assertRunning();
   log('preflight passed: required binaries present and fixed loopback application ports are free');
@@ -675,7 +831,8 @@ async function runStack(resources: OwnedResources): Promise<number> {
   const containerName = `obiad-e2e-postgres-${process.pid}-${randomHex(4)}`;
   resources.containerName = containerName;
   const postgresPassword = randomHex(24);
-  const dockerRun = spawnSync(
+  const dockerRun = await runBounded(
+    resources,
     'docker',
     [
       'run',
@@ -689,15 +846,17 @@ async function runStack(resources: OwnedResources): Promise<number> {
       '127.0.0.1::5432',
       POSTGRES_IMAGE,
     ],
-    { env: { ...process.env, POSTGRES_PASSWORD: postgresPassword }, stdio: ['ignore', 'pipe', 'inherit'] },
+    { env: { ...process.env, POSTGRES_PASSWORD: postgresPassword } },
   );
   if (dockerRun.status !== 0) {
-    throw new Error(`failed to start the PostgreSQL container (docker status ${dockerRun.status})`);
+    throw new Error(
+      `failed to start the PostgreSQL container (docker status ${dockerRun.status ?? 'timeout'}${dockerRun.timedOut ? ', timed out' : ''})`,
+    );
   }
   assertRunning();
   log(`started PostgreSQL container ${containerName}`);
-  await waitForPostgresReady(containerName);
-  const postgresPort = dockerPublishedPort(containerName);
+  await waitForPostgresReady(resources, containerName);
+  const postgresPort = await dockerPublishedPort(resources, containerName);
   log(`PostgreSQL 17 is ready on loopback port ${postgresPort}`);
 
   // 6. Reuse the existing local deployment setup with ephemeral credentials
@@ -745,6 +904,9 @@ async function runStack(resources: OwnedResources): Promise<number> {
     cwd: BACKEND,
     env: { ...process.env, OBIAD_RUNTIME_DATABASE_URL: runtimeDatabaseUrl },
   });
+  if (fiber.pid === undefined) {
+    throw new Error(`failed to spawn the Fiber server ${serverBinary}`);
+  }
   resources.fiberStarted = true;
   log(`started real Fiber process (pid ${fiber.pid}) on ${FIBER_ADDR}`);
   await waitForService(
@@ -758,10 +920,13 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // 8. Optimized Vite preview on the strict port over the owned build output.
   const preview = spawnOwned(
     resources,
-    'bunx',
-    ['vite', 'preview', '--host', '127.0.0.1', '--port', String(PREVIEW_PORT), '--strictPort', '--outDir', buildOutDir],
+    'bun',
+    ['x', 'vite', 'preview', '--host', '127.0.0.1', '--port', String(PREVIEW_PORT), '--strictPort', '--outDir', buildOutDir],
     { cwd: FRONTEND },
   );
+  if (preview.pid === undefined) {
+    throw new Error('failed to spawn the Vite preview');
+  }
   resources.previewStarted = true;
   log(`started optimized Vite preview (pid ${preview.pid}) on ${PREVIEW_ORIGIN}`);
   await waitForService(
@@ -775,7 +940,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
 
   // 9. Ensure the pinned Playwright Chromium is installed (no-op when present).
   log('ensuring the pinned Playwright Chromium is installed');
-  status = await runStep(resources, 'bunx', ['playwright', 'install', 'chromium'], { cwd: FRONTEND });
+  status = await runStep(resources, 'bun', ['x', 'playwright', 'install', 'chromium'], { cwd: FRONTEND });
   assertRunning();
   if (status !== 0) {
     throw new Error(`playwright install chromium failed with status ${status}`);
@@ -785,7 +950,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // status. The browser client bundle path reaches the scenario through the
   // environment; the scenario runs the generated client inside Chromium.
   log('running the real-stack Playwright scenario');
-  return runStep(resources, 'bunx', ['playwright', 'test'], {
+  return runStep(resources, 'bun', ['x', 'playwright', 'test'], {
     cwd: FRONTEND,
     env: { ...process.env, OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle },
   });
