@@ -3,13 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Runnable client-only Svelte 5 and Vite application foundation that preserves the generated TypeScript API client. No /api proxy, Interface Language control, suggestions, selected input, result cards, or result state yet (task 21, ARCH-001, ARCH-008, ARCH-016).",
+  "description": "Runnable client-only Svelte 5 and Vite application foundation that preserves the generated TypeScript API client and proxies same-origin /api requests to the fixed loopback Fiber listener, with a self-cleaning real-stack Playwright launcher behind test:e2e (task 21, task 22; ARCH-001, ARCH-008, ARCH-016, ARCH-022). No Interface Language control, suggestions, selected input, result cards, or result state yet.",
   "scripts": {
     "generate:api": "openapi-ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "test:e2e": "bun ./e2e/launcher.ts"
   },
   "dependencies": {
     "@tanstack/svelte-query": "6.1.38"
