@@ -17,12 +17,13 @@ package repository
 // decreasing full-precision order, English-name and stable-ID ties, the raw
 // stored-name collation tie rule (case and whitespace remain significant),
 // three unique results, one fresh SELECT, no mutation or derived-value
-// persistence, the Serving conversion branch, all three unrounded scaled
-// macro fields, and the finite-boundary classification of schema-valid
-// extreme Macro Profiles. In the same test, Macro Profiles loaded by the
-// real private Catalog Loader are passed directly to the private production
-// calorie, cosine, and Matched Quantity helpers and compared with
-// independently recorded full-precision expectations using
+// persistence, the Serving conversion branch, the final display projection
+// of the three scaled macro fields and the whole Matched Quantity and
+// similarity percentage (task 17), and the finite-boundary classification
+// of schema-valid extreme Macro Profiles. In the same test, Macro Profiles
+// loaded by the real private Catalog Loader are passed directly to the
+// private production calorie, cosine, and Matched Quantity helpers and
+// compared with independently recorded full-precision expectations using
 // abs(got - want) <= 1e-12 (ISSUE-005: the absolute 1e-12 tolerance is a
 // test comparison only, never a production tie or ranking threshold). No
 // exported seam, fake, or test hook is added: the helpers stay private and
@@ -93,8 +94,10 @@ var wantCalories = map[int32]float64{
 // wantCandidate is one independently recorded full-precision expectation for
 // one eligible Substitute of a designated input: its seeded calories per
 // Nutrition Basis, its cosine Nutritional Similarity to the input, its
-// equal-calorie Matched Quantity in the candidate base unit, and the three
-// unrounded macronutrients scaled to that Matched Quantity.
+// equal-calorie Matched Quantity in the candidate base unit, the three
+// unrounded macronutrients scaled to that Matched Quantity, and the
+// candidate base unit of that Matched Quantity (g for a solid, ml for a
+// liquid, ARCH-013).
 type wantCandidate struct {
 	id              int32
 	calories        float64
@@ -103,6 +106,7 @@ type wantCandidate struct {
 	protein         float64
 	carbohydrate    float64
 	fat             float64
+	unit            Unit
 }
 
 // wantSubstitutePage is one independently recorded page-0 expectation for a
@@ -130,9 +134,9 @@ var wantSubstitutePages = []wantSubstitutePage{
 		totalCalories: 875.0,
 		pageIDs:       []int32{13, 29, 26},
 		candidates: []wantCandidate{
-			{id: 13, calories: 200.0, cosine: 0.9999999999999999, matchedQuantity: 437.5, protein: 35.0, carbohydrate: 105.0, fat: 35.0},
-			{id: 29, calories: 157.0, cosine: 0.9953414448979734, matchedQuantity: 557.3248407643312, protein: 44.58598726114649, carbohydrate: 111.46496815286623, fat: 27.86624203821656},
-			{id: 26, calories: 199.0, cosine: 0.992122967180221, matchedQuantity: 439.69849246231155, protein: 26.38190954773869, carbohydrate: 123.11557788944724, fat: 30.77889447236181},
+			{id: 13, calories: 200.0, cosine: 0.9999999999999999, matchedQuantity: 437.5, protein: 35.0, carbohydrate: 105.0, fat: 35.0, unit: UnitGram},
+			{id: 29, calories: 157.0, cosine: 0.9953414448979734, matchedQuantity: 557.3248407643312, protein: 44.58598726114649, carbohydrate: 111.46496815286623, fat: 27.86624203821656, unit: UnitGram},
+			{id: 26, calories: 199.0, cosine: 0.992122967180221, matchedQuantity: 439.69849246231155, protein: 26.38190954773869, carbohydrate: 123.11557788944724, fat: 30.77889447236181, unit: UnitGram},
 		},
 	},
 	{
@@ -142,9 +146,9 @@ var wantSubstitutePages = []wantSubstitutePage{
 		totalCalories: 156.4,
 		pageIDs:       []int32{23, 11, 6},
 		candidates: []wantCandidate{
-			{id: 23, calories: 134.0, cosine: 0.998907198578582, matchedQuantity: 116.71641791044776, protein: 33.84776119402985, carbohydrate: 0.0, fat: 2.334328358208955},
-			{id: 11, calories: 61.8, cosine: 0.9353543324988515, matchedQuantity: 253.07443365695795, protein: 27.838187702265373, carbohydrate: 10.122977346278319, fat: 0.506148867313916},
-			{id: 6, calories: 234.0, cosine: 0.9349276360101546, matchedQuantity: 66.83760683760684, protein: 18.046153846153846, carbohydrate: 0.0, fat: 9.357264957264958},
+			{id: 23, calories: 134.0, cosine: 0.998907198578582, matchedQuantity: 116.71641791044776, protein: 33.84776119402985, carbohydrate: 0.0, fat: 2.334328358208955, unit: UnitGram},
+			{id: 11, calories: 61.8, cosine: 0.9353543324988515, matchedQuantity: 253.07443365695795, protein: 27.838187702265373, carbohydrate: 10.122977346278319, fat: 0.506148867313916, unit: UnitGram},
+			{id: 6, calories: 234.0, cosine: 0.9349276360101546, matchedQuantity: 66.83760683760684, protein: 18.046153846153846, carbohydrate: 0.0, fat: 9.357264957264958, unit: UnitGram},
 		},
 	},
 	{
@@ -154,9 +158,9 @@ var wantSubstitutePages = []wantSubstitutePage{
 		totalCalories: 50.8,
 		pageIDs:       []int32{33, 3, 21},
 		candidates: []wantCandidate{
-			{id: 33, calories: 96.0, cosine: 0.9948293845065213, matchedQuantity: 52.916666666666664, protein: 3.704166666666666, carbohydrate: 4.233333333333333, fat: 2.1166666666666667},
-			{id: 3, calories: 180.0, cosine: 0.9884883774184667, matchedQuantity: 28.22222222222222, protein: 2.54, carbohydrate: 5.08, fat: 2.2577777777777777},
-			{id: 21, calories: 265.0, cosine: 0.9870586973699207, matchedQuantity: 19.169811320754718, protein: 2.4920754716981133, carbohydrate: 4.6007547169811325, fat: 2.4920754716981133},
+			{id: 33, calories: 96.0, cosine: 0.9948293845065213, matchedQuantity: 52.916666666666664, protein: 3.704166666666666, carbohydrate: 4.233333333333333, fat: 2.1166666666666667, unit: UnitMillilitre},
+			{id: 3, calories: 180.0, cosine: 0.9884883774184667, matchedQuantity: 28.22222222222222, protein: 2.54, carbohydrate: 5.08, fat: 2.2577777777777777, unit: UnitGram},
+			{id: 21, calories: 265.0, cosine: 0.9870586973699207, matchedQuantity: 19.169811320754718, protein: 2.4920754716981133, carbohydrate: 4.6007547169811325, fat: 2.4920754716981133, unit: UnitGram},
 		},
 	},
 }
@@ -235,6 +239,57 @@ func assertNearEqual(t *testing.T, name string, got, want float64) {
 	}
 }
 
+// assertProjectedItem checks that one page item carries the final display
+// projection of the independently recorded full-precision candidate
+// expectation (task 17, REQ-039): the whole Matched Quantity in the
+// candidate base unit, the protein, carbohydrate, and fat scaled to the
+// unrounded Matched Quantity and rounded to 0.1 g, and the whole similarity
+// percentage. The full-precision expectation is projected through the
+// private production helpers, which are themselves pinned to exact boundary
+// literals by TestSubstituteProjectionIntegration.
+func assertProjectedItem(t *testing.T, item SubstituteItem, want wantCandidate) {
+	t.Helper()
+	wantMQ := int64(roundHalfUp(want.matchedQuantity))
+	if item.MatchedQuantity.Value != wantMQ || item.MatchedQuantity.Unit != want.unit {
+		t.Fatalf("item %d: Matched Quantity is %+v, want value %d in unit %q (full precision %.17g)",
+			item.FoodObjectID, item.MatchedQuantity, wantMQ, want.unit, want.matchedQuantity)
+	}
+	assertMacro := func(name string, got, full float64) {
+		t.Helper()
+		if want := projectMacronutrient(full); got != want {
+			t.Fatalf("item %d: %s is %.17g, want the projected %.17g of the full-precision %.17g",
+				item.FoodObjectID, name, got, want, full)
+		}
+	}
+	assertMacro("protein", item.Protein, want.protein)
+	assertMacro("carbohydrate", item.Carbohydrate, want.carbohydrate)
+	assertMacro("fat", item.Fat, want.fat)
+	if wantPercent := projectSimilarityPercent(want.cosine); item.SimilarityPercent != wantPercent {
+		t.Fatalf("item %d: similarity percent is %d, want the projected %d of the full-precision %.17g",
+			item.FoodObjectID, item.SimilarityPercent, wantPercent, want.cosine)
+	}
+}
+
+// assertBitIdenticalTie verifies, through the private production cosine
+// helper, that two tie candidates have bit-identical full-precision
+// similarity to the tie input (REQ-035). The item projection no longer
+// exposes the unrounded similarity, so the test re-derives it from a fresh
+// request-local catalog snapshot that includes the isolated tie fixtures
+// inserted by the caller.
+func assertBitIdenticalTie(t *testing.T, module *FindSubstitutePage, ctx context.Context, inputID, aID, bID int32) {
+	t.Helper()
+	profiles := loadProfiles(t, module, ctx)
+	inputProfile, ok := profiles[inputID]
+	if !ok {
+		t.Fatalf("loaded catalog has no tie input %d", inputID)
+	}
+	simA := cosineSimilarity(inputProfile, profiles[aID])
+	simB := cosineSimilarity(inputProfile, profiles[bID])
+	if simA != simB {
+		t.Fatalf("identical-profile candidates %d and %d must have bit-identical similarity: %.17g vs %.17g", aID, bID, simA, simB)
+	}
+}
+
 // loadProfiles performs one fresh catalog read through the real private
 // Catalog Loader on the runtime connection and returns every Food Object's
 // Macro Profile keyed by stable ID.
@@ -282,7 +337,11 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	// Designated seeded inputs: exact eligible counts (ISSUE-002: 36 for
 	// Pizza Margherita, 37 for Chicken breast and Milk), hasMore true, the
 	// recorded page-0 ID order, three unique items, and decreasing
-	// full-precision similarity across the returned items.
+	// full-precision similarity across the returned items. One request-local
+	// catalog snapshot is loaded through the real private Catalog Loader up
+	// front so the ordering and projection assertions below can re-derive
+	// the full-precision values with the private production helpers.
+	profiles := loadProfiles(t, module, ctx)
 	wantCounts := map[int32]int{1: 36, 5: 37, 10: 37}
 	for _, want := range wantSubstitutePages {
 		page := run(SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity})
@@ -298,9 +357,17 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 		assertPageIDs(t, page, want.pageIDs...)
 		assertUniqueThree(t, page)
+		// The item projection no longer exposes the unrounded similarity, so
+		// the strictly decreasing page-0 order is verified on the
+		// full-precision values re-derived through the private production
+		// helper (REQ-034): an implementation that rounded similarity for
+		// ranking would break this check.
+		inputProfile := profiles[want.inputID]
 		for i := 1; i < len(page.Items); i++ {
-			if page.Items[i-1].Similarity <= page.Items[i].Similarity {
-				t.Fatalf("input %d: page-0 similarity is not strictly decreasing: %.17g then %.17g", want.inputID, page.Items[i-1].Similarity, page.Items[i].Similarity)
+			prev := cosineSimilarity(inputProfile, profiles[page.Items[i-1].FoodObjectID])
+			curr := cosineSimilarity(inputProfile, profiles[page.Items[i].FoodObjectID])
+			if prev <= curr {
+				t.Fatalf("input %d: page-0 full-precision similarity is not strictly decreasing: %.17g then %.17g", want.inputID, prev, curr)
 			}
 		}
 	}
@@ -331,7 +398,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	// within ISSUE-005's absolute 1e-12 tolerance. The recorded top-three
 	// cosines strictly decrease, so the recorded page-0 ID order is the
 	// decreasing full-precision similarity order.
-	profiles := loadProfiles(t, module, ctx)
 	for id, want := range wantCalories {
 		profile, ok := profiles[id]
 		if !ok {
@@ -352,17 +418,14 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			assertNearEqual(t, "cosineSimilarity(input, candidate)", gotCosine, candidate.cosine)
 			assertNearEqual(t, "calories(candidate)", gotCalories, candidate.calories)
 			assertNearEqual(t, "matchedQuantity", gotMatched, candidate.matchedQuantity)
-			// The page-0 items returned by Run carry the same full-precision
-			// values the helpers produce for the recorded candidates: the
-			// unrounded similarity, the unrounded Matched Quantity, and the
-			// three unrounded macronutrients scaled to that Matched Quantity
-			// (REQ-031; Phase 4 task 17 rounds them for display).
-			item := page.Items[i]
-			assertNearEqual(t, "item similarity", item.Similarity, candidate.cosine)
-			assertNearEqual(t, "item Matched Quantity", item.MatchedQuantity, candidate.matchedQuantity)
-			assertNearEqual(t, "item protein", item.Protein, candidate.protein)
-			assertNearEqual(t, "item carbohydrate", item.Carbohydrate, candidate.carbohydrate)
-			assertNearEqual(t, "item fat", item.Fat, candidate.fat)
+			// The page-0 items returned by Run carry the final display
+			// projection of the recorded full-precision values (task 17,
+			// REQ-039): the whole Matched Quantity in the candidate base
+			// unit, the macronutrients rounded to 0.1 g, and the whole
+			// similarity percentage. The full-precision values themselves
+			// are asserted above through the private helpers, so the two
+			// halves of the evidence pin the scaling and the projection.
+			assertProjectedItem(t, page.Items[i], candidate)
 			if i > 0 && want.candidates[i-1].cosine <= candidate.cosine {
 				t.Fatalf("recorded top-3 cosines for input %d are not strictly decreasing", want.inputID)
 			}
@@ -411,9 +474,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 	assertPageIDs(t, idTie, 44, 45, 29)
 	assertUniqueThree(t, idTie)
-	if idTie.Items[0].Similarity != idTie.Items[1].Similarity {
-		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", idTie.Items[0].Similarity, idTie.Items[1].Similarity)
-	}
+	assertBitIdenticalTie(t, module, ctx, 43, 44, 45)
 	if idTie.Items[0].Names.En != "Tie duplicate" || idTie.Items[1].Names.En != "Tie duplicate" {
 		t.Fatalf("stable-ID tie fixtures carry names %q and %q, want both \"Tie duplicate\"", idTie.Items[0].Names.En, idTie.Items[1].Names.En)
 	}
@@ -438,9 +499,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 	assertPageIDs(t, nameTie, 55, 54, 34)
 	assertUniqueThree(t, nameTie)
-	if nameTie.Items[0].Similarity != nameTie.Items[1].Similarity {
-		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", nameTie.Items[0].Similarity, nameTie.Items[1].Similarity)
-	}
+	assertBitIdenticalTie(t, module, ctx, 53, 55, 54)
 	if nameTie.Items[0].Names.En != "Tie alpha" || nameTie.Items[1].Names.En != "Tie zulu" {
 		t.Fatalf("English-name tie ordered as %q then %q, want \"Tie alpha\" then \"Tie zulu\"", nameTie.Items[0].Names.En, nameTie.Items[1].Names.En)
 	}
@@ -468,9 +527,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 	assertPageIDs(t, caseTie, 68, 67, 15)
 	assertUniqueThree(t, caseTie)
-	if caseTie.Items[0].Similarity != caseTie.Items[1].Similarity {
-		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", caseTie.Items[0].Similarity, caseTie.Items[1].Similarity)
-	}
+	assertBitIdenticalTie(t, module, ctx, 66, 68, 67)
 	if caseTie.Items[0].Names.En != "tie case" || caseTie.Items[1].Names.En != "Tie case" {
 		t.Fatalf("case tie ordered as %q then %q, want \"tie case\" then \"Tie case\" by the raw English collation", caseTie.Items[0].Names.En, caseTie.Items[1].Names.En)
 	}
@@ -491,9 +548,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 	assertPageIDs(t, spaceTie, 78, 77, 20)
 	assertUniqueThree(t, spaceTie)
-	if spaceTie.Items[0].Similarity != spaceTie.Items[1].Similarity {
-		t.Fatalf("identical-profile candidates must have bit-identical similarity: %.17g vs %.17g", spaceTie.Items[0].Similarity, spaceTie.Items[1].Similarity)
-	}
+	assertBitIdenticalTie(t, module, ctx, 76, 78, 77)
 	if spaceTie.Items[0].Names.En != "Tie  space" || spaceTie.Items[1].Names.En != "Tie space" {
 		t.Fatalf("whitespace tie ordered as %q then %q, want \"Tie  space\" then \"Tie space\" by the raw English collation", spaceTie.Items[0].Names.En, spaceTie.Items[1].Names.En)
 	}
