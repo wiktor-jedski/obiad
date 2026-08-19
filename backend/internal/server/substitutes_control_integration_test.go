@@ -30,8 +30,9 @@ package server
 // five-request pool-exhaustion batch, and every deadline response well
 // under two deadlines. The log test proves the structured request-log
 // fields and the sensitive-value exclusions: request ID, method, route
-// template, status, duration, stable code, and internal cause, with Food
-// Quantities, request bodies, SQL text, credentials, and stack details
+// template, status, duration, stable code, and an exact stable safe
+// internal cause, with Food Quantities, units, unknown-key names, numeric
+// tokens, request bodies, SQL text, credentials, and stack details
 // excluded (P04-G2, P04-G4).
 //
 // The explicit ISSUE-003 and ISSUE-005 zero-result deviation is preserved:
@@ -454,7 +455,10 @@ func TestSubstituteSearchFailuresHTTPIntegration(t *testing.T) {
 // Fiber listener backed by disposable real PostgreSQL: every request
 // produces one JSON record with request ID, method, route template, status,
 // duration, and, for failures, the stable error code and the internal
-// cause; and the records exclude Food Quantities, request bodies, SQL
+// cause. Adversarial requests carry distinctive Food Quantity values,
+// units, unknown-key names, numeric tokens, Content-Type values, and body
+// padding, and every record is asserted to carry the exact stable safe
+// cause and to exclude those tokens, the raw request bodies, SQL
 // parameters, database credentials, and stack details (P04-G2, P04-G4).
 func TestSubstituteRequestLogIntegration(t *testing.T) {
 	db := newSetupDB(t)
@@ -473,36 +477,62 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	runtimePassword, _ := runtimeURL.User.Password()
 	baseForbidden := []string{runtimePassword, "food_objects", "password", "goroutine", ".go:", "INSERT", "UPDATE"}
 
-	// 1. A successful request with a distinctive quantity value: the record
-	// has the required fields, no code, and no cause, and never echoes the
-	// request body — the raw body text is the forbidden token.
+	// 1. A successful request with a distinctive quantity value 4321 and
+	// unit g in the body: the record has the required fields, no code, and
+	// no cause, and never echoes the request body — the raw body text is
+	// the forbidden token.
 	successBody := `{"foodObjectId":5,"quantity":{"value":4321,"unit":"g"},"pageIndex":0}`
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType, successBody)
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	// 2. A malformed body with a distinctive token: 400 INVALID_REQUEST
-	// without a field, and the record never echoes the token (the internal
-	// cause names the malformed-document class, not the body).
-	malformedBody := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"secret-body-token-xyz":`
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, malformedBody), http.StatusBadRequest, "INVALID_REQUEST", "")
-	// 3. A semantic quantity failure: 422 INVALID_QUANTITY with quantity.value,
-	// the stable code and the sanitized internal cause logged server-side.
-	semanticBody := `{"foodObjectId":5,"quantity":{"value":0,"unit":"g"},"pageIndex":0}`
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, semanticBody), http.StatusUnprocessableEntity, "INVALID_QUANTITY", "quantity.value")
-	// 4. A missing positive Food Object: 404 FOOD_OBJECT_NOT_FOUND with
-	// foodObjectId, the stable code and the internal cause logged.
+
+	// 2. An unknown key with a distinctive name: 400 INVALID_REQUEST without
+	// a field, and the record's cause is the fixed "request body contains
+	// an unknown field" — the client-supplied key name must never reach the
+	// log (the task-20 safe-cause boundary, F-1).
+	unknownKeyBody := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"secret-unknown-key-xyz":1}`
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, unknownKeyBody), http.StatusBadRequest, "INVALID_REQUEST", "")
+
+	// 3. A converted-quantity range failure with a distinctive value 1E9
+	// (g, on the solid Chicken breast): 422 QUANTITY_OUT_OF_RANGE with
+	// quantity.value, and the record's cause is the fixed
+	// "converted quantity exceeds the base-unit limit (field
+	// quantity.value)" — neither the value nor the unit must reach the log
+	// (the Module cause text carries both; F-1).
+	rangeBody := `{"foodObjectId":5,"quantity":{"value":1E9,"unit":"g"},"pageIndex":0}`
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, rangeBody), http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "quantity.value")
+
+	// 4. A wrong-typed Food Object ID with a distinctive out-of-int32
+	// numeric token 1E12: 400 INVALID_REQUEST with foodObjectId, and the
+	// record's cause is the fixed "field foodObjectId is not a valid int32"
+	// — the raw numeric token must never reach the log.
+	bigIDBody := `{"foodObjectId":1E12,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, bigIDBody), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
+
+	// 5. A non-JSON Content-Type with a distinctive header value: 400
+	// INVALID_REQUEST without a field, and the record's cause is the fixed
+	// "Content-Type is not application/json" — the client-supplied header
+	// value must never reach the log.
+	assertError(t, postSubstitutesResult(t, baseURL, "secret-content-type-xyz", canonicalSubstituteBody), http.StatusBadRequest, "INVALID_REQUEST", "")
+
+	// 6. A missing positive Food Object: 404 FOOD_OBJECT_NOT_FOUND with
+	// foodObjectId, and the record's cause is the fixed
+	// "food object is absent from the catalog (field foodObjectId)" — the
+	// absent ID must never reach the log.
 	notFoundBody := `{"foodObjectId":9999,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, notFoundBody), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
-	// 5. An oversized body with a distinctive padding token: 413
-	// REQUEST_BODY_TOO_LARGE without a field, and the record never echoes
-	// the body (the internal cause names the limit, not the body).
+
+	// 7. An oversized body with a distinctive padding token: 413
+	// REQUEST_BODY_TOO_LARGE without a field, and the record's cause is the
+	// fixed "request body exceeds the 4 KiB limit" — the body padding must
+	// never reach the log.
 	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 700) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
 
-	// 6. A deadline expiry: with the schema owner holding an ACCESS
+	// 8. A deadline expiry: with the schema owner holding an ACCESS
 	// EXCLUSIVE lock on food_objects, a valid request blocks in the catalog
 	// SELECT until the single 450 ms deadline cancels pgx and the response
 	// is 504 SEARCH_TIMEOUT; the record carries the stable code and the
-	// sanitized internal cause.
+	// fixed deadline cause text.
 	owner := connect(t, db.OwnerURL)
 	if _, err := owner.Exec(context.Background(), "BEGIN"); err != nil {
 		t.Fatalf("begin lock transaction: %v", err)
@@ -517,8 +547,8 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, deadlineBody), http.StatusGatewayTimeout, "SEARCH_TIMEOUT", "")
 
 	lines := logs.snapshot()
-	if len(lines) != 6 {
-		t.Fatalf("captured %d log records, want exactly 6 (one per request): %q", len(lines), lines)
+	if len(lines) != 8 {
+		t.Fatalf("captured %d log records, want exactly 8 (one per request): %q", len(lines), lines)
 	}
 	records := make([]logRecord, 0, len(lines))
 	seenRequestIDs := make(map[string]bool, len(lines))
@@ -534,15 +564,18 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 		seenRequestIDs[record.RequestID] = true
 	}
 	wantRoute := "/api/v1/substitutes/search"
-	// The raw body text of every request is forbidden: a record that echoed
-	// any request body would contain its distinctive text. The 404 internal
-	// cause legitimately names the absent Food Object ID, so its body text
-	// is not a forbidden token; every other cause never echoes the body.
+	// Every record forbids the raw request body text and its distinctive
+	// client-supplied tokens: a record that echoed any request value, unit,
+	// unknown key, numeric token, Content-Type value, or body padding would
+	// fail. The causes are asserted exactly below, so the forbidden-token
+	// scan is the second, explicit no-leakage layer.
 	forbiddenByRecord := [][]string{
 		append(append([]string{}, baseForbidden...), successBody),
-		append(append([]string{}, baseForbidden...), malformedBody, "secret-body-token-xyz"),
-		append(append([]string{}, baseForbidden...), semanticBody),
-		append([]string{}, baseForbidden...),
+		append(append([]string{}, baseForbidden...), unknownKeyBody, "secret-unknown-key-xyz"),
+		append(append([]string{}, baseForbidden...), rangeBody, "1E9"),
+		append(append([]string{}, baseForbidden...), bigIDBody, "1E12"),
+		append(append([]string{}, baseForbidden...), "secret-content-type-xyz"),
+		append(append([]string{}, baseForbidden...), notFoundBody, "9999"),
 		append(append([]string{}, baseForbidden...), oversizedBody, "secret-padding-token-xyz"),
 		append(append([]string{}, baseForbidden...), deadlineBody),
 	}
@@ -552,13 +585,18 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 		cause  string
 	}{
 		{http.StatusOK, "", ""},
-		{http.StatusBadRequest, "INVALID_REQUEST", ""},
-		{http.StatusUnprocessableEntity, "INVALID_QUANTITY", "must be a positive integer"},
-		{http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "absent"},
-		{http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "exceeds the 4 KiB limit"},
-		{http.StatusGatewayTimeout, "SEARCH_TIMEOUT", ""},
+		{http.StatusBadRequest, "INVALID_REQUEST", "request body contains an unknown field"},
+		{http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "converted quantity exceeds the base-unit limit (field quantity.value)"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "field foodObjectId is not a valid int32"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "Content-Type is not application/json"},
+		{http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "food object is absent from the catalog (field foodObjectId)"},
+		{http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "request body exceeds the 4 KiB limit"},
+		{http.StatusGatewayTimeout, "SEARCH_TIMEOUT", deadlineLogCause},
 	}
 	for i, record := range records {
-		assertRequestLog(t, record, http.MethodPost, want[i].status, want[i].code, want[i].cause, wantRoute, forbiddenByRecord[i])
+		assertRequestLog(t, record, http.MethodPost, want[i].status, want[i].code, "", wantRoute, forbiddenByRecord[i])
+		if record.Cause != want[i].cause {
+			t.Fatalf("log record %d cause %q, want exactly %q (no client values, units, unknown keys, numeric tokens, body text, SQL, credentials, or stack details)", i, record.Cause, want[i].cause)
+		}
 	}
 }

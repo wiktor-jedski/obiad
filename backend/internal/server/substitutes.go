@@ -109,22 +109,45 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			},
 		}, req.PageIndex)
 		if err != nil {
-			status, code, field := substituteRunError(err)
-			return writeError(c, status, code, field, err)
+			status, code, field, logCause := substituteRunError(err)
+			return writeStableError(c, status, code, field, logCause)
 		}
 		return c.JSON(substituteResponse(page))
 	}
 }
 
+// deadlineLogCause is the fixed internal cause text of a substitute request
+// whose 450 ms deadline expired while reading the catalog (ARCH-019). The
+// fixed text keeps the request log free of any pgx or query detail.
+const deadlineLogCause = "request deadline expired while reading the catalog"
+
+// safeSubstituteCause returns the stable internal cause text of one
+// substitute client failure: a fixed description and the fixed ISSUE-005
+// field path. It never contains client values (Food Quantities, units,
+// Food Object IDs, page indexes) or request body text (ARCH-019,
+// golang-security logging guidance).
+func safeSubstituteCause(description, field string) string {
+	if field == "" {
+		return description
+	}
+	return description + " (field " + field + ")"
+}
+
 // substituteRunError maps one Find Substitute Page Module failure to the
-// ISSUE-005-resolved stable HTTP status, code, and optional field. Deadline
-// expiry (the 450 ms request context reached pgx) is SEARCH_TIMEOUT no
-// matter how the failure surfaces from the Module; client failures carry
-// their exact ISSUE-005 field path; server failures carry none and expose
-// no internal cause.
-func substituteRunError(err error) (status int, code transport.ErrorCode, field *transport.ErrorField) {
+// ISSUE-005-resolved stable HTTP status, code, optional field, and the safe
+// internal cause text for the request log. Deadline expiry (the 450 ms
+// request context reached pgx) is SEARCH_TIMEOUT no matter how the failure
+// surfaces from the Module. Client failures derive the log cause only from
+// the stable code and the fixed ISSUE-005 field path: the Module cause text
+// contains the client Food Quantity values, units, Food Object IDs, and
+// page indexes, which must never reach the log (ARCH-019). Server failures
+// (storage, invariant, unexpected) keep the server-generated pgx or
+// catalog-invariant cause, which contains no client input. Client failures
+// carry their field; server failures carry none and expose no internal
+// cause in the response.
+func substituteRunError(err error) (status int, code transport.ErrorCode, field *transport.ErrorField, logCause string) {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil
+		return fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, deadlineLogCause
 	}
 	var moduleErr *repository.Error
 	if errors.As(err, &moduleErr) {
@@ -133,32 +156,32 @@ func substituteRunError(err error) (status int, code transport.ErrorCode, field 
 			// A nonpositive Food Object ID (ISSUE-005: 400 INVALID_REQUEST
 			// with field foodObjectId). The strict decoder already
 			// classifies every structural foodObjectId failure.
-			return fiber.StatusBadRequest, transport.INVALIDREQUEST, fieldPathOf(moduleErr.Field)
+			return fiber.StatusBadRequest, transport.INVALIDREQUEST, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute request", moduleErr.Field)
 		case repository.CodeFoodObjectNotFound:
-			return fiber.StatusNotFound, transport.FOODOBJECTNOTFOUND, fieldPathOf(moduleErr.Field)
+			return fiber.StatusNotFound, transport.FOODOBJECTNOTFOUND, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object is absent from the catalog", moduleErr.Field)
 		case repository.CodeInvalidQuantity:
 			// The Module reports the exact ISSUE-005 field: quantity.value
 			// for a nonpositive or nonintegral direct value or a
 			// nonpositive Serving count, quantity.unit for an unsupported
 			// unit.
-			return fiber.StatusUnprocessableEntity, transport.INVALIDQUANTITY, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.INVALIDQUANTITY, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute quantity", moduleErr.Field)
 		case repository.CodeQuantityUnitMismatch:
-			return fiber.StatusUnprocessableEntity, transport.QUANTITYUNITMISMATCH, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.QUANTITYUNITMISMATCH, fieldPathOf(moduleErr.Field), safeSubstituteCause("quantity unit does not match the food object physical state", moduleErr.Field)
 		case repository.CodeServingUnavailable:
-			return fiber.StatusUnprocessableEntity, transport.SERVINGUNAVAILABLE, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.SERVINGUNAVAILABLE, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object has no stored serving", moduleErr.Field)
 		case repository.CodeQuantityOutOfRange:
-			return fiber.StatusUnprocessableEntity, transport.QUANTITYOUTOFRANGE, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.QUANTITYOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("converted quantity exceeds the base-unit limit", moduleErr.Field)
 		case repository.CodeInvalidPageIndex:
-			return fiber.StatusUnprocessableEntity, transport.INVALIDPAGEINDEX, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.INVALIDPAGEINDEX, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is negative", moduleErr.Field)
 		case repository.CodePageOutOfRange:
-			return fiber.StatusUnprocessableEntity, transport.PAGEOUTOFRANGE, fieldPathOf(moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.PAGEOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is out of range: only page 0 exists until Phase 11", moduleErr.Field)
 		case repository.CodeCatalogUnavailable:
-			return fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil
+			return fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err.Error()
 		case repository.CodeInternalError:
-			return fiber.StatusInternalServerError, transport.INTERNALERROR, nil
+			return fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error()
 		}
 	}
-	return fiber.StatusInternalServerError, transport.INTERNALERROR, nil
+	return fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error()
 }
 
 // valueKind enumerates the JSON value kinds the strict request decoder
@@ -222,7 +245,9 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	var req transport.SubstituteSearchRequest
 	mediaType, _, err := mime.ParseMediaType(c.Get(fiber.HeaderContentType))
 	if err != nil || mediaType != "application/json" {
-		return req, nil, fmt.Errorf("Content-Type %q is not application/json", c.Get(fiber.HeaderContentType))
+		// The cause is fixed text: the client-supplied Content-Type header
+		// value never reaches the request log (ARCH-019).
+		return req, nil, errors.New("Content-Type is not application/json")
 	}
 
 	body := c.Body()
@@ -313,8 +338,9 @@ func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *tr
 		field, known := byKey[key]
 		if !known {
 			// An unknown key is a closed-object violation without a field
-			// (ISSUE-005).
-			return nil, nil, fmt.Errorf("unknown field %q", key)
+			// (ISSUE-005). The cause is fixed text: the client-supplied key
+			// name never reaches the request log (ARCH-019).
+			return nil, nil, errors.New("request body contains an unknown field")
 		}
 		if seen[key] {
 			return nil, fieldPathOf(field.path), fmt.Errorf("field %q is duplicated", key)
@@ -381,11 +407,12 @@ func fieldPathOf(path string) *transport.ErrorField {
 // strictInt32 converts a validated JSON number token to the int32 of one
 // generated request field, rejecting non-integral values and values outside
 // the int32 range with the field's ISSUE-005 path (a generated int32 decode
-// failure).
+// failure). The cause names only the fixed known field: the client-supplied
+// numeric token never reaches the request log (ARCH-019).
 func strictInt32(number json.Number, field string) (int32, error) {
 	v, err := strconv.ParseInt(number.String(), 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("field %q value %s is not an int32", field, number)
+		return 0, fmt.Errorf("field %s is not a valid int32", field)
 	}
 	return int32(v), nil
 }
@@ -393,11 +420,12 @@ func strictInt32(number json.Number, field string) (int32, error) {
 // strictFloat64 converts a validated JSON number token to the float64 of
 // one generated request field, rejecting values that do not fit the double
 // range with the field's ISSUE-005 path (a generated double decode
-// failure).
+// failure). The cause names only the fixed known field: the client-supplied
+// numeric token never reaches the request log (ARCH-019).
 func strictFloat64(number json.Number, field string) (float64, error) {
 	v, err := strconv.ParseFloat(number.String(), 64)
 	if err != nil {
-		return 0, fmt.Errorf("field %q value %s is not a finite double", field, number)
+		return 0, fmt.Errorf("field %s is not a valid double", field)
 	}
 	return v, nil
 }
