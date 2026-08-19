@@ -273,13 +273,13 @@ Additional language keys are permitted in the localized-name map. A solid has a 
 | Requirements | REQ-011, REQ-037, REQ-055, REQ-069, REQ-073 |
 | Dependencies | Vite frontend bundle |
 
-**Responsibility:** Supply deterministic images, placeholder content, and fonts without a runtime third party.
+**Responsibility:** Supply deterministic images and placeholder content without a runtime third party, and define the browser typography fallback contract.
 
 **Owner:** ARCH-001.
 
-**Structure contract:** Bundled Food Object images use opaque image keys. One bundled placeholder handles an absent or unusable image. Pinned local WOFF2 subsets provide Inter and Roboto Mono.
+**Structure contract:** Bundled Food Object images use opaque image keys. One owner-supplied `512×512` lossless sRGB PNG handles an absent or unusable image. Tailwind declares `Inter, system-ui, sans-serif` for UI text and `Roboto Mono, ui-monospace, monospace` for data and labels. Matching the established mealswapp pattern, `@font-face` resolves system-local Inter across weights `100 900` and Roboto Mono across weights `100 700`; no font file is bundled.
 
-**Flow:** A Substitute response carries an optional image key. The browser resolves a known key to its bundled image. An absent, unknown, or failed image resolves to the placeholder. The browser loads fonts from its own origin.
+**Flow:** A Substitute response carries an optional image key. The browser resolves a known key to its bundled image. An absent, unknown, or failed image resolves to the placeholder. The browser uses an installed Inter or Roboto Mono family when available, otherwise its declared system fallback, and sends no runtime font request.
 
 ## ARCH-016 — Local Three-Process Deployment
 

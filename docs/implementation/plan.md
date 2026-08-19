@@ -202,7 +202,8 @@ Phase 3. Phase 5 does not depend on the Phase 4 implementation details.
 - Make the script use the optimized Vite preview, Fiber, and PostgreSQL stack.
 - Configure the same-origin `/api` proxy.
 - Use the colors, fonts, input style, and maximum width from `docs/requirements/style.md`.
-- Bundle Inter, Roboto Mono, and the image placeholder.
+- Use system-local Inter and Roboto Mono with system font fallbacks.
+- Bundle the image placeholder.
 - Render one primary content column.
 - Render only the empty-state Search control.
 - Do not add language selection, suggestions, or result cards.
