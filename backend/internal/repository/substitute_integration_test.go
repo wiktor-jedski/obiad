@@ -502,17 +502,15 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			pageIDs(spaceTie)[:2])
 	}
 
-	// Finite-boundary classification (ARCH-018, ISSUE-005): the ARCH-013
-	// schema accepts the largest finite double and the smallest positive
-	// subnormal as Macro Profile values, but the derived arithmetic over or
-	// under them — 4×DBL_MAX overflows to +Inf calories and an Inf/Inf cosine,
-	// and a subnormal vector norm underflows to a zero denominator and a
-	// nonfinite cosine. Run must classify every such schema-valid profile as
-	// the stable internal failure at the Module boundary instead of returning
-	// nonfinite page fields or ordering by NaN, after exactly one fresh
-	// SELECT and no retry. The fixtures are artificial boundary data owned by
-	// this isolated integration test, never the production seed (ISSUE-002,
-	// ARCH-018 quality constraints).
+	// Candidate-calorie overflow classification (ARCH-018, ISSUE-005): a
+	// schema-valid largest-finite candidate with protein = DBL_MAX has
+	// derived calories 4p + 4c + 9f = +Inf, yet against a small normal input
+	// its dot product and cosine stay finite (the candidate norm overflows to
+	// +Inf, so the cosine is a finite zero). Without the candidate-calorie
+	// check the Matched Quantity would divide finite input calories by +Inf
+	// and return a false successful zero quantity with zero scaled macros.
+	// Run must classify the pair as the stable INTERNAL_ERROR before ranking
+	// or page construction, after exactly one fresh SELECT and no retry.
 	runExpectInternalError := func(input SubstituteInput) {
 		t.Helper()
 		tracer.reset()
@@ -526,6 +524,21 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 		tracer.assertSingleSelect(t, wantSQL)
 	}
+	insertTieObject(90, "Small normal input", "Maly normalny produkt", 0.1, 0, 0)
+	insertTieObject(91, "Largest calories candidate", "Kandydat o najwiekszej kalorycznosci", math.MaxFloat64, 0, 0)
+	runExpectInternalError(SubstituteInput{FoodObjectID: 90, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+
+	// Finite-boundary classification (ARCH-018, ISSUE-005): the ARCH-013
+	// schema accepts the largest finite double and the smallest positive
+	// subnormal as Macro Profile values, but the derived arithmetic over or
+	// under them — 4×DBL_MAX overflows to +Inf calories and an Inf/Inf cosine,
+	// and a subnormal vector norm underflows to a zero denominator and a
+	// nonfinite cosine. Run must classify every such schema-valid profile as
+	// the stable internal failure at the Module boundary instead of returning
+	// nonfinite page fields or ordering by NaN, after exactly one fresh
+	// SELECT and no retry. The fixtures are artificial boundary data owned by
+	// this isolated integration test, never the production seed (ISSUE-002,
+	// ARCH-018 quality constraints).
 
 	// Smallest positive subnormal candidate: its squared norm underflows to a
 	// zero denominator, so its cosine against any normal input is not finite.

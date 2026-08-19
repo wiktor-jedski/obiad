@@ -179,8 +179,10 @@ type rankedSubstitute struct {
 // (REQ-032) and every other member of its Food Family (REQ-033) are
 // excluded. Similarities are the full-precision float64 values; no tolerance
 // is used as a tie or ranking threshold (ISSUE-005). A schema-valid extreme
-// Macro Profile whose cosine is not finite is reported as an error so a NaN
-// or infinite similarity can never enter the strict ordering.
+// Macro Profile whose cosine or derived calories are not finite is reported
+// as an error so a NaN or infinite similarity can never enter the strict
+// ordering and an infinite candidate calorie value can never reach the
+// Matched Quantity calculation.
 func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, objects []foodObject) ([]rankedSubstitute, error) {
 	collator := collate.New(language.English)
 	rankedList := make([]rankedSubstitute, 0, len(objects))
@@ -195,6 +197,9 @@ func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, 
 		similarity := cosineSimilarity(inputProfile, profile)
 		if !isFiniteDerived(similarity) {
 			return nil, fmt.Errorf("food object %d: Nutritional Similarity %v is not finite for the seeded Macro Profile", object.id, similarity)
+		}
+		if candidateCalories := calories(profile); !isFiniteDerived(candidateCalories) {
+			return nil, fmt.Errorf("food object %d: derived calories %v are not finite for the seeded Macro Profile", object.id, candidateCalories)
 		}
 		rankedList = append(rankedList, rankedSubstitute{
 			object:     object,
