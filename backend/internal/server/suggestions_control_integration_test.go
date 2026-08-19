@@ -475,7 +475,7 @@ func TestFoodSuggestionValidationHTTPIntegration(t *testing.T) {
 	nfc := getSuggestionsEnvelope(t, baseURL, "pierś z kurczaka", "pl")
 	nfd := getSuggestionsEnvelope(t, baseURL, "pier"+"s\u0301"+" z kurczaka", "pl")
 	assertSameOrder(t, nfd, nfc)
-	assertSuggestionItem(t, nfc.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.G)
+	assertSuggestionItem(t, nfc.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.FoodQuantityUnitG)
 }
 
 // TestFoodSuggestionFailuresHTTPIntegration verifies every suggestion-relevant

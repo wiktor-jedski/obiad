@@ -238,15 +238,15 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	// (REQ-007, REQ-024).
 	pizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "en")
 	assertOrderedIDs(t, pizza, 1, 2, 8, 12, 3)
-	assertSuggestionItem(t, pizza.Items[0], "Pizza Margherita", "Pizza margherita", 1, transport.Serving)
+	assertSuggestionItem(t, pizza.Items[0], "Pizza Margherita", "Pizza margherita", 1, transport.FoodQuantityUnitServing)
 
 	chicken := getSuggestionsEnvelope(t, baseURL, "chicken breast", "en")
 	assertOrderedIDs(t, chicken, 5, 23, 7, 36, 15)
-	assertSuggestionItem(t, chicken.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.G)
+	assertSuggestionItem(t, chicken.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.FoodQuantityUnitG)
 
 	milk := getSuggestionsEnvelope(t, baseURL, "milk", "en")
 	assertOrderedIDs(t, milk, 10, 14, 30, 13, 16)
-	assertSuggestionItem(t, milk.Items[0], "Milk", "Mleko", 100, transport.Ml)
+	assertSuggestionItem(t, milk.Items[0], "Milk", "Mleko", 100, transport.FoodQuantityUnitMl)
 
 	// P03-G6: normalization — letter-case and Unicode-whitespace variants of
 	// the same query produce identical ordered suggestions (REQ-014,
@@ -264,11 +264,11 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	// second rank shifts (23 versus 4).
 	zForm := getSuggestionsEnvelope(t, baseURL, "pierozki gyoza", "pl")
 	assertOrderedIDs(t, zForm, 13, 23, 4, 5, 25)
-	assertSuggestionItem(t, zForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.Serving)
+	assertSuggestionItem(t, zForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.FoodQuantityUnitServing)
 
 	accentedForm := getSuggestionsEnvelope(t, baseURL, "pierożki gyoza", "pl")
 	assertOrderedIDs(t, accentedForm, 13, 4, 23, 5, 25)
-	assertSuggestionItem(t, accentedForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.Serving)
+	assertSuggestionItem(t, accentedForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.FoodQuantityUnitServing)
 	if zForm.Items[1].FoodObjectId == accentedForm.Items[1].FoodObjectId {
 		t.Fatalf("the z-form and ż-form queries must rank differently: both put ID %d at rank 2", zForm.Items[1].FoodObjectId)
 	}
@@ -330,7 +330,7 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	// 39 before 40 in both languages.
 	dupEn := getSuggestionsEnvelope(t, baseURL, "sernik duplikat", "en")
 	assertOrderedIDs(t, dupEn, 39, 40, 34, 12, 37)
-	assertSuggestionItem(t, dupEn.Items[0], "Sernik duplikat", "Sernik duplikat", 100, transport.G)
+	assertSuggestionItem(t, dupEn.Items[0], "Sernik duplikat", "Sernik duplikat", 100, transport.FoodQuantityUnitG)
 
 	dupPl := getSuggestionsEnvelope(t, baseURL, "sernik duplikat", "pl")
 	assertOrderedIDs(t, dupPl, 39, 40, 36, 34, 23)
@@ -343,8 +343,8 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	// Language (REQ-017, ISSUE-004).
 	aEn := getSuggestionsEnvelope(t, baseURL, "a", "en")
 	assertOrderedIDs(t, aEn, 30, 42, 41, 13, 15)
-	assertSuggestionItem(t, aEn.Items[1], "żaba", "Żaba", 100, transport.G)
-	assertSuggestionItem(t, aEn.Items[2], "źle", "Źle", 100, transport.G)
+	assertSuggestionItem(t, aEn.Items[1], "żaba", "Żaba", 100, transport.FoodQuantityUnitG)
+	assertSuggestionItem(t, aEn.Items[2], "źle", "Źle", 100, transport.FoodQuantityUnitG)
 
 	aPl := getSuggestionsEnvelope(t, baseURL, "a", "pl")
 	assertOrderedIDs(t, aPl, 41, 42, 15, 18, 38)
