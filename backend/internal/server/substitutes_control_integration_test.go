@@ -15,19 +15,21 @@ package server
 // The validation test proves the ISSUE-005-resolved request-control
 // contract of POST /api/v1/substitutes/search: the accepted 4 KiB and
 // rejected 4 KiB-plus-one request-body boundaries (413 REQUEST_BODY_TOO_LARGE
-// without a field), enforced as a route-aware pre-read ingress cap — a raw
-// request declaring a 100,000-byte Content-Length or a 100,000-byte chunk
-// is rejected while the request is read, before the body is buffered, and
-// an unrelated route keeps its default body limit; the strict
-// content-type rule, the empty, malformed, trailing, unknown-key,
-// duplicate-key, missing, null, and wrong-typed structural failures
-// (400 INVALID_REQUEST with the exact field or omission), the semantic
-// quantity, unit, Serving, and range failures (the specific 422 stable
-// codes with their exact ISSUE-005 fields), and PAGE_OUT_OF_RANGE for every
-// nonzero page index. The failures test proves every applicable stable
-// server error — 400, 404, 413, 422, 503, 504, and 500 — with the exact
-// ISSUE-005 field or omission and no response leakage, in isolated real
-// database-outage, pool-blocking, deadline, and catalog-invariant
+// without a field), enforced as a route-aware pre-read ingress cap — raw
+// requests declaring a 100,000-byte Content-Length or a 100,000-byte chunk
+// are rejected while the request is read, before the body is buffered, for
+// both origin-form and absolute-form targets (including a query string and
+// an Expect: 100-continue preface), a malformed target fails closed without
+// admitting any body byte, and an unrelated route keeps its default body
+// limit; the strict content-type rule, the empty, malformed, trailing,
+// unknown-key, duplicate-key, missing, null, and wrong-typed structural
+// failures (400 INVALID_REQUEST with the exact field or omission), the
+// semantic quantity, unit, Serving, and range failures (the specific 422
+// stable codes with their exact ISSUE-005 fields), and PAGE_OUT_OF_RANGE for
+// every nonzero page index. The failures test proves every applicable
+// stable server error — 400, 404, 413, 422, 503, 504, and 500 — with the
+// exact ISSUE-005 field or omission and no response leakage, in isolated
+// real database-outage, pool-blocking, deadline, and catalog-invariant
 // scenarios, proves that the single 450 ms deadline reaches blocked pgx
 // work and cancels it, and proves no retry: one catalog query per request,
 // a maximum of four concurrent queries for a five-request pool-exhaustion
@@ -211,6 +213,69 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 		"\r\n" +
 		"186a0\r\n" // declares a 100,000-byte chunk; the payload is never sent
 	assertError(t, partialRawRequest(t, base.Host, chunkedHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Absolute-form request targets resolve to the same route path and must
+	// receive the same pre-read cap (task-20 repair, review finding F-2):
+	// "POST http://<host>/api/v1/substitutes/search" with a declared
+	// 100,000-byte Content-Length and no body bytes is rejected with the
+	// exact 413 while the request is read. A callback that compared the raw
+	// absolute-form target to the origin-form literal would instead return
+	// the server default, try to buffer the declared body, and block on the
+	// missing bytes until the read deadline — failing this test.
+	absoluteHead := "POST http://" + base.Host + "/api/v1/substitutes/search HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	assertError(t, partialRawRequest(t, base.Host, absoluteHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Absolute-form target with a query string: the path is compared after
+	// the query, so "?…" does not hide the substitute route from the cap. A
+	// chunked body whose first declared chunk (100,000 bytes) crosses the
+	// limit is rejected at the chunk-size line without reading the payload.
+	absoluteChunkedHead := "POST http://" + base.Host + "/api/v1/substitutes/search?query=1 HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Transfer-Encoding: chunked\r\n" +
+		"Connection: close\r\n" +
+		"\r\n" +
+		"186a0\r\n"
+	assertError(t, partialRawRequest(t, base.Host, absoluteChunkedHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Absolute-form target with Expect: 100-continue: fasthttp answers the
+	// 100 Continue preface and then rejects the declared 100,000-byte body
+	// with the exact 413 before reading any body byte — the client never
+	// sends the body. partialRawRequest parses the leading 100 Continue
+	// head, so its body is the raw 413 response.
+	expectHead := "POST http://" + base.Host + "/api/v1/substitutes/search HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Expect: 100-continue\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	expectResult := partialRawRequest(t, base.Host, expectHead)
+	if expectResult.status != http.StatusContinue {
+		t.Fatalf("Expect request status %d, want the 100 Continue preface (body %q)", expectResult.status, expectResult.body)
+	}
+	status, expectContentType, expectBody := parseRawResponse(t, []byte(expectResult.body))
+	assertError(t, httpResult{status: status, body: expectBody, contentType: expectContentType}, http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Malformed request targets must not weaken the limit: an absolute-form
+	// target whose authority is invalid (non-numeric port) cannot be parsed.
+	// The callback fails closed to the substitute cap, and fasthttp rejects
+	// the request (400 INVALID_REQUEST) after the headers and before reading
+	// any body byte, so the declared 100,000-byte body is never buffered — a
+	// server that admitted the body would block on the missing bytes and
+	// time out instead.
+	malformedHead := "POST http://127.0.0.1:notaport/api/v1/substitutes/search HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	assertError(t, partialRawRequest(t, base.Host, malformedHead), http.StatusBadRequest, "INVALID_REQUEST", "")
 
 	// The ingress cap is route-aware: an unrelated route keeps the
 	// server-wide default body limit. A POST to the suggestion route with a

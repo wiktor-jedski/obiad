@@ -108,10 +108,23 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 	// error path maps ErrBodyTooLarge to the Fiber 413 error, which the app
 	// error handler answers with the exact stable REQUEST_BODY_TOO_LARGE
 	// response and log record (errorHandler).
+	//
+	// The request target is parsed canonically with fasthttp's URI parser,
+	// so accepted origin-form ("/api/v1/substitutes/search?…") and
+	// absolute-form ("http://host/api/v1/substitutes/search?…") targets
+	// resolve to the same path, compared after the query. The comparison
+	// uses the same normalized path fasthttp later routes on, so a target
+	// that resolves to the substitute route always carries the cap and no
+	// other route loses its default. A target the parser rejects (a control
+	// byte, an invalid scheme, or an invalid authority) fails closed to the
+	// substitute cap: malformed targets must never weaken the limit, and
+	// fasthttp rejects them before reading any body byte anyway.
 	app.Server().HeaderReceived = func(h *fasthttp.RequestHeader) fasthttp.RequestConfig {
-		requestURI := h.RequestURI()
-		path, _, _ := bytes.Cut(requestURI, []byte{'?'})
-		if bytes.Equal(path, []byte("/api/v1/substitutes/search")) {
+		var target fasthttp.URI
+		if err := target.Parse(h.Host(), h.RequestURI()); err != nil {
+			return fasthttp.RequestConfig{MaxRequestBodySize: maxRequestBodyBytes}
+		}
+		if bytes.Equal(target.Path(), []byte("/api/v1/substitutes/search")) {
 			return fasthttp.RequestConfig{MaxRequestBodySize: maxRequestBodyBytes}
 		}
 		return fasthttp.RequestConfig{}
