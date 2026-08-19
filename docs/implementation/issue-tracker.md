@@ -114,3 +114,24 @@ Status: ready-for-agent
 
 - No Playwright or browser-integration test is planned because the phase explicitly excludes Svelte, Vite, the `/api` proxy, and suggestion interaction. The generated TypeScript client is compile-checked only; backend API tests collect evidence for REQ-002, REQ-012, REQ-013, REQ-023, and REQ-024 without marking them complete.
 - No permanent unit test is planned for normalization or Levenshtein internals. [ARCH-022](../architecture/architecture.md#arch-022--architecture-verification-mechanism) requires committed tests to exercise the real Catalog Loader, operation Module, and Fiber Adapter with disposable PostgreSQL and requires development-only unit tests to be removed.
+
+## ISSUE-005: Phase 4 Substitute API contract and verification decisions
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Comments
+
+- Resolved with the project owner on 2026-08-19. The POST accepts only `application/json` and uses strict canonical JSON. Every request and response object is closed. Runtime decoding rejects empty or malformed JSON, trailing JSON, unknown keys, and duplicate keys at every nesting level; OpenAPI uses `additionalProperties: false` wherever it can express the same rule.
+- The request has required positive `int32` `foodObjectId`, required `quantity` with `double` `value` and unit `g`, `ml`, or `serving`, and required nonnegative `int32` `pageIndex`. The generated shape does not attempt conditional base-unit integrality or Physical State compatibility; the Module enforces those semantic rules.
+- A successful response has nonnegative `int32` `pageIndex` and `totalEligibleCount`, Boolean `hasMore`, and zero to three items with unique Food Object IDs. Each item has positive `int32` `foodObjectId`, both localized names, optional nonempty `imageKey` omitted when absent and never `null`, `matchedQuantity` with whole nonnegative `int64` `value` and unit `g` or `ml`, `macronutrients` with nonnegative `double` `protein`, `carbohydrate`, and `fat`, and `int32` `similarityPercent` from 0 through 100.
+- The allowed `Error.field` values are `foodObjectId`, `quantity`, `quantity.value`, `quantity.unit`, and `pageIndex`. Empty, malformed, or trailing JSON, an unknown key, and a missing or non-JSON Content-Type return `400 INVALID_REQUEST` without `field`. A missing, duplicate, `null`, or wrong-typed known field returns `400 INVALID_REQUEST` with that field path. A nonpositive Food Object ID returns `400 INVALID_REQUEST` with `foodObjectId`; an absent positive ID returns `404 FOOD_OBJECT_NOT_FOUND` with `foodObjectId`.
+- A nonpositive or nonintegral direct base quantity returns `422 INVALID_QUANTITY` with `quantity.value`; an unsupported unit returns `422 INVALID_QUANTITY` with `quantity.unit`; a Physical State mismatch returns `422 QUANTITY_UNIT_MISMATCH` with `quantity.unit`; an unavailable Serving returns `422 SERVING_UNAVAILABLE` with `quantity.unit`; and a converted quantity over `100,000 g` or `100,000 ml` returns `422 QUANTITY_OUT_OF_RANGE` with `quantity.value`. A negative page returns `422 INVALID_PAGE_INDEX` with `pageIndex`.
+- Every `pageIndex > 0` returns `422 PAGE_OUT_OF_RANGE` with `pageIndex` until Phase 11 deliberately adds valid later-page behavior. A body over 4 KiB returns `413 REQUEST_BODY_TOO_LARGE` without `field`. `CATALOG_UNAVAILABLE`, `SEARCH_TIMEOUT`, and `INTERNAL_ERROR` never carry `field`.
+- Permanent cosine comparisons use absolute tolerance `abs(got - want) <= 1e-12`. This is a test comparison only; production ranking uses the full unrounded `float64` values and no tolerance-based tie.
+- Calculation verification uses one hybrid real-PostgreSQL integration test. It exercises the concrete `Run` interface for behavior, then passes Macro Profiles loaded through the real private Catalog Loader directly to the private production calorie, cosine, and Matched Quantity helpers for full-precision assertions. It adds no exported interface, fake Adapter, or test hook.
+
+### Testing coverage deviations
+
+- No Playwright check is planned here. The frontend remains the generated-client compile package; the plan validates REQ-025 at HTTP and defers its browser quantity-control evidence to Phase 10.
+- A successful zero-item runtime response is not exercised. ISSUE-003 records that zero eligible Substitutes are unreachable with the supported deterministic catalog and forbids a separate PostgreSQL fixture, production eligibility rule, or catalog-coverage exception. `P04-G4` therefore covers the generated zero-to-three schema and all reachable page-0 runtime outcomes, but omits the otherwise requested zero-result execution.
