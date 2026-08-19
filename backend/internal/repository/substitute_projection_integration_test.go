@@ -40,6 +40,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -135,7 +136,7 @@ type projectedDisplay struct {
 // displayOf projects one Matched Quantity and the protein scaled to it.
 func displayOf(mq, protein float64) projectedDisplay {
 	return projectedDisplay{
-		matchedQuantity: int64(roundHalfUp(mq)),
+		matchedQuantity: int64(math.Round(mq)),
 		protein:         projectMacronutrient(protein * mq / 100),
 	}
 }
@@ -178,36 +179,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		}
 	}
 
-	// Exact-half-up projection primitives (REQ-039, ARCH-018): the rounding
-	// used at every target precision — whole Matched Quantity, 0.1 g
-	// macronutrients, whole percentage — rounds exact nonnegative halves up
-	// and permits a positive value to display as zero. Exact halves at all
-	// three target precisions are proven through concrete page-0 Run
-	// fixtures (101, 103, and 108); these direct assertions additionally pin
-	// the primitive boundaries and the arbitrary 0.1 g halves that no
-	// top-ranked fixture can reach through Run, mirroring the task-16
-	// helper-assertion pattern.
-	if got := roundHalfUp(0.5); got != 1 {
-		t.Fatalf("roundHalfUp(0.5) = %v, want 1 (exact half rounds up)", got)
-	}
-	if got := roundHalfUp(1.5); got != 2 {
-		t.Fatalf("roundHalfUp(1.5) = %v, want 2 (exact half rounds up)", got)
-	}
-	if got := roundHalfUp(2.5); got != 3 {
-		t.Fatalf("roundHalfUp(2.5) = %v, want 3 (exact half rounds up)", got)
-	}
-	if got := roundHalfUp(0.49999999999999994); got != 0 {
-		t.Fatalf("roundHalfUp(0.49999999999999994) = %v, want 0 (a value just below the half rounds down)", got)
-	}
-	if got := roundHalfUp(0.4); got != 0 {
-		t.Fatalf("roundHalfUp(0.4) = %v, want 0 (a positive value can display as zero)", got)
-	}
-	if got := roundHalfUp(437.5); got != 438 {
-		t.Fatalf("roundHalfUp(437.5) = %v, want 438 (exact half rounds up)", got)
-	}
-	if got := roundHalfUp(437.49999999999994); got != 437 {
-		t.Fatalf("roundHalfUp(437.49999999999994) = %v, want 437 (a value just below the half rounds down)", got)
-	}
 	if got := projectMacronutrient(8.75); got != 8.8 {
 		t.Fatalf("projectMacronutrient(8.75) = %v, want 8.8 (exact half rounds up)", got)
 	}
@@ -374,9 +345,9 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		t.Fatalf("adversary full-precision display is %+v, want {437 g, 0.3 g}", fullDisplay)
 	}
 	naivePipelines := map[string]float64{
-		"input calories rounded to a whole": matchedQuantity(roundHalfUp(inputCal), candCal),
-		"candidate calories rounded to 0.1": matchedQuantity(inputCal, roundHalfUp(candCal*10)/10),
-		"Matched Quantity rounded to 0.1":   roundHalfUp(mqFull*10) / 10,
+		"input calories rounded to a whole": matchedQuantity(math.Round(inputCal), candCal),
+		"candidate calories rounded to 0.1": matchedQuantity(inputCal, math.Round(candCal*10)/10),
+		"Matched Quantity rounded to 0.1":   math.Round(mqFull*10) / 10,
 	}
 	for name, naiveMQ := range naivePipelines {
 		if naiveDisplay := displayOf(naiveMQ, adversary.protein); naiveDisplay == fullDisplay {

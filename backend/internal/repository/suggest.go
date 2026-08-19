@@ -154,7 +154,7 @@ func (s *Suggest) Run(ctx context.Context, rawQuery string, lang Language) ([]Su
 		return nil, &Error{
 			Code:  CodeUnsupportedLanguage,
 			Field: "language",
-			cause: fmt.Errorf("unsupported Interface Language %q", lang),
+			cause: errors.New("unsupported Interface Language"),
 		}
 	}
 	query, err := normalizeQuery(rawQuery)

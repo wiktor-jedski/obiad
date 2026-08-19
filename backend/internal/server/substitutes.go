@@ -66,7 +66,7 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 		// response, without a field, before any JSON processing (ARCH-008,
 		// ISSUE-005).
 		if len(c.Body()) > maxRequestBodyBytes {
-			return writeError(c, fiber.StatusRequestEntityTooLarge, transport.REQUESTBODYTOOLARGE, nil, errors.New("request body exceeds the 4 KiB limit"))
+			return writeError(c, fiber.StatusRequestEntityTooLarge, transport.REQUESTBODYTOOLARGE, nil, "request body exceeds the 4 KiB limit")
 		}
 
 		req, field, err := decodeSubstituteRequest(c)
@@ -76,7 +76,7 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			// without a field; a missing, duplicate, null, or wrong-typed
 			// known field returns 400 INVALID_REQUEST with its ISSUE-005
 			// field path.
-			return writeError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err)
+			return writeError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err.Error())
 		}
 
 		// ARCH-019: one 450 ms context bounds the whole substitute request —
@@ -94,9 +94,9 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			// deadline expiry is SEARCH_TIMEOUT; every other acquire failure
 			// means the catalog storage is unavailable (ISSUE-005).
 			if errors.Is(err, context.DeadlineExceeded) {
-				return writeError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err)
+				return writeError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err.Error())
 			}
-			return writeError(c, fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err)
+			return writeError(c, fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err.Error())
 		}
 		defer poolConn.Release()
 
@@ -104,7 +104,7 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil {
 			// The embedded catalog SELECT cannot be read: an unexpected
 			// internal failure, never a client error.
-			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err)
+			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error())
 		}
 
 		page, err := find.Run(ctx, repository.SubstituteInput{
@@ -116,7 +116,7 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 		}, req.PageIndex)
 		if err != nil {
 			status, code, field, logCause := substituteRunError(err)
-			return writeStableError(c, status, code, field, logCause)
+			return writeError(c, status, code, field, logCause)
 		}
 		return c.JSON(substituteResponse(page))
 	}

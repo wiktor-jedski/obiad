@@ -249,7 +249,7 @@ func assertNearEqual(t *testing.T, name string, got, want float64) {
 // literals by TestSubstituteProjectionIntegration.
 func assertProjectedItem(t *testing.T, item SubstituteItem, want wantCandidate) {
 	t.Helper()
-	wantMQ := int64(roundHalfUp(want.matchedQuantity))
+	wantMQ := int64(math.Round(want.matchedQuantity))
 	if item.MatchedQuantity.Value != wantMQ || item.MatchedQuantity.Unit != want.unit {
 		t.Fatalf("item %d: Matched Quantity is %+v, want value %d in unit %q (full precision %.17g)",
 			item.FoodObjectID, item.MatchedQuantity, wantMQ, want.unit, want.matchedQuantity)

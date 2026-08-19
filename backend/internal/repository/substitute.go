@@ -162,17 +162,6 @@ func matchedQuantity(inputCalories, candidateCaloriesPer100 float64) float64 {
 	return inputCalories * 100 / candidateCaloriesPer100
 }
 
-// roundHalfUp returns the nearest whole number to v, rounding exact
-// nonnegative halves up (REQ-039, ARCH-018): 0.5 becomes 1, 1.5 becomes 2,
-// and 0.49999999999999994 becomes 0. Every value it receives is
-// nonnegative — Matched Quantities, scaled macronutrients, and similarities
-// never go below zero — so math.Round's half-away-from-zero rule is exactly
-// half-up here. It is the single rounding primitive of the final display
-// projection.
-func roundHalfUp(v float64) float64 {
-	return math.Round(v)
-}
-
 // projectMatchedQuantity rounds the full-precision Matched Quantity to a
 // whole candidate base unit and attaches that unit — g for a solid
 // candidate, ml for a liquid candidate (ARCH-013 Nutrition Basis, REQ-038,
@@ -182,7 +171,7 @@ func roundHalfUp(v float64) float64 {
 // exceeds it is a Module failure, never a wrapped or overflowed display
 // value.
 func projectMatchedQuantity(mq float64, state physicalState) (MatchedQuantity, error) {
-	whole := roundHalfUp(mq)
+	whole := math.Round(mq)
 	if whole >= float64(math.MaxInt64) {
 		return MatchedQuantity{}, fmt.Errorf("whole Matched Quantity %v exceeds the int64 display range", mq)
 	}
@@ -199,7 +188,7 @@ func projectMatchedQuantity(mq float64, state physicalState) (MatchedQuantity, e
 // as zero. The rounding happens once, in this final projection, never
 // before the scaling.
 func projectMacronutrient(amount float64) float64 {
-	return roundHalfUp(amount*10) / 10
+	return math.Round(amount*10) / 10
 }
 
 // projectSimilarityPercent rounds 100 × the full-precision Nutritional
@@ -207,7 +196,7 @@ func projectMacronutrient(amount float64) float64 {
 // and 0.5049999999999999 becomes 50. The similarity itself stays unrounded
 // until this projection.
 func projectSimilarityPercent(similarity float64) int32 {
-	return int32(roundHalfUp(similarity * 100))
+	return int32(math.Round(similarity * 100))
 }
 
 // isFiniteDerived reports whether one derived calculation result is a finite
