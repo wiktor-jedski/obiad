@@ -277,6 +277,42 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 		"\r\n"
 	assertError(t, partialRawRequest(t, base.Host, malformedHead), http.StatusBadRequest, "INVALID_REQUEST", "")
 
+	// Encoded-slash parity: "/api/v1/substitutes%2Fsearch" is NOT the
+	// substitute route to Fiber — the router compares the raw undecoded
+	// path, so an encoded slash stays encoded and the path is unrelated.
+	// The pre-read cap must not over-apply: a 10,000-byte body (over 4 KiB,
+	// under the server default) is admitted and the request is answered
+	// 404, never 413.
+	encodedSlashBody := `{"foodObjectId":1,` + strings.Repeat("x", 10000) + `}`
+	status, encodedSlashRespBody, _ := postTo(t, baseURL, "/api/v1/substitutes%2Fsearch", jsonType, encodedSlashBody)
+	if status != http.StatusNotFound {
+		t.Fatalf("POST /api/v1/substitutes%%2Fsearch status %d, want 404 (encoded slash is unrelated to the route; the cap must not over-apply, body %q)", status, encodedSlashRespBody)
+	}
+
+	// Uppercase parity: Fiber routes case-insensitively by default
+	// (CaseSensitive false), so "/API/V1/SUBSTITUTES/SEARCH" reaches the
+	// substitute handler and must carry the pre-read cap: a raw request
+	// declaring a 100,000-byte body and sending none is rejected with the
+	// exact 413 promptly, before any body byte is read.
+	uppercaseHead := "POST /API/V1/SUBSTITUTES/SEARCH HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	assertError(t, partialRawRequest(t, base.Host, uppercaseHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
+	// Trailing-slash parity: Fiber trims trailing slashes (StrictRouting
+	// false), so "/api/v1/substitutes/search/" reaches the substitute
+	// handler and carries the pre-read cap.
+	trailingSlashHead := "POST /api/v1/substitutes/search/ HTTP/1.1\r\n" +
+		"Host: " + base.Host + "\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 100000\r\n" +
+		"Connection: close\r\n" +
+		"\r\n"
+	assertError(t, partialRawRequest(t, base.Host, trailingSlashHead), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
+
 	// The ingress cap is route-aware: an unrelated route keeps the
 	// server-wide default body limit. A POST to the suggestion route with a
 	// body far over 4 KiB is not rejected as 413; it reaches routing and is

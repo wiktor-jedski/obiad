@@ -112,25 +112,46 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 	// The request target is parsed canonically with fasthttp's URI parser,
 	// so accepted origin-form ("/api/v1/substitutes/search?…") and
 	// absolute-form ("http://host/api/v1/substitutes/search?…") targets
-	// resolve to the same path, compared after the query. The comparison
-	// uses the same normalized path fasthttp later routes on, so a target
-	// that resolves to the substitute route always carries the cap and no
-	// other route loses its default. A target the parser rejects (a control
-	// byte, an invalid scheme, or an invalid authority) fails closed to the
-	// substitute cap: malformed targets must never weaken the limit, and
-	// fasthttp rejects them before reading any body byte anyway.
+	// resolve to the same raw path. The cap then applies exactly when Fiber
+	// routes the request to the substitute handler, replicating the router's
+	// detection path for this composition's defaults (CaseSensitive false,
+	// StrictRouting false, UnescapePath false): the raw undecoded path
+	// (PathOriginal — an encoded slash stays encoded and is unrelated to
+	// the route), folded to ASCII lowercase, with trailing slashes trimmed.
+	// A target the parser rejects (a control byte, an invalid scheme, or an
+	// invalid authority) fails closed to the substitute cap: malformed
+	// targets must never weaken the limit, and fasthttp rejects them before
+	// reading any body byte anyway. If the composition ever changes those
+	// Fiber routing config flags, this matcher must follow.
 	app.Server().HeaderReceived = func(h *fasthttp.RequestHeader) fasthttp.RequestConfig {
 		var target fasthttp.URI
 		if err := target.Parse(h.Host(), h.RequestURI()); err != nil {
 			return fasthttp.RequestConfig{MaxRequestBodySize: maxRequestBodyBytes}
 		}
-		if bytes.Equal(target.Path(), []byte("/api/v1/substitutes/search")) {
+		detection := lowerASCIIPath(target.PathOriginal())
+		if len(detection) > 1 && detection[len(detection)-1] == '/' {
+			detection = bytes.TrimRight(detection, "/")
+		}
+		if bytes.Equal(detection, []byte("/api/v1/substitutes/search")) {
 			return fasthttp.RequestConfig{MaxRequestBodySize: maxRequestBodyBytes}
 		}
 		return fasthttp.RequestConfig{}
 	}
 
 	return app, pool, nil
+}
+
+// lowerASCIIPath maps every ASCII 'A'-'Z' byte of path to lowercase in
+// place and returns path. It mirrors the ASCII-only case fold Fiber v3
+// applies to request paths when CaseSensitive is false (the default):
+// non-ASCII bytes are unchanged, exactly as the router treats them.
+func lowerASCIIPath(path []byte) []byte {
+	for i, c := range path {
+		if c >= 'A' && c <= 'Z' {
+			path[i] = c | 0x20
+		}
+	}
+	return path
 }
 
 // healthHandler returns the unversioned GET /health handler (ARCH-009). It
