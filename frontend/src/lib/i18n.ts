@@ -38,6 +38,14 @@ export interface Messages {
   selectedFoodLabel: () => string;
   /** Localized unit label of one Serving in the read-only Substitution Input (task 28, ISSUE-008). */
   servingUnit: () => string;
+  /** Visible label of the protein macronutrient row on a result card (task 29, ISSUE-008). */
+  proteinLabel: () => string;
+  /** Visible label of the carbohydrate macronutrient row on a result card (task 29, ISSUE-008). */
+  carbohydratesLabel: () => string;
+  /** Visible label of the fat macronutrient row on a result card (task 29, ISSUE-008). */
+  fatLabel: () => string;
+  /** Visible label of the Macro similarity row on a result card (task 29, ISSUE-008). */
+  similarityLabel: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -48,6 +56,10 @@ const en = {
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
+  proteinLabel: () => "Protein",
+  carbohydratesLabel: () => "Carbohydrates",
+  fatLabel: () => "Fat",
+  similarityLabel: () => "Similarity",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -58,6 +70,10 @@ const pl = {
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",
+  proteinLabel: () => "Białko",
+  carbohydratesLabel: () => "Węglowodany",
+  fatLabel: () => "Tłuszcz",
+  similarityLabel: () => "Podobieństwo",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */
@@ -109,4 +125,28 @@ export function formatFoodQuantityValue(
       ? getDictionary(language).servingUnit()
       : quantity.unit;
   return `${quantity.value} ${unit}`;
+}
+
+/**
+ * Formats one display-ready macronutrient value for a result card (task 29;
+ * REQ-037, REQ-039, REQ-040, ISSUE-008): exactly one active-locale decimal
+ * place followed by the invariant `g` unit, for example `35.0 g` in English
+ * and `35,0 g` in Polish. The value arrives already rounded to `0.1 g` by
+ * the backend (ARCH-001, ARCH-005); the browser never recalculates or
+ * rerounds nutrition (REQ-040), it only applies the localized display
+ * formatting.
+ *
+ * @param value - the backend-rounded macronutrient value in grams
+ * @param language - the Interface Language captured by the search (ISSUE-008)
+ * @returns the formatted `value g` string with one localized decimal place
+ */
+export function formatMacronutrientValue(
+  value: number,
+  language: InterfaceLanguage,
+): string {
+  const locale = language === "en" ? "en" : "pl";
+  return `${value.toLocaleString(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} g`;
 }

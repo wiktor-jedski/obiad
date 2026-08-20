@@ -19,3 +19,26 @@
 import foodPlaceholderPng from "./food-placeholder.png";
 
 export const foodPlaceholderUrl: string = foodPlaceholderPng;
+
+/**
+ * The supported Food Object image-key map (task 29; ARCH-015, REQ-011,
+ * ISSUE-008). The POC map is deliberately empty: the four seeded opaque keys
+ * (`pizza-margherita`, `chicken-breast`, `milk`, and `gyoza`) remain
+ * unmapped catalog data, so an absent key, any seeded key, and every other
+ * unmapped key all resolve to the existing bundled placeholder. No new food
+ * artwork or external asset source is added (ISSUE-008).
+ */
+export const supportedFoodImageKeys: ReadonlyMap<string, string> = new Map();
+
+/**
+ * Resolves one opaque Food Object image key to its bundled image URL
+ * (ARCH-015 flow). The browser resolves a known key to its bundled image;
+ * an absent, unknown, or failed image resolves to the placeholder. With the
+ * empty supported map, every key resolves to the placeholder.
+ *
+ * @param imageKey - the optional opaque image key from the Substitute item
+ * @returns the same-origin bundled image URL for the card
+ */
+export function resolveFoodImage(imageKey: string | undefined): string {
+  return supportedFoodImageKeys.get(imageKey ?? "") ?? foodPlaceholderUrl;
+}
