@@ -1,0 +1,12 @@
+# Component integration test configuration (task 25; ISSUE-007).
+#
+# `bun test` runs only the component integration tests under `src/` with the
+# pinned happy-dom and @testing-library/svelte packages. The preload runs
+# before every test file: it registers the happy-dom browser globals, the
+# svelte client-build redirect, and the Bun plugin that compiles `.svelte`
+# components through svelte/compiler (see src/lib/test-setup.ts). The
+# Playwright specs under `e2e/` belong to `bun run test:e2e` and are outside
+# the test root.
+[test]
+preload = ["./src/lib/test-setup.ts"]
+root = "./src"
