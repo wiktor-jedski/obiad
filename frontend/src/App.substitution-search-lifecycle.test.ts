@@ -25,7 +25,7 @@
  * is touched (ISSUE-007, ISSUE-008).
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import App from "./App.svelte";
@@ -81,6 +81,15 @@ async function settle(): Promise<void> {
 }
 
 describe("the Substitution Search lifecycle", () => {
+  beforeEach(() => {
+    // Bun's test runner reuses worker processes across files, so the shared
+    // single application interaction-state store may carry a selection from
+    // another scenario. Resetting it makes this scenario order-independent
+    // (task 30 adds the reset action; the result-state scenario resets the
+    // same store in its own beforeEach).
+    interactionState.reset();
+  });
+
   afterEach(() => {
     cleanup();
   });

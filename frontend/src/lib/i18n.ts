@@ -46,6 +46,8 @@ export interface Messages {
   fatLabel: () => string;
   /** Visible label of the Macro similarity row on a result card (task 29, ISSUE-008). */
   similarityLabel: () => string;
+  /** Localized result-area message for a successful empty page (task 30, REQ-044, ISSUE-008). */
+  zeroResultsMessage: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -60,6 +62,7 @@ const en = {
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
   similarityLabel: () => "Similarity",
+  zeroResultsMessage: () => "No substitutes found",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -74,6 +77,7 @@ const pl = {
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
   similarityLabel: () => "Podobieństwo",
+  zeroResultsMessage: () => "Nie znaleziono zamienników",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */
