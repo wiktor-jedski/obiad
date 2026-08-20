@@ -10,6 +10,7 @@
     suggestionOptionId,
   } from "../suggestions";
   import { createSubstitutionSearchQuery } from "../substitutionSearch";
+  import ResultCard from "./ResultCard.svelte";
   import SelectedInput from "./SelectedInput.svelte";
   import SuggestionList from "./SuggestionList.svelte";
   import type { FoodSuggestion } from "../../client/types.gen";
@@ -51,7 +52,10 @@
    * `loadingNew`, `results`, and `zeroResults` transitions; TanStack Query
    * continues to own response data and pending state, and the new-search
    * spinner shows `12px` below the Search field for the complete pending
-   * interval (REQ-046), after which Search keeps focus (REQ-064). No Food
+   * interval (REQ-046), after which Search keeps focus (REQ-064). Task 29
+   * adds the result-card region: a successful three-item page renders
+   * exactly the three result cards below the read-only Substitution Input,
+   * stacked in one column (REQ-036, REQ-037). No Food
    * Quantity edit, MORE!, failure state, motion, or active-content
    * language-change behavior belongs to this task.
    */
@@ -212,5 +216,22 @@
   {/if}
   {#if state.name !== "empty"}
     <SelectedInput selected={state.selected} />
+  {/if}
+  {#if state.name === "results" && substitutionSearch.data !== undefined}
+    <!--
+      Result-card region (task 29; ARCH-001, ARCH-020, ARCH-022, REQ-036,
+      REQ-037): the successful page-0 response renders exactly its
+      zero-to-three display-ready Substitutes as one card per item, stacked
+      in one column in ranked order. Each card consumes one generated
+      `SubstituteItem` and the Interface Language captured by the search
+      (ISSUE-008); TanStack Query continues to own the response data and the
+      store receives only the outcome (ARCH-002). The final result-state
+      geometry belongs to task 30.
+    -->
+    <div class="mt-3 flex flex-col gap-3">
+      {#each substitutionSearch.data.items as item (item.foodObjectId)}
+        <ResultCard {item} language={state.selected.capturedLanguage} />
+      {/each}
+    </div>
   {/if}
 </div>
