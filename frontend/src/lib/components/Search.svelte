@@ -22,10 +22,10 @@
   const dictionary = $derived(getDictionary($interfaceLanguage));
 </script>
 
-<label for="food-search" class="sr-only">{dictionary.searchLabel}</label>
+<label for="food-search" class="sr-only">{dictionary.searchLabel()}</label>
 <input
   id="food-search"
   type="search"
-  placeholder={dictionary.searchPlaceholder}
+  placeholder={dictionary.searchPlaceholder()}
   class="mx-auto block h-14 w-full max-w-[640px] appearance-none rounded-full border border-solid border-dark-secondary bg-dark-surface pl-[calc(1.75rem+0.5em)] pr-4 text-base text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-webkit-search-results-button]:hidden [&::-webkit-search-results-decoration]:hidden"
 />

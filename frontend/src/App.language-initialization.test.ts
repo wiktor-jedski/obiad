@@ -24,6 +24,7 @@ import {
   createInterfaceLanguageStore,
   interfaceLanguage,
 } from "./lib/interfaceLanguage";
+import { getDictionary } from "./lib/i18n";
 import type { InterfaceLanguageEnvironment } from "./lib/interfaceLanguage";
 
 /** The exact ISSUE-007 copy of the two supported dictionaries. */
@@ -64,6 +65,15 @@ describe("the persisted Interface Language store", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  test("the static dictionaries expose the exact copy through message functions", () => {
+    expect(getDictionary("en").searchLabel()).toBe("Search");
+    expect(getDictionary("en").searchPlaceholder()).toBe("Search foods");
+    expect(getDictionary("en").interfaceLanguage()).toBe("Interface language");
+    expect(getDictionary("pl").searchLabel()).toBe("Szukaj");
+    expect(getDictionary("pl").searchPlaceholder()).toBe("Szukaj potraw");
+    expect(getDictionary("pl").interfaceLanguage()).toBe("Język interfejsu");
   });
 
   test("the root application and the Search component render the exact English copy", async () => {

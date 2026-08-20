@@ -5,10 +5,10 @@
  * Interface Language slice: the closed `en`/`pl` language type, the exact
  * shape every dictionary must satisfy, and the static English and Polish
  * dictionaries that expose every currently rendered interface and
- * accessibility message (ISSUE-006, ISSUE-007). Components consume the
- * dictionary of the active Interface Language through {@link getDictionary};
- * the persisted active language itself lives in `interfaceLanguage.ts`
- * (ARCH-012, ARCH-014).
+ * accessibility message through zero-argument message functions (ISSUE-006,
+ * ISSUE-007). Components consume the dictionary of the active Interface
+ * Language through {@link getDictionary}; the persisted active language
+ * itself lives in `interfaceLanguage.ts` (ARCH-012, ARCH-014).
  */
 
 /**
@@ -19,32 +19,34 @@
 export type InterfaceLanguage = "en" | "pl";
 
 /**
- * The exact shape every static dictionary satisfies (ARCH-003). Each
- * dictionary is checked against this shape at compile time, so a message
- * added to one language without the other fails to compile.
+ * The exact shape every static dictionary satisfies (ARCH-003). Each message
+ * is a zero-argument function; the dictionaries are checked against this
+ * shape at compile time (`satisfies Messages`), so a message added to one
+ * language without the other — or with a different return type — fails to
+ * compile.
  */
 export interface Messages {
   /** Visually hidden accessible label of the empty-state Search control. */
-  searchLabel: string;
+  searchLabel: () => string;
   /** Placeholder of the empty-state Search control. */
-  searchPlaceholder: string;
+  searchPlaceholder: () => string;
   /** Accessible name of the Interface Language control group (task 26). */
-  interfaceLanguage: string;
+  interfaceLanguage: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
-const en: Messages = {
-  searchLabel: "Search",
-  searchPlaceholder: "Search foods",
-  interfaceLanguage: "Interface language",
-};
+const en = {
+  searchLabel: () => "Search",
+  searchPlaceholder: () => "Search foods",
+  interfaceLanguage: () => "Interface language",
+} satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
-const pl: Messages = {
-  searchLabel: "Szukaj",
-  searchPlaceholder: "Szukaj potraw",
-  interfaceLanguage: "Język interfejsu",
-};
+const pl = {
+  searchLabel: () => "Szukaj",
+  searchPlaceholder: () => "Szukaj potraw",
+  interfaceLanguage: () => "Język interfejsu",
+} satisfies Messages;
 
 /** Shape-checked static dictionaries keyed by Interface Language. */
 const dictionaries: Record<InterfaceLanguage, Messages> = { en, pl };
@@ -53,7 +55,8 @@ const dictionaries: Record<InterfaceLanguage, Messages> = { en, pl };
  * Returns the static dictionary for the active Interface Language.
  *
  * @param language - the active Interface Language
- * @returns the shape-checked dictionary carrying the localized messages
+ * @returns the shape-checked dictionary carrying the localized message
+ *   functions
  */
 export function getDictionary(language: InterfaceLanguage): Messages {
   return dictionaries[language];
