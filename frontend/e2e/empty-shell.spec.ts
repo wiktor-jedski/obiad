@@ -18,8 +18,8 @@ import { dirname } from "node:path";
  *     `Search foods` placeholder, no icon, no autofocus);
  *   - exactly one semantic primary content column and one Search control,
  *     with no excluded Phase 7 (suggestion list, selected input, result
- *     cards) region, the Phase 6 Interface Language control limited to its
- *     two PL/EN buttons (task 26), and no application API request;
+ *     cards) region, the Phase 6 Interface Language dropdown, and no
+ *     application API request;
  *   - the centered maximum-`1280px` column cap, the responsive page gutters
  *     (`16px` below `640px`, `24px` from `640px` through `1023px`, `32px`
  *     from `1024px`), the pill-shaped field, the Surface/Secondary/Text-Primary
@@ -101,16 +101,17 @@ async function assertEmptyShell(
   await expect(input).toHaveAttribute("type", "search");
 
   // No excluded Phase 7 region: no suggestion list, selected input, result
-  // card, or result-state control. The Phase 6 Interface Language control
-  // (task 26) is present as its two PL/EN buttons; the other excluded
-  // surfaces stay absent.
-  await expect(page.locator("button")).toHaveCount(2);
-  await expect(page.locator("select")).toHaveCount(0);
+  // card, or result-state control. The Phase 6 native language dropdown is
+  // the only additional form control.
+  await expect(page.locator("button")).toHaveCount(0);
+  const languageSelect = page.getByRole("combobox", {
+    name: "Interface language",
+  });
+  await expect(languageSelect).toHaveCount(1);
+  await expect(languageSelect.locator("option")).toHaveCount(2);
   await expect(page.locator("a")).toHaveCount(0);
   await expect(page.locator('img, svg, [role="img"]')).toHaveCount(0);
-  await expect(
-    page.locator('[role="combobox"], [role="listbox"], [role="option"]'),
-  ).toHaveCount(0);
+  await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   await expect(page.locator("ul, ol")).toHaveCount(0);
   await expect(main).toContainText("Search");
 

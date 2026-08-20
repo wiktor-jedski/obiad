@@ -21,9 +21,8 @@ import { expect, test, type Page } from "@playwright/test";
  * scenario also proves the first rendered Search label and placeholder use
  * the resolved dictionary, that browser-derived initialization performs no
  * storage write, and that startup performs no application API request
- * (P06-G3). Task 26 added the Interface Language control, so every scenario
- * also asserts the localized named group with the two buttons in fixed
- * PL-then-EN order and the correct `aria-pressed` active state.
+ * (P06-G3). The Interface Language control is one localized native dropdown
+ * with fixed PL-then-EN options and the resolved active value.
  */
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -73,10 +72,8 @@ async function useStoredLanguage(page: Page, value: string): Promise<void> {
 
 /**
  * Loads the application and asserts the resolved dictionary on the first
- * rendered Search label and placeholder, the localized named Interface
- * Language group with its two buttons in fixed PL-then-EN order and the
- * correct `aria-pressed` active state (task 26), and the startup network
- * contract: no application API request, every request on the preview origin.
+ * rendered Search copy and the localized native language dropdown, plus the
+ * startup network contract.
  */
 async function assertInitialCopy(
   page: Page,
@@ -98,22 +95,18 @@ async function assertInitialCopy(
   await expect(label).toHaveText(expected.label);
   await expect(input).toHaveAccessibleName(expected.label);
 
-  // The localized named group contains the two real buttons in fixed
-  // PL-then-EN order, with the active language pressed (task 26, ISSUE-007).
-  const group = page.getByRole("group");
-  await expect(group).toHaveAttribute("aria-label", expected.group);
-  const buttons = page.locator("button");
-  await expect(buttons).toHaveCount(2);
-  await expect(buttons.nth(0)).toHaveText("PL");
-  await expect(buttons.nth(1)).toHaveText("EN");
-  await expect(buttons.nth(0)).toHaveAttribute(
-    "aria-pressed",
-    language === "pl" ? "true" : "false",
-  );
-  await expect(buttons.nth(1)).toHaveAttribute(
-    "aria-pressed",
-    language === "en" ? "true" : "false",
-  );
+  // The borderless native dropdown exposes the localized accessible name,
+  // fixed PL-then-EN options, and resolved active value.
+  const languageSelect = page.getByRole("combobox", {
+    name: expected.group,
+  });
+  await expect(languageSelect).toHaveValue(language);
+  const options = languageSelect.locator("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.nth(0)).toHaveText("PL");
+  await expect(options.nth(0)).toHaveAttribute("value", "pl");
+  await expect(options.nth(1)).toHaveText("EN");
+  await expect(options.nth(1)).toHaveAttribute("value", "en");
 
   // Startup performs no application API request; every request stays on the
   // preview origin (ARCH-016, P06-G3).
