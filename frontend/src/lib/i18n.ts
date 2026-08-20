@@ -10,7 +10,7 @@
  * Language through {@link getDictionary}; the persisted active language
  * itself lives in `interfaceLanguage.ts` (ARCH-012, ARCH-014).
  */
-import type { GetFoodSuggestionsData } from "../client/types.gen";
+import type { FoodQuantity, GetFoodSuggestionsData } from "../client/types.gen";
 
 /**
  * The closed set of supported Interface Languages from the authoritative
@@ -34,6 +34,10 @@ export interface Messages {
   interfaceLanguage: () => string;
   /** Accessible name of the suggestion listbox (task 27, REQ-018). */
   suggestionsListLabel: () => string;
+  /** Visible label of the read-only Substitution Input (task 28, ISSUE-008). */
+  selectedFoodLabel: () => string;
+  /** Localized unit label of one Serving in the read-only Substitution Input (task 28, ISSUE-008). */
+  servingUnit: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -42,6 +46,8 @@ const en = {
   searchPlaceholder: () => "Search foods",
   interfaceLanguage: () => "Interface language",
   suggestionsListLabel: () => "Suggestions",
+  selectedFoodLabel: () => "Selected food",
+  servingUnit: () => "serving",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -50,6 +56,8 @@ const pl = {
   searchPlaceholder: () => "Szukaj potraw",
   interfaceLanguage: () => "Język interfejsu",
   suggestionsListLabel: () => "Podpowiedzi",
+  selectedFoodLabel: () => "Wybrany produkt",
+  servingUnit: () => "porcja",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */
@@ -79,4 +87,26 @@ export function isInterfaceLanguage(value: string): value is InterfaceLanguage {
  */
 export function getDictionary(language: InterfaceLanguage): Messages {
   return dictionaries[language];
+}
+
+/**
+ * Formats one captured Food Quantity as the read-only Substitution Input
+ * value (task 28, ISSUE-008). Serving renders with the localized unit of
+ * the given language (`1 serving` or `1 porcja`); `g` and `ml` stay
+ * invariant. The caller passes the Interface Language captured at selection
+ * so the value never re-translates with the active Interface Language.
+ *
+ * @param quantity - the captured default Food Quantity
+ * @param language - the Interface Language captured at selection
+ * @returns the formatted `value unit` string
+ */
+export function formatFoodQuantityValue(
+  quantity: FoodQuantity,
+  language: InterfaceLanguage,
+): string {
+  const unit =
+    quantity.unit === "serving"
+      ? getDictionary(language).servingUnit()
+      : quantity.unit;
+  return `${quantity.value} ${unit}`;
 }
