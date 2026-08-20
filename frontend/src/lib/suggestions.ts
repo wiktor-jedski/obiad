@@ -32,6 +32,16 @@ import type { InterfaceLanguage } from "./i18n";
 export const SUGGESTIONS_LISTBOX_ID = "food-suggestions-listbox";
 
 /**
+ * The query-key prefix of every suggestion query. The full key adds the
+ * active Interface Language and the Search Query text, so each request is
+ * keyed by the Search Query and the active Interface Language (ARCH-019).
+ * The prefix also lets the Search control remove every inactive suggestion
+ * query when the field loses focus, so a later identical intent starts a
+ * real backend request instead of reusing a successful response.
+ */
+export const SUGGESTIONS_QUERY_KEY_PREFIX = ["food-suggestions"] as const;
+
+/**
  * Returns the stable DOM `id` of one suggestion option (ARCH-020,
  * REQ-018). The id is derived from the stable Food Object ID, so it stays
  * identical across renders, languages, and query changes, and the Search
@@ -68,7 +78,11 @@ export interface SuggestionsQueryInput {
  */
 export function createSuggestionsQuery(input: SuggestionsQueryInput) {
   return createQuery(() => ({
-    queryKey: ["food-suggestions", input.language(), input.query()] as const,
+    queryKey: [
+      ...SUGGESTIONS_QUERY_KEY_PREFIX,
+      input.language(),
+      input.query(),
+    ] as const,
     queryFn: ({ signal }) =>
       fetchSuggestions({
         query: input.query(),

@@ -2,8 +2,10 @@
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
+  import { queryClient } from "../queryClient";
   import {
     SUGGESTIONS_LISTBOX_ID,
+    SUGGESTIONS_QUERY_KEY_PREFIX,
     createSuggestionsQuery,
     suggestionOptionId,
   } from "../suggestions";
@@ -70,12 +72,35 @@
     focused && query.length > 0 && suggestionItems !== undefined,
   );
 
-  /** The stable id of the first (active) option for `aria-activedescendant`. */
+  /**
+   * The stable id of the first (active) option for `aria-activedescendant`.
+   * It exists only for a current open list: whenever the list is closed or
+   * the field loses focus, the attribute is absent, so it can never point to
+   * a removed option (ARCH-020, REQ-018).
+   */
   const activeOptionId = $derived(
-    suggestionItems !== undefined
+    open && suggestionItems !== undefined
       ? suggestionOptionId(suggestionItems[0].foodObjectId)
       : undefined,
   );
+
+  /**
+   * Fresh-visible-query boundary (ARCH-019): when the Search field loses
+   * focus the suggestion query becomes inactive, and because the disabled
+   * observer stays mounted, `gcTime: 0` alone does not evict it. Removing
+   * every inactive suggestion query on blur guarantees that a later
+   * identical intent — refocusing with the same Search Query text — starts
+   * a real backend request and never reuses a successful response. The
+   * panel stays closed until that fresh request returns, so a reused
+   * response can never be visible.
+   */
+  $effect(() => {
+    if (!focused) {
+      queryClient.removeQueries({
+        queryKey: SUGGESTIONS_QUERY_KEY_PREFIX,
+      });
+    }
+  });
 
   /** Applies typed Search Query text to the interaction state. */
   function onInput(event: Event): void {

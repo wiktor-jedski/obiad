@@ -147,6 +147,7 @@ test.describe("Interface Language selection", () => {
     // because the Search field is not focused.
     await languageSelect.focus();
     await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(searchInput).not.toHaveAttribute("aria-activedescendant");
     await languageSelect.selectOption("pl");
 
     await expect(searchInput).toHaveValue("abc");

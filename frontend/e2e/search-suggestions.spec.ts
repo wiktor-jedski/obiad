@@ -24,7 +24,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
-const STORAGE_KEY = "obiad.interfaceLanguage";
 
 const FIELD_HEIGHT_PX = 56;
 const FIELD_MAX_WIDTH_PX = 640;
@@ -118,16 +117,6 @@ async function useBrowserLanguages(
       get: () => tags,
     });
   }, languages);
-}
-
-/** Seeds the persisted Interface Language before the application scripts run. */
-async function useStoredLanguage(page: Page, value: string): Promise<void> {
-  await page.addInitScript(
-    ([key, stored]) => {
-      window.localStorage.setItem(key, stored);
-    },
-    [STORAGE_KEY, value] as const,
-  );
 }
 
 /**
@@ -258,10 +247,13 @@ test.describe("live Food Object suggestions", () => {
     await search.fill("zzzzzz");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.zzzzzz, COPY.en);
 
-    // The list closes when the field loses focus and the text remains.
+    // The list closes when the field loses focus and the text remains; the
+    // active-descendant must be absent for the closed list (ARCH-020).
     await search.blur();
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(search).toHaveValue("zzzzzz");
+    await expect(search).not.toHaveAttribute("aria-activedescendant");
+    await expect(search).toHaveAttribute("aria-expanded", "false");
 
     // P07-G20, REQ-002: every food-data request stays on the Vite origin
     // under `/api`; none reaches Fiber or a third-party host.
@@ -295,6 +287,75 @@ test.describe("live Food Object suggestions", () => {
 
     await search.fill("zzzzzz");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.zzzzzz, COPY.pl);
+  });
+
+  test("refocusing with the same Search Query starts a fresh request and never reuses the earlier response", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    const suggestionRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/v1/food-suggestions")) {
+        suggestionRequestUrls.push(request.url());
+      }
+    });
+
+    // Hold only the second "chicken" request — the refocus intent — so the
+    // scenario can prove the panel stays closed until that fresh response
+    // returns (ARCH-019: no successful-response reuse; each intent starts a
+    // real backend request).
+    let chickenCount = 0;
+    let releaseSecond: () => void = () => {};
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    await page.route("**/api/v1/food-suggestions*", async (route) => {
+      const queryParam = new URL(route.request().url()).searchParams.get(
+        "query",
+      );
+      if (queryParam === "chicken") {
+        chickenCount += 1;
+        if (chickenCount === 2) {
+          await secondGate;
+        }
+      }
+      await route.continue();
+    });
+
+    await page.goto("/");
+    const search = page.getByRole("combobox", { name: COPY.en.search });
+    const panel = page.getByRole("listbox", { name: COPY.en.listbox });
+
+    // First intent: focus and type a normal Search Query, then see the five
+    // seeded suggestions from the real stack.
+    await search.fill("chicken");
+    await expect(panel).toBeVisible();
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
+
+    // Blur closes the list and removes the inactive suggestion query.
+    await search.blur();
+    await expect(panel).toHaveCount(0);
+    await expect(search).not.toHaveAttribute("aria-activedescendant");
+
+    // Second intent: refocus with the same text. The fresh request is held,
+    // so the earlier response must never appear: the panel stays closed
+    // until the new request returns.
+    await search.focus();
+    await expect(panel).toHaveCount(0);
+    await page.waitForTimeout(300);
+    await expect(panel).toHaveCount(0);
+    await expect(search).not.toHaveAttribute("aria-activedescendant");
+
+    // Releasing the held response shows only the fresh intent's list.
+    releaseSecond();
+    await expect(panel).toBeVisible();
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
+
+    // Exactly one request per intent — the refocus never reused the first
+    // successful response (ARCH-019).
+    expect(
+      suggestionRequestUrls.filter((url) => url.includes("query=chicken")),
+    ).toHaveLength(2);
   });
 
   test("a superseded suggestion request is aborted and its delayed response cannot change the latest list", async ({
