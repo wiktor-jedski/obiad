@@ -139,6 +139,15 @@ export interface InteractionStateStore extends Readable<InteractionState> {
    * only the outcome.
    */
   applySearchResult: (hasItems: boolean) => void;
+  /**
+   * Restores the initial empty state: no Search Query, no focus intent, and
+   * no selection. Production components reach the empty state only through
+   * the transition actions; this action exists so tests can establish a
+   * deterministic start with the single application store before a scenario
+   * drives it (task 30), mirroring the persisted Interface Language store
+   * reset in the component integration suite.
+   */
+  reset: () => void;
 }
 
 /**
@@ -185,6 +194,9 @@ export function createInteractionState(): InteractionStateStore {
           selected: state.selected,
         };
       });
+    },
+    reset() {
+      update(() => ({ name: "empty", query: "", focused: false }));
     },
   };
 }

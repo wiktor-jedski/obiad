@@ -16,8 +16,9 @@
    * value is computed from the name and Interface Language captured at
    * selection, so switching the Interface Language never re-translates this
    * captured active-content value (ISSUE-008). There is no Food Quantity
-   * edit; Phase 10 owns quantity editing. The final region layout belongs
-   * to task 30.
+   * edit; Phase 10 owns quantity editing. Task 30 composes this region in
+   * the root application: the root owns the `24px` vertical gap after the
+   * Search region, so the region root carries no top margin.
    */
 
   interface Props {
@@ -42,7 +43,7 @@
   );
 </script>
 
-<div data-selected-input class="mt-3 flex flex-col gap-1">
+<div data-selected-input class="flex flex-col gap-1">
   <span class="font-data text-sm font-medium text-dark-text-muted"
     >{dictionary.selectedFoodLabel()}</span
   >

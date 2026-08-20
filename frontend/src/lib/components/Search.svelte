@@ -9,9 +9,6 @@
     createSuggestionsQuery,
     suggestionOptionId,
   } from "../suggestions";
-  import { createSubstitutionSearchQuery } from "../substitutionSearch";
-  import ResultCard from "./ResultCard.svelte";
-  import SelectedInput from "./SelectedInput.svelte";
   import SuggestionList from "./SuggestionList.svelte";
   import type { FoodSuggestion } from "../../client/types.gen";
 
@@ -21,7 +18,12 @@
    * task 27, task 28; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010,
    * ARCH-011, ARCH-012, ARCH-019, ARCH-020, REQ-012, REQ-013, REQ-018,
    * REQ-020, REQ-022, REQ-023, REQ-024, REQ-046, REQ-060, REQ-064,
-   * ISSUE-006, ISSUE-007, ISSUE-008).
+   * ISSUE-006, ISSUE-007, ISSUE-008). Task 30 keeps this component as the
+   * stable Search region of the root composition: the input, the suggestion
+   * panel, and the new-search spinner. The read-only Substitution Input,
+   * the result-card region, and the zero-result message live in the root
+   * application (App.svelte), which owns the result-state geometry: the
+   * Search field's `96px` top edge and the `24px` region intervals.
    *
    * The control renders an `<input type="search">` with a visually hidden
    * label and the placeholder from the active Interface Language
@@ -45,18 +47,18 @@
    * or tap on any option selects that exact returned Food Object without
    * moving focus from Search, closes the suggestion list, retains the
    * selected localized names and returned default Food Quantity as the
-   * read-only Substitution Input, and starts exactly one generated-client
+   * starts exactly one generated-client
    * `POST /api/v1/substitutes/search` operation with that `foodObjectId`,
    * the unchanged default quantity, and `pageIndex: 0` (REQ-020, REQ-022,
    * REQ-023, REQ-024). The interaction-state union gains only the required
    * `loadingNew`, `results`, and `zeroResults` transitions; TanStack Query
    * continues to own response data and pending state, and the new-search
    * spinner shows `12px` below the Search field for the complete pending
-   * interval (REQ-046), after which Search keeps focus (REQ-064). Task 29
-   * adds the result-card region: a successful three-item page renders
-   * exactly the three result cards below the read-only Substitution Input,
-   * stacked in one column (REQ-036, REQ-037). No Food
-   * Quantity edit, MORE!, failure state, motion, or active-content
+   * interval (REQ-046), after which Search keeps focus (REQ-064). The
+   * page-0 query itself and the `loadingNew` → `results`/`zeroResults`
+   * transition effect moved to the root composition with task 30, which
+   * also renders the selected-input, result-card, and zero-result regions.
+   * No Food Quantity edit, MORE!, failure state, motion, or active-content
    * language-change behavior belongs to this task.
    */
 
@@ -114,24 +116,6 @@
   );
 
   /**
-   * The selected Food Object captured by the latest selection, or undefined
-   * while the interaction state is still empty (task 28).
-   */
-  const selected = $derived(
-    state.name === "empty" ? undefined : state.selected,
-  );
-
-  /**
-   * The TanStack Query owning the page-0 Substitution Search (ARCH-011,
-   * ARCH-019). It is disabled until a selection exists, so mounting the
-   * application performs no request and no duplicate intent, queue,
-   * automatic retry, or second submit action can start an extra request.
-   */
-  const substitutionSearch = createSubstitutionSearchQuery({
-    selected: () => selected,
-  });
-
-  /**
    * Fresh-visible-query boundary (ARCH-019): when the Search field loses
    * focus the suggestion query becomes inactive, and because the disabled
    * observer stays mounted, `gcTime: 0` alone does not evict it. Removing
@@ -146,21 +130,6 @@
       queryClient.removeQueries({
         queryKey: SUGGESTIONS_QUERY_KEY_PREFIX,
       });
-    }
-  });
-
-  /**
-   * Result transition (task 28, ARCH-002): the first page-0 response data
-   * arriving while the state is `loadingNew` transitions the union to
-   * `results` when the page contains items and to `zeroResults` when it is
-   * empty. The response data itself stays in TanStack Query; the store
-   * receives only the outcome, and the spinner covers the complete pending
-   * interval.
-   */
-  $effect(() => {
-    const data = substitutionSearch.data;
-    if (state.name === "loadingNew" && data !== undefined) {
-      interactionState.applySearchResult(data.items.length > 0);
     }
   });
 
@@ -188,7 +157,7 @@
 </script>
 
 <label for="food-search" class="sr-only">{dictionary.searchLabel()}</label>
-<div class="mx-auto w-full max-w-[640px]">
+<div data-search-region class="mx-auto w-full max-w-[640px]">
   <input
     id="food-search"
     type="search"
@@ -213,25 +182,5 @@
       aria-hidden="true"
       class="mx-auto mt-3 h-6 w-6 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
     ></div>
-  {/if}
-  {#if state.name !== "empty"}
-    <SelectedInput selected={state.selected} />
-  {/if}
-  {#if state.name === "results" && substitutionSearch.data !== undefined}
-    <!--
-      Result-card region (task 29; ARCH-001, ARCH-020, ARCH-022, REQ-036,
-      REQ-037): the successful page-0 response renders exactly its
-      zero-to-three display-ready Substitutes as one card per item, stacked
-      in one column in ranked order. Each card consumes one generated
-      `SubstituteItem` and the Interface Language captured by the search
-      (ISSUE-008); TanStack Query continues to own the response data and the
-      store receives only the outcome (ARCH-002). The final result-state
-      geometry belongs to task 30.
-    -->
-    <div class="mt-3 flex flex-col gap-3">
-      {#each substitutionSearch.data.items as item (item.foodObjectId)}
-        <ResultCard {item} language={state.selected.capturedLanguage} />
-      {/each}
-    </div>
   {/if}
 </div>
