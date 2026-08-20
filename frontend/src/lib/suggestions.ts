@@ -24,6 +24,7 @@ import type {
   GetFoodSuggestionsResponses,
 } from "../client/types.gen";
 import type { InterfaceLanguage } from "./i18n";
+import type { InteractionState } from "./interactionState";
 
 /**
  * The stable `id` of the suggestion listbox panel; the Search input's
@@ -62,18 +63,26 @@ export interface SuggestionsQueryInput {
   focused: () => boolean;
   /** The active Interface Language accessor. */
   language: () => InterfaceLanguage;
+  /**
+   * The current interaction-state transition name accessor. The suggestion
+   * lane serves only the empty state (task 28): once a selection starts a
+   * Substitution Search, the list stays closed even though Search keeps
+   * focus and text.
+   */
+  stateName: () => InteractionState["name"];
 }
 
 /**
  * Creates the TanStack Query that owns the live suggestion list (ARCH-010,
- * ARCH-019). The query is enabled only while the Search field is focused and
- * contains nonempty text; it is keyed by the Search Query and the active
- * Interface Language; the query function passes TanStack Query's
- * `AbortSignal` through to the generated client; automatic retry and
- * successful-response reuse are disabled; and window focus never triggers a
- * suggestion refetch, so only genuine query or focus intents start requests.
+ * ARCH-019). The query is enabled only while the Search field is focused,
+ * contains nonempty text, and the interaction state is `empty`; it is keyed
+ * by the Search Query and the active Interface Language; the query function
+ * passes TanStack Query's `AbortSignal` through to the generated client;
+ * automatic retry and successful-response reuse are disabled; and window
+ * focus never triggers a suggestion refetch, so only genuine query or focus
+ * intents start requests.
  *
- * @param input - the reactive query, focus, and language accessors
+ * @param input - the reactive query, focus, language, and state accessors
  * @returns the TanStack Query result owning the HTTP data and pending state
  */
 export function createSuggestionsQuery(input: SuggestionsQueryInput) {
@@ -89,7 +98,10 @@ export function createSuggestionsQuery(input: SuggestionsQueryInput) {
         language: input.language(),
         signal,
       }),
-    enabled: input.focused() && input.query().length > 0,
+    enabled:
+      input.stateName() === "empty" &&
+      input.focused() &&
+      input.query().length > 0,
     retry: false,
     gcTime: 0,
     refetchOnWindowFocus: false,
