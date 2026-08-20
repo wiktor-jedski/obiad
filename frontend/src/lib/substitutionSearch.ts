@@ -10,11 +10,14 @@
  * ID, the Food Quantity, and page index `0`; the query function passes
  * TanStack Query's `AbortSignal` to the generated client; automatic retry
  * and successful-response reuse are disabled (ARCH-019) with `retry: false`
- * and `gcTime: 0`. There is no duplicate intent, queue, second submit
- * action, or response-data store: the query is enabled only while a
- * selection exists, one key change starts one fresh request, and the
- * interaction state receives only the success outcome, never the response
- * data (ARCH-002).
+ * and `gcTime: 0`, and every lifecycle-driven refetch path is disabled
+ * (`retryOnMount`, `refetchOnMount`, `refetchOnReconnect`,
+ * `refetchOnWindowFocus`) so a network reconnect or a component remount
+ * never submits a second request. There is no duplicate intent, queue,
+ * second submit action, or response-data store: the query is enabled only
+ * while a selection exists, one key change starts one fresh request, and
+ * the interaction state receives only the success outcome, never the
+ * response data (ARCH-002).
  */
 import { createQuery } from "@tanstack/svelte-query";
 import { client } from "../client/client.gen";
@@ -48,8 +51,13 @@ export interface SubstitutionSearchQueryInput {
  * and is keyed by the selected Food Object ID, the Food Quantity, and page
  * index `0`; the query function passes TanStack Query's `AbortSignal`
  * through to the generated client; automatic retry and successful-response
- * reuse are disabled; and window focus never triggers a refetch, so only
- * genuine selection intents start requests.
+ * reuse are disabled; and every lifecycle-driven refetch path is disabled
+ * — `retry: false` (no automatic retry), `retryOnMount: false` (no mount
+ * retry of an errored query), `refetchOnMount: false` (no refetch when an
+ * observer mounts with cached data), `refetchOnWindowFocus: false`, and
+ * `refetchOnReconnect: false` — so only a genuine selection intent starts
+ * a Substitution Search POST and neither a network reconnect nor a
+ * component remount submits a second request (REQ-022, ARCH-019).
  *
  * @param input - the selected Food Object accessor
  * @returns the TanStack Query result owning the HTTP data and pending state
@@ -88,8 +96,11 @@ export function createSubstitutionSearchQuery(
       },
       enabled: selected !== undefined,
       retry: false,
-      gcTime: 0,
+      retryOnMount: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
       refetchOnWindowFocus: false,
+      gcTime: 0,
     };
   });
 }

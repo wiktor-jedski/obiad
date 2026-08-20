@@ -23,7 +23,11 @@ import { expect, test, type Page } from "@playwright/test";
  * response fetched from real Fiber and PostgreSQL stays pending at the
  * browser boundary while the new-search spinner remains `12px` below the
  * Search field; fulfillment removes the spinner and leaves the Search field
- * as `document.activeElement` (REQ-046, REQ-064).
+ * as `document.activeElement` (REQ-046, REQ-064). One adversarial network
+ * reconnect while results are visible proves the disabled TanStack
+ * `refetchOnReconnect` path: exactly one Substitution Search POST remains
+ * per selection (ARCH-019, REQ-022, task 28 repair; the remount half of
+ * the lifecycle coverage lives in the component-integration suite).
  */
 
 const SPINNER_OFFSET_PX = 12;
@@ -420,6 +424,49 @@ test.describe("pointer substitution search", () => {
     );
     expect(posts).toHaveLength(1);
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
+  });
+
+  test("a network reconnect while results are visible does not start a second Substitution Search", async ({
+    page,
+    context,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    const posts = trackSubstitutePosts(page);
+
+    await page.goto("/");
+    const search = page.getByRole("combobox", { name: COPY.en.search });
+    await search.fill("chicken");
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
+    await page
+      .getByRole("listbox", { name: COPY.en.listbox })
+      .getByRole("option")
+      .nth(2)
+      .click();
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    await expect.poll(() => posts[0]?.status ?? null).toBe(200);
+    expect(posts).toHaveLength(1);
+
+    // Adversarial reconnect: dropping and restoring the browser network
+    // fires the `online` event, which TanStack Query's `refetchOnReconnect`
+    // default would answer with another Substitution Search POST. The
+    // production query disables that path, so exactly one POST remains
+    // (ARCH-019, REQ-022, task 28 repair).
+    await context.setOffline(true);
+    await page.waitForTimeout(300);
+    await context.setOffline(false);
+    await page.waitForTimeout(600);
+    expect(
+      posts.length,
+      "a reconnect must not start a second Substitution Search",
+    ).toBe(1);
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    await expect(search).toBeFocused();
   });
 
   test("the Pizza Margherita flow sends 1 serving, shows the exact localized selected label and value, and retains the captured result language", async ({
