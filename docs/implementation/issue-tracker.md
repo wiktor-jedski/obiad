@@ -135,3 +135,22 @@ Status: ready-for-agent
 
 - No Playwright check is planned here. The frontend remains the generated-client compile package; the plan validates REQ-025 at HTTP and defers its browser quantity-control evidence to Phase 10.
 - A successful zero-item runtime response is not exercised. ISSUE-003 records that zero eligible Substitutes are unreachable with the supported deterministic catalog and forbids a separate PostgreSQL fixture, production eligibility rule, or catalog-coverage exception. `P04-G4` therefore covers the generated zero-to-three schema and all reachable page-0 runtime outcomes, but omits the otherwise requested zero-result execution.
+
+## ISSUE-006: Phase 5 empty-shell visual and asset decisions
+
+Type: Product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-19. Phase 5 uses an `<input type="search">` with a visually hidden `Search` label, `Search foods` placeholder, no icon, and no autofocus. Phase 6 moves both strings into the typed English and Polish dictionaries.
+- Resolved with the project owner on 2026-08-19. The Search field is `56px` high and `min(100%, 640px)` wide. Its box is horizontally centered and its vertical center is `45%` of `100dvh`, with no additional offset. The maximum-`1280px` primary column uses horizontal gutters of `16px` below `640px`, `24px` from `640px` through `1023px`, and `32px` from `1024px`. Playwright measures within `1` CSS px at `320×568`, `768×1024`, and `1280×720`.
+- Resolved with the project owner on 2026-08-19. Typography follows the established mealswapp CSS pattern instead of bundling WOFF2: Tailwind uses `Inter, system-ui, sans-serif` for UI text and `Roboto Mono, ui-monospace, monospace` for data and labels; `@font-face` resolves system-local Inter at weights `100 900` and Roboto Mono at weights `100 700`; no runtime font request is allowed.
+- Resolved with the project owner on 2026-08-19. `bun run test:e2e` owns a self-contained disposable stack: one `postgres:17-alpine` container on a random loopback port, `scripts/setup_local_database.sh` with ephemeral secrets and a temporary credential file, fixed Fiber at `127.0.0.1:8080`, and a strict-port optimized Vite preview. It requires no prestarted service, fails clearly when an application port is occupied, and cleans owned resources after success, failure, or interruption.
+- Resolved with the project owner on 2026-08-19. Playwright records one full-page PNG review attachment at each required viewport, but screenshots are non-gating and are not committed pixel-comparison snapshots. Exact DOM, style, overflow, and `1` CSS px geometry assertions are the acceptance gate.
+- Resolved with the project owner on 2026-08-19. The owner supplied generated or commissioned artwork for which they hold the required project-use rights; no attribution is required. The accepted `frontend/src/lib/assets/food-placeholder.png` is a `512×512`, 8-bit, true-color sRGB PNG with no alpha or localized text. Unnecessary source metadata was stripped without changing its pixel signature; the committed file SHA-256 is `741ef3e3a323cc1b47c466aba947aee59cb03790f7ffee754470fbbc64c24b95`.
+
+### Testing coverage deviations
+
+- Phase 5 adds no `@testing-library/svelte` component integration test. The real-stack Playwright scenario covers the exact Search semantics and copy together with the viewport geometry, styles, overflow, API inactivity, and complete deployment; a second DOM-only suite would duplicate the only observable component contract.
+- Visual screenshots do not gate because the owner-selected system-local fonts can legitimately render different glyph pixels across hosts. The screenshots remain phase-review evidence; deterministic DOM, computed-style, and geometry assertions gate REQ-060.

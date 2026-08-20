@@ -1,4 +1,4 @@
-import { defineConfig } from '@hey-api/openapi-ts';
+import { defineConfig } from "@hey-api/openapi-ts";
 
 /**
  * Generates the TypeScript HTTP client (Fetch) and types from the
@@ -8,7 +8,7 @@ import { defineConfig } from '@hey-api/openapi-ts';
  * `src/client/` and is not committed; `bun run typecheck` compiles it.
  */
 export default defineConfig({
-  input: '../api/openapi.yaml',
-  output: 'src/client',
-  plugins: ['@hey-api/client-fetch', '@hey-api/typescript'],
+  input: "../api/openapi.yaml",
+  output: "src/client",
+  plugins: ["@hey-api/client-fetch", "@hey-api/typescript"],
 });

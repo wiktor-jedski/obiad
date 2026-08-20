@@ -1,0 +1,60 @@
+/**
+ * Application stylesheet for the client-only Obiad browser application.
+ *
+ * Tailwind CSS 4 is wired through the Vite plugin (`@tailwindcss/vite`) and
+ * its generated utilities enter the bundle through this single import.
+ *
+ * Task 23 (ISSUE-006 presentation contract, ARCH-015) owns the palette and
+ * typography tokens below. The palette mirrors `docs/requirements/style.md`
+ * verbatim, the font chains and `@font-face` ranges mirror the established
+ * mealswapp CSS pattern, and no font file is bundled: the `@font-face`
+ * declarations resolve system-local Inter and Roboto Mono when installed and
+ * otherwise fall back through the declared chains. No runtime font request
+ * is ever made.
+ */
+@import "tailwindcss";
+
+@theme static {
+  /* ISSUE-006: UI text chain with the system-ui fallback. */
+  --font-ui: "Inter", system-ui, sans-serif;
+
+  /* ISSUE-006: data and label chain with the ui-monospace fallback. */
+  --font-data: "Roboto Mono", ui-monospace, monospace;
+
+  /* docs/requirements/style.md palette (dark theme). */
+  --color-dark-background: #0a0f0a;
+  --color-dark-surface: #161d16;
+  --color-dark-primary: #4ade80;
+  --color-dark-secondary: #86efac;
+  --color-dark-accent: #ffb86c;
+  --color-dark-error: #f87171;
+  --color-dark-text-primary: #f3f4f6;
+  --color-dark-text-muted: #9ca3af;
+  --color-dark-text-on-bright: #0a0f0a;
+}
+
+/* ISSUE-006: system-local Inter across weights 100 900 (mealswapp pattern). */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Inter");
+}
+
+/* ISSUE-006: system-local Roboto Mono across weights 100 700. */
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: local("Roboto Mono");
+}
+
+@layer base {
+  body {
+    font-family: var(--font-ui);
+    /* style.md: Background #0A0F0A is the primary app background. */
+    background-color: var(--color-dark-background);
+  }
+}
