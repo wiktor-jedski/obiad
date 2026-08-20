@@ -32,6 +32,8 @@ export interface Messages {
   searchPlaceholder: () => string;
   /** Accessible name of the Interface Language control group (task 26). */
   interfaceLanguage: () => string;
+  /** Accessible name of the suggestion listbox (task 27, REQ-018). */
+  suggestionsListLabel: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -39,6 +41,7 @@ const en = {
   searchLabel: () => "Search",
   searchPlaceholder: () => "Search foods",
   interfaceLanguage: () => "Interface language",
+  suggestionsListLabel: () => "Suggestions",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -46,6 +49,7 @@ const pl = {
   searchLabel: () => "Szukaj",
   searchPlaceholder: () => "Szukaj potraw",
   interfaceLanguage: () => "Język interfejsu",
+  suggestionsListLabel: () => "Podpowiedzi",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */
