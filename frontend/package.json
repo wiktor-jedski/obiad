@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Runnable client-only Svelte 5 and Vite application foundation that preserves the generated TypeScript API client and proxies same-origin /api requests to the fixed loopback Fiber listener, with a self-cleaning real-stack Playwright launcher behind test:e2e (task 21, task 22; ARCH-001, ARCH-008, ARCH-016, ARCH-022). No Interface Language control, suggestions, selected input, result cards, or result state yet.",
+  "description": "Runnable client-only Svelte 5 and Vite application foundation that preserves the generated TypeScript API client and proxies same-origin /api requests to the fixed loopback Fiber listener, with a self-cleaning real-stack Playwright launcher behind test:e2e (task 21, task 22; ARCH-001, ARCH-008, ARCH-016, ARCH-022). It renders the empty-state Search control and the borderless Interface Language dropdown (task 24, task 26; ARCH-001, ARCH-003, ARCH-012, ARCH-014, ARCH-020, REQ-057, ISSUE-006, ISSUE-007). No suggestions, selected input, result cards, or result state yet.",
   "scripts": {
     "generate:api": "openapi-ts",
     "dev": "vite",
@@ -18,11 +18,14 @@
     "@tanstack/svelte-query": "6.1.38"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "20.11.6",
     "@hey-api/openapi-ts": "0.99.0",
     "@playwright/test": "1.62.1",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
+    "@testing-library/svelte": "5.4.2",
     "@types/bun": "1.3.14",
+    "happy-dom": "20.11.6",
     "prettier": "3.9.6",
     "prettier-plugin-svelte": "4.1.1",
     "svelte": "5.56.9",

@@ -154,3 +154,15 @@ Status: ready-for-agent
 
 - Phase 5 adds no `@testing-library/svelte` component integration test. The real-stack Playwright scenario covers the exact Search semantics and copy together with the viewport geometry, styles, overflow, API inactivity, and complete deployment; a second DOM-only suite would duplicate the only observable component contract.
 - Visual screenshots do not gate because the owner-selected system-local fonts can legitimately render different glyph pixels across hosts. The screenshots remain phase-review evidence; deterministic DOM, computed-style, and geometry assertions gate REQ-060.
+
+## ISSUE-007: Phase 6 language copy, control, storage, and test-boundary decisions
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Comments
+
+- Resolved with the project owner on 2026-08-20. The typed dictionaries use exact English copy `Search`, `Search foods`, and `Interface language`, and exact Polish copy `Szukaj`, `Szukaj potraw`, and `Język interfejsu`. The control shows only the active `PL` or `EN` language code and a small downward chevron; both codes remain the fixed native dropdown options in PL-then-EN order.
+- Superseded by the project owner on 2026-08-20. The Interface Language control is one borderless native dropdown in the primary column's top-right corner, inset from the top and right by the existing responsive gutter: `16px` below `640px`, `24px` from `640px` through `1023px`, and `32px` from `1024px`. It preserves the Search field's `45dvh` center. The transparent control has no resting or hover border, exposes the localized accessible name, retains a minimum `44px` target, and uses a two-pixel Primary focus-visible outline with two-pixel offset. Native pointer and keyboard selection update the persisted Interface Language store.
+- Resolved with the project owner on 2026-08-20. Persistence uses browser `localStorage`, not cookies, under key `obiad.interfaceLanguage`, with exact values `en` and `pl`. A failed read behaves as a missing value. A failed write leaves the newly selected language active in memory for the current session without crashing or showing a new error; persistence may therefore be lost on reload. Missing, invalid, and browser-derived initial values are not written. An invalid stored value remains ignored until a user selection overwrites it.
+- Resolved with the project owner on 2026-08-20. `bun test` uses pinned `happy-dom` and `@testing-library/svelte` for component integration limited to the Interface Language store and rendered App, Search, and Interface Language components; these tests make no generated-client or network call and start no backend or database. For this component-level seam, ARCH-022's real-stack rule is satisfied by the separate Playwright acceptance scenarios: `bun run test:e2e` exercises the optimized Vite application with real Fiber and PostgreSQL. No permanent unit test is added.
