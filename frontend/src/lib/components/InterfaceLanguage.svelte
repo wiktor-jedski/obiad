@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { getDictionary } from "../i18n";
+  import {
+    getDictionary,
+    interfaceLanguages,
+    isInterfaceLanguage,
+  } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
 
   /**
@@ -18,7 +22,7 @@
 
   function selectLanguage(event: Event): void {
     const language = (event.currentTarget as HTMLSelectElement).value;
-    if (language === "pl" || language === "en") {
+    if (isInterfaceLanguage(language)) {
       interfaceLanguage.set(language);
     }
   }
@@ -34,8 +38,9 @@
     onchange={selectLanguage}
     class="h-11 min-w-16 cursor-pointer appearance-none border-0 bg-transparent py-0 pl-3 pr-8 font-data text-sm font-medium text-dark-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-dark-primary"
   >
-    <option value="pl">PL</option>
-    <option value="en">EN</option>
+    {#each interfaceLanguages as language}
+      <option value={language}>{language.toUpperCase()}</option>
+    {/each}
   </select>
   <span
     aria-hidden="true"

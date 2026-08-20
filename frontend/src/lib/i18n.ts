@@ -10,13 +10,13 @@
  * Language through {@link getDictionary}; the persisted active language
  * itself lives in `interfaceLanguage.ts` (ARCH-012, ARCH-014).
  */
+import type { GetFoodSuggestionsData } from "../client/types.gen";
 
 /**
- * The closed set of supported Interface Languages. Only `en` and `pl` are
- * valid; both are the exact values persisted under the
- * `obiad.interfaceLanguage` localStorage key (ISSUE-007, ARCH-014).
+ * The closed set of supported Interface Languages from the authoritative
+ * generated HTTP contract.
  */
-export type InterfaceLanguage = "en" | "pl";
+export type InterfaceLanguage = GetFoodSuggestionsData["query"]["language"];
 
 /**
  * The exact shape every static dictionary satisfies (ARCH-003). Each message
@@ -48,8 +48,23 @@ const pl = {
   interfaceLanguage: () => "Język interfejsu",
 } satisfies Messages;
 
-/** Shape-checked static dictionaries keyed by Interface Language. */
-const dictionaries: Record<InterfaceLanguage, Messages> = { en, pl };
+/** Shape-checked static dictionaries keyed in UI display order. */
+const dictionaries = { pl, en } satisfies Record<InterfaceLanguage, Messages>;
+
+/** Supported Interface Languages in UI display order. */
+export const interfaceLanguages: readonly InterfaceLanguage[] = Object.freeze(
+  Object.keys(dictionaries) as InterfaceLanguage[],
+);
+
+/**
+ * Reports whether a raw value identifies a supported Interface Language.
+ *
+ * @param value - the raw language value
+ * @returns whether the value has a corresponding static dictionary
+ */
+export function isInterfaceLanguage(value: string): value is InterfaceLanguage {
+  return Object.hasOwn(dictionaries, value);
+}
 
 /**
  * Returns the static dictionary for the active Interface Language.

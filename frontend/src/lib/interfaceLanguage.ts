@@ -14,7 +14,7 @@
  */
 
 import { writable, type Readable } from "svelte/store";
-import type { InterfaceLanguage } from "./i18n";
+import { isInterfaceLanguage, type InterfaceLanguage } from "./i18n";
 
 /** The localStorage key that persists the Interface Language (ARCH-014). */
 export const INTERFACE_LANGUAGE_STORAGE_KEY = "obiad.interfaceLanguage";
@@ -39,9 +39,6 @@ export interface InterfaceLanguageStore extends Readable<InterfaceLanguage> {
   set: (language: InterfaceLanguage) => void;
 }
 
-/** The exact values the persisted preference may hold (ARCH-014). */
-const SUPPORTED_LANGUAGES: readonly string[] = ["en", "pl"];
-
 /**
  * Reads the persisted value. A failed storage read behaves as a missing
  * value (ISSUE-007).
@@ -64,12 +61,12 @@ function resolveInitialLanguage(
   environment: InterfaceLanguageEnvironment,
 ): InterfaceLanguage {
   const stored = readStoredLanguage(environment.storage);
-  if (stored !== null && SUPPORTED_LANGUAGES.includes(stored)) {
-    return stored as InterfaceLanguage;
+  if (stored !== null && isInterfaceLanguage(stored)) {
+    return stored;
   }
   for (const tag of environment.browserLanguages) {
     const primary = tag.split(/[-_]/u)[0]?.toLowerCase() ?? "";
-    if (primary === "en" || primary === "pl") {
+    if (isInterfaceLanguage(primary)) {
       return primary;
     }
   }
