@@ -21,7 +21,9 @@ import { expect, test, type Page } from "@playwright/test";
  * scenario also proves the first rendered Search label and placeholder use
  * the resolved dictionary, that browser-derived initialization performs no
  * storage write, and that startup performs no application API request
- * (P06-G3).
+ * (P06-G3). Task 26 added the Interface Language control, so every scenario
+ * also asserts the localized named group with the two buttons in fixed
+ * PL-then-EN order and the correct `aria-pressed` active state.
  */
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -31,8 +33,16 @@ const STORAGE_KEY = "obiad.interfaceLanguage";
 
 /** The exact ISSUE-007 copy of the two supported dictionaries. */
 const COPY = {
-  en: { label: "Search", placeholder: "Search foods" },
-  pl: { label: "Szukaj", placeholder: "Szukaj potraw" },
+  en: {
+    label: "Search",
+    placeholder: "Search foods",
+    group: "Interface language",
+  },
+  pl: {
+    label: "Szukaj",
+    placeholder: "Szukaj potraw",
+    group: "Język interfejsu",
+  },
 } as const;
 
 /**
@@ -63,14 +73,16 @@ async function useStoredLanguage(page: Page, value: string): Promise<void> {
 
 /**
  * Loads the application and asserts the resolved dictionary on the first
- * rendered Search label and placeholder, the remaining empty-shell surface
- * (no Interface Language control yet — task 26), and the startup network
+ * rendered Search label and placeholder, the localized named Interface
+ * Language group with its two buttons in fixed PL-then-EN order and the
+ * correct `aria-pressed` active state (task 26), and the startup network
  * contract: no application API request, every request on the preview origin.
  */
 async function assertInitialCopy(
   page: Page,
-  expected: { label: string; placeholder: string },
+  language: "en" | "pl",
 ): Promise<void> {
+  const expected = COPY[language];
   const requestUrls: string[] = [];
   page.on("request", (request) => requestUrls.push(request.url()));
 
@@ -86,8 +98,22 @@ async function assertInitialCopy(
   await expect(label).toHaveText(expected.label);
   await expect(input).toHaveAccessibleName(expected.label);
 
-  // Task 25 adds no Interface Language control (task 26 owns it).
-  await expect(page.locator("button")).toHaveCount(0);
+  // The localized named group contains the two real buttons in fixed
+  // PL-then-EN order, with the active language pressed (task 26, ISSUE-007).
+  const group = page.getByRole("group");
+  await expect(group).toHaveAttribute("aria-label", expected.group);
+  const buttons = page.locator("button");
+  await expect(buttons).toHaveCount(2);
+  await expect(buttons.nth(0)).toHaveText("PL");
+  await expect(buttons.nth(1)).toHaveText("EN");
+  await expect(buttons.nth(0)).toHaveAttribute(
+    "aria-pressed",
+    language === "pl" ? "true" : "false",
+  );
+  await expect(buttons.nth(1)).toHaveAttribute(
+    "aria-pressed",
+    language === "en" ? "true" : "false",
+  );
 
   // Startup performs no application API request; every request stays on the
   // preview origin (ARCH-016, P06-G3).
@@ -111,20 +137,20 @@ async function expectStored(page: Page, value: string | null): Promise<void> {
 test.describe("browser-derived Interface Language initialization", () => {
   test("renders Polish on pl-PL", async ({ page }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     // Browser-derived initialization performs no storage write.
     await expectStored(page, null);
   });
 
   test("renders English on en-US", async ({ page }) => {
     await useBrowserLanguages(page, ["en-US"]);
-    await assertInitialCopy(page, COPY.en);
+    await assertInitialCopy(page, "en");
     await expectStored(page, null);
   });
 
   test("renders English on de-DE", async ({ page }) => {
     await useBrowserLanguages(page, ["de-DE"]);
-    await assertInitialCopy(page, COPY.en);
+    await assertInitialCopy(page, "en");
     await expectStored(page, null);
   });
 
@@ -132,7 +158,7 @@ test.describe("browser-derived Interface Language initialization", () => {
     page,
   }) => {
     await useBrowserLanguages(page, ["de-DE", "pl-PL"]);
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     await expectStored(page, null);
   });
 
@@ -140,7 +166,7 @@ test.describe("browser-derived Interface Language initialization", () => {
     page,
   }) => {
     await useBrowserLanguages(page, ["fr-FR", "de-DE"]);
-    await assertInitialCopy(page, COPY.en);
+    await assertInitialCopy(page, "en");
     await expectStored(page, null);
   });
 
@@ -148,7 +174,7 @@ test.describe("browser-derived Interface Language initialization", () => {
     page,
   }) => {
     await useBrowserLanguages(page, ["PL-pl", "en-US"]);
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     await expectStored(page, null);
   });
 });
@@ -159,7 +185,7 @@ test.describe("persisted Interface Language preference", () => {
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     await useStoredLanguage(page, "pl");
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     await expectStored(page, "pl");
   });
 
@@ -168,7 +194,7 @@ test.describe("persisted Interface Language preference", () => {
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
     await useStoredLanguage(page, "en");
-    await assertInitialCopy(page, COPY.en);
+    await assertInitialCopy(page, "en");
     await expectStored(page, "en");
   });
 });
@@ -176,7 +202,7 @@ test.describe("persisted Interface Language preference", () => {
 test.describe("missing and invalid saved values", () => {
   test("a missing saved value invokes browser resolution", async ({ page }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     await expectStored(page, null);
   });
 
@@ -185,7 +211,7 @@ test.describe("missing and invalid saved values", () => {
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
     await useStoredLanguage(page, "fr");
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     // The invalid value is ignored without rewriting it (ISSUE-007).
     await expectStored(page, "fr");
   });
@@ -195,7 +221,7 @@ test.describe("missing and invalid saved values", () => {
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
     await useStoredLanguage(page, "PL");
-    await assertInitialCopy(page, COPY.pl);
+    await assertInitialCopy(page, "pl");
     await expectStored(page, "PL");
   });
 });
