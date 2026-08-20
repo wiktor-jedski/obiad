@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { QueryClientProvider } from '@tanstack/svelte-query';
-  import { queryClient } from './lib/queryClient';
-  import { foodPlaceholderUrl } from './lib/assets';
-  import Search from './lib/components/Search.svelte';
+  import { QueryClientProvider } from "@tanstack/svelte-query";
+  import { queryClient } from "./lib/queryClient";
+  import { foodPlaceholderUrl } from "./lib/assets";
+  import Search from "./lib/components/Search.svelte";
 </script>
 
 <!--

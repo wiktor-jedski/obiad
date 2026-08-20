@@ -73,28 +73,28 @@
  * inside the temporary credential file, which cleanup removes together with
  * its directory.
  */
-import { spawn } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import net from 'node:net';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import process from 'node:process';
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import net from "node:net";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import process from "node:process";
 
-const FRONTEND = resolve(import.meta.dir, '..');
-const REPO = resolve(FRONTEND, '..');
-const BACKEND = join(REPO, 'backend');
-const SETUP_SCRIPT = join(REPO, 'scripts', 'setup_local_database.sh');
+const FRONTEND = resolve(import.meta.dir, "..");
+const REPO = resolve(FRONTEND, "..");
+const BACKEND = join(REPO, "backend");
+const SETUP_SCRIPT = join(REPO, "scripts", "setup_local_database.sh");
 
 /** The fixed loopback Fiber listener (ARCH-016, ISSUE-004). */
-const FIBER_ADDR = '127.0.0.1:8080';
+const FIBER_ADDR = "127.0.0.1:8080";
 const FIBER_PORT = 8080;
 /** The strict-port optimized Vite preview origin (ISSUE-006, playwright.config.ts). */
 const PREVIEW_PORT = 4173;
 const PREVIEW_ORIGIN = `http://127.0.0.1:${PREVIEW_PORT}`;
 /** The pinned disposable PostgreSQL 17 image (AGENTS.md, ISSUE-006). */
-const POSTGRES_IMAGE = 'postgres:17-alpine';
+const POSTGRES_IMAGE = "postgres:17-alpine";
 
 const PROCESS_START_TIMEOUT_MS = 60_000;
 const POSTGRES_START_TIMEOUT_MS = 60_000;
@@ -112,9 +112,14 @@ const DOCKER_PROBE_TIMEOUT_MS = 5_000;
 const TOOL_CHECK_TIMEOUT_MS = 10_000;
 
 /** Gitignored generated output owned by this launcher run when this run creates it. */
-const GENERATED_CLIENT_DIR = join(FRONTEND, 'src', 'client');
-const TEST_RESULTS_DIR = join(FRONTEND, 'test-results');
-const GENERATED_TRANSPORT_FILE = join(BACKEND, 'internal', 'transport', 'suggestions.gen.go');
+const GENERATED_CLIENT_DIR = join(FRONTEND, "src", "client");
+const TEST_RESULTS_DIR = join(FRONTEND, "test-results");
+const GENERATED_TRANSPORT_FILE = join(
+  BACKEND,
+  "internal",
+  "transport",
+  "suggestions.gen.go",
+);
 
 interface ProcessGroup {
   label: string;
@@ -149,7 +154,10 @@ interface BoundedResult {
 }
 
 /** One serialized shutdown: the first signal wins and cleanup runs exactly once. */
-const shutdown: { signal: NodeJS.Signals | null; cleanupInFlight: Promise<string[]> | null } = {
+const shutdown: {
+  signal: NodeJS.Signals | null;
+  cleanupInFlight: Promise<string[]> | null;
+} = {
   signal: null,
   cleanupInFlight: null,
 };
@@ -165,11 +173,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 function randomHex(bytes: number): string {
-  return randomBytes(bytes).toString('hex');
+  return randomBytes(bytes).toString("hex");
 }
 
 function signalExitCode(signal: NodeJS.Signals): number {
-  return signal === 'SIGINT' ? 130 : 143;
+  return signal === "SIGINT" ? 130 : 143;
 }
 
 /** Throws when a shutdown has been requested; runStack checks between phases. */
@@ -191,13 +199,16 @@ function groupAlive(pgid: number): boolean {
 
 /** Whether the leader of a registered process group is still running. */
 function processAlive(resources: OwnedResources, child: ChildProcess): boolean {
-  const group = child.pid !== undefined ? resources.groups.get(child.pid) : undefined;
-  return group !== undefined && child.exitCode === null && child.signalCode === null;
+  const group =
+    child.pid !== undefined ? resources.groups.get(child.pid) : undefined;
+  return (
+    group !== undefined && child.exitCode === null && child.signalCode === null
+  );
 }
 
 function tcpPortInUse(port: number): Promise<boolean> {
   const { promise, resolve: settle } = Promise.withResolvers<boolean>();
-  const socket = net.connect({ host: '127.0.0.1', port });
+  const socket = net.connect({ host: "127.0.0.1", port });
   let settled = false;
   const finish = (inUse: boolean) => {
     if (settled) {
@@ -207,8 +218,8 @@ function tcpPortInUse(port: number): Promise<boolean> {
     socket.destroy();
     settle(inUse);
   };
-  socket.once('connect', () => finish(true));
-  socket.once('error', () => finish(false));
+  socket.once("connect", () => finish(true));
+  socket.once("error", () => finish(false));
   socket.setTimeout(1_000, () => finish(false));
   return promise;
 }
@@ -224,22 +235,29 @@ function spawnOwned(
   resources: OwnedResources,
   command: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; stdio?: 'inherit' | 'pipe' } = {},
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    stdio?: "inherit" | "pipe";
+  } = {},
 ): ChildProcess {
   const child = spawn(command, args, {
     cwd: options.cwd ?? REPO,
     env: options.env ?? process.env,
-    stdio: options.stdio === 'pipe' ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    stdio: options.stdio === "pipe" ? ["ignore", "pipe", "pipe"] : "inherit",
     detached: true,
   });
-  child.once('error', (error: Error) => {
+  child.once("error", (error: Error) => {
     log(`error: failed to spawn '${command}': ${error.message}`);
     if (child.pid !== undefined) {
       resources.groups.delete(child.pid);
     }
   });
   if (child.pid !== undefined) {
-    resources.groups.set(child.pid, { label: `${command} ${args.join(' ')}`, leader: child });
+    resources.groups.set(child.pid, {
+      label: `${command} ${args.join(" ")}`,
+      leader: child,
+    });
   }
   return child;
 }
@@ -251,7 +269,10 @@ function spawnOwned(
  * still owns it; a group that is truly gone is removed promptly, so a stale
  * registration can never outlive the process it refers to (PGID reuse).
  */
-function deregisterGroupWhenGone(resources: OwnedResources, child: ChildProcess): void {
+function deregisterGroupWhenGone(
+  resources: OwnedResources,
+  child: ChildProcess,
+): void {
   const pgid = child.pid;
   if (pgid === undefined) {
     return;
@@ -277,8 +298,8 @@ async function runStep(
   assertRunning();
   const child = spawnOwned(resources, command, args, options);
   const { promise, resolve, reject } = Promise.withResolvers<number>();
-  child.once('error', reject);
-  child.once('exit', (code) => {
+  child.once("error", reject);
+  child.once("exit", (code) => {
     resolve(code ?? 1);
     deregisterGroupWhenGone(resources, child);
   });
@@ -297,28 +318,39 @@ async function runStep(
 async function runBounded(
   resources: OwnedResources,
   command: string,
-  args: string[],
-  options: { timeoutMs?: number; env?: NodeJS.ProcessEnv; inheritStdout?: boolean } = {},
+  args: readonly string[],
+  options: {
+    timeoutMs?: number;
+    env?: NodeJS.ProcessEnv;
+    inheritStdout?: boolean;
+  } = {},
 ): Promise<BoundedResult> {
   const timeoutMs = options.timeoutMs ?? DOCKER_OP_TIMEOUT_MS;
   const { promise, resolve } = Promise.withResolvers<BoundedResult>();
-  let stdout = '';
-  let stderr = '';
+  let stdout = "";
+  let stderr = "";
   let timedOut = false;
   const controller = new AbortController();
   const child = spawn(command, args, {
     cwd: REPO,
     env: options.env ?? process.env,
-    stdio: ['ignore', options.inheritStdout ? 'inherit' : 'pipe', options.inheritStdout ? 'inherit' : 'pipe'],
+    stdio: [
+      "ignore",
+      options.inheritStdout ? "inherit" : "pipe",
+      options.inheritStdout ? "inherit" : "pipe",
+    ],
     detached: true,
     signal: controller.signal,
   });
   const pgid = child.pid;
-  child.once('error', (error: Error) => {
+  child.once("error", (error: Error) => {
     finish({ status: null, stdout, stderr: stderr || error.message, timedOut });
   });
   if (pgid !== undefined) {
-    resources.groups.set(pgid, { label: `${command} ${args.join(' ')}`, leader: child });
+    resources.groups.set(pgid, {
+      label: `${command} ${args.join(" ")}`,
+      leader: child,
+    });
   }
 
   /** Kills the whole group after abort and deregisters it once it is gone. */
@@ -328,7 +360,7 @@ async function runBounded(
     }
     controller.abort();
     try {
-      process.kill(-pgid, 'SIGTERM');
+      process.kill(-pgid, "SIGTERM");
     } catch {
       // group already gone
     }
@@ -338,7 +370,7 @@ async function runBounded(
     }
     if (groupAlive(pgid)) {
       try {
-        process.kill(-pgid, 'SIGKILL');
+        process.kill(-pgid, "SIGKILL");
       } catch {
         // group vanished between the check and the kill
       }
@@ -356,10 +388,10 @@ async function runBounded(
   }, timeoutMs);
 
   if (!options.inheritStdout) {
-    child.stdout?.on('data', (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
     });
-    child.stderr?.on('data', (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
   }
@@ -377,7 +409,7 @@ async function runBounded(
     }
     resolve(result);
   }
-  child.once('exit', (code) => {
+  child.once("exit", (code) => {
     finish({ status: code, stdout, stderr, timedOut });
   });
   return promise;
@@ -389,14 +421,17 @@ async function runBounded(
  * period. The group id is retained until the group is confirmed gone, so
  * descendants that outlive their leader are still stopped.
  */
-async function stopProcessGroup(resources: OwnedResources, pgid: number): Promise<boolean> {
+async function stopProcessGroup(
+  resources: OwnedResources,
+  pgid: number,
+): Promise<boolean> {
   const group = resources.groups.get(pgid);
   if (!group) {
     return true;
   }
   const label = group.label;
   try {
-    process.kill(-pgid, 'SIGTERM');
+    process.kill(-pgid, "SIGTERM");
   } catch {
     // ESRCH: the group is already gone; nothing to stop.
   }
@@ -406,7 +441,7 @@ async function stopProcessGroup(resources: OwnedResources, pgid: number): Promis
   }
   if (groupAlive(pgid)) {
     try {
-      process.kill(-pgid, 'SIGKILL');
+      process.kill(-pgid, "SIGKILL");
     } catch {
       // group vanished between the check and the kill
     }
@@ -427,15 +462,17 @@ async function stopProcessGroup(resources: OwnedResources, pgid: number): Promis
 /** Validates that every directly required executable is available and runs. */
 async function preflight(resources: OwnedResources): Promise<void> {
   for (const [command, args, label] of [
-    ['docker', ['--version'], 'docker'],
-    ['go', ['version'], 'go'],
-    ['bun', ['--version'], 'bun'],
-    ['bash', ['--version'], 'bash'],
+    ["docker", ["--version"], "docker"],
+    ["go", ["version"], "go"],
+    ["bun", ["--version"], "bun"],
+    ["bash", ["--version"], "bash"],
   ] as const) {
-    const result = await runBounded(resources, command, args, { timeoutMs: TOOL_CHECK_TIMEOUT_MS });
+    const result = await runBounded(resources, command, args, {
+      timeoutMs: TOOL_CHECK_TIMEOUT_MS,
+    });
     if (result.status !== 0) {
       throw new Error(
-        `required binary ${label} is not available (${result.stderr.trim() || `status ${result.status}`}${result.timedOut ? ', timed out' : ''})`,
+        `required binary ${label} is not available (${result.stderr.trim() || `status ${result.status}`}${result.timedOut ? ", timed out" : ""})`,
       );
     }
   }
@@ -451,14 +488,24 @@ async function preflightPorts(): Promise<void> {
   }
 }
 
-async function waitForPostgresReady(resources: OwnedResources, containerName: string): Promise<void> {
+async function waitForPostgresReady(
+  resources: OwnedResources,
+  containerName: string,
+): Promise<void> {
   const deadline = Date.now() + POSTGRES_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     assertRunning();
     const probe = await runBounded(
       resources,
-      'docker',
-      ['exec', containerName, 'pg_isready', '--host=127.0.0.1', '--username=postgres', '--dbname=postgres'],
+      "docker",
+      [
+        "exec",
+        containerName,
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres",
+        "--dbname=postgres",
+      ],
       { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
     );
     if (probe.status === 0) {
@@ -466,16 +513,16 @@ async function waitForPostgresReady(resources: OwnedResources, containerName: st
     }
     const running = await runBounded(
       resources,
-      'docker',
-      ['inspect', '--format={{.State.Running}}', containerName],
+      "docker",
+      ["inspect", "--format={{.State.Running}}", containerName],
       { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
     );
-    if (running.status !== 0 || running.stdout.trim() !== 'true') {
+    if (running.status !== 0 || running.stdout.trim() !== "true") {
       break;
     }
     await sleep(250);
   }
-  await runBounded(resources, 'docker', ['logs', containerName], {
+  await runBounded(resources, "docker", ["logs", containerName], {
     timeoutMs: DOCKER_OP_TIMEOUT_MS,
     inheritStdout: true,
   });
@@ -484,16 +531,31 @@ async function waitForPostgresReady(resources: OwnedResources, containerName: st
   );
 }
 
-async function dockerPublishedPort(resources: OwnedResources, containerName: string): Promise<number> {
-  const result = await runBounded(resources, 'docker', ['port', containerName, '5432/tcp'], {
-    timeoutMs: DOCKER_OP_TIMEOUT_MS,
-  });
+async function dockerPublishedPort(
+  resources: OwnedResources,
+  containerName: string,
+): Promise<number> {
+  const result = await runBounded(
+    resources,
+    "docker",
+    ["port", containerName, "5432/tcp"],
+    {
+      timeoutMs: DOCKER_OP_TIMEOUT_MS,
+    },
+  );
   if (result.status !== 0) {
-    throw new Error(`failed to read the PostgreSQL port mapping for ${containerName}`);
+    throw new Error(
+      `failed to read the PostgreSQL port mapping for ${containerName}`,
+    );
   }
-  const lines = result.stdout.trim().split('\n').filter((line) => line.length > 0);
+  const lines = result.stdout
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0);
   if (lines.length !== 1) {
-    throw new Error(`expected one PostgreSQL port mapping, got ${result.stdout.trim()}`);
+    throw new Error(
+      `expected one PostgreSQL port mapping, got ${result.stdout.trim()}`,
+    );
   }
   const match = /^127\.0\.0\.1:(\d+)$/.exec(lines[0].trim());
   if (!match) {
@@ -519,16 +581,22 @@ function unquoteShellWord(word: string): string {
     return word.slice(1, end);
   }
   if (word.startsWith('"')) {
-    let out = '';
+    let out = "";
     for (let i = 1; i < word.length; i++) {
       const char = word[i];
-      if (char === '"' && (i === word.length - 1 || word[i + 1] === '\n')) {
+      if (char === '"' && (i === word.length - 1 || word[i + 1] === "\n")) {
         break;
       }
-      if (char === '\\' && i + 1 < word.length) {
+      if (char === "\\" && i + 1 < word.length) {
         const next = word[i + 1];
-        if (next === '"' || next === '\\' || next === '$' || next === '`' || next === '\n') {
-          out += next === '\n' ? '' : next;
+        if (
+          next === '"' ||
+          next === "\\" ||
+          next === "$" ||
+          next === "`" ||
+          next === "\n"
+        ) {
+          out += next === "\n" ? "" : next;
           i++;
           continue;
         }
@@ -537,9 +605,9 @@ function unquoteShellWord(word: string): string {
     }
     return out;
   }
-  let out = '';
+  let out = "";
   for (let i = 0; i < word.length; i++) {
-    if (word[i] === '\\' && i + 1 < word.length) {
+    if (word[i] === "\\" && i + 1 < word.length) {
       out += word[i + 1];
       i++;
       continue;
@@ -555,7 +623,7 @@ function unquoteShellWord(word: string): string {
  */
 function readCredentialLine(content: string, key: string): string {
   const prefix = `${key}=`;
-  for (const line of content.split('\n')) {
+  for (const line of content.split("\n")) {
     if (!line.startsWith(prefix)) {
       continue;
     }
@@ -580,17 +648,27 @@ async function waitForService(
   label: string,
 ): Promise<void> {
   const deadline = Date.now() + PROCESS_START_TIMEOUT_MS;
-  let lastProbe = 'no response';
+  let lastProbe = "no response";
   while (Date.now() < deadline) {
     assertRunning();
     if (!alive()) {
-      throw new Error(`${label}: owned process exited before becoming ready (last probe: ${lastProbe})`);
+      throw new Error(
+        `${label}: owned process exited before becoming ready (last probe: ${lastProbe})`,
+      );
     }
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS) });
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS),
+      });
       const body = await response.text();
-      lastProbe = `${response.status} ${response.headers.get('content-type') ?? ''}`;
-      if (accept(response.status, body, response.headers.get('content-type') ?? '')) {
+      lastProbe = `${response.status} ${response.headers.get("content-type") ?? ""}`;
+      if (
+        accept(
+          response.status,
+          body,
+          response.headers.get("content-type") ?? "",
+        )
+      ) {
         return;
       }
     } catch {
@@ -598,7 +676,9 @@ async function waitForService(
     }
     await sleep(250);
   }
-  throw new Error(`${label}: did not become ready within ${PROCESS_START_TIMEOUT_MS} ms (last probe: ${lastProbe})`);
+  throw new Error(
+    `${label}: did not become ready within ${PROCESS_START_TIMEOUT_MS} ms (last probe: ${lastProbe})`,
+  );
 }
 
 /**
@@ -608,22 +688,26 @@ async function waitForService(
  * single-field object `{"status":"ready"}`. Suffix/prefix types such as
  * `application/jsonp` and a false or malformed ready body never pass.
  */
-function fiberReady(status: number, body: string, contentType: string): boolean {
+function fiberReady(
+  status: number,
+  body: string,
+  contentType: string,
+): boolean {
   if (status !== 200) {
     return false;
   }
-  const mediaType = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
-  if (mediaType !== 'application/json') {
+  const mediaType = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (mediaType !== "application/json") {
     return false;
   }
   try {
     const parsed: unknown = JSON.parse(body);
     return (
       parsed !== null &&
-      typeof parsed === 'object' &&
+      typeof parsed === "object" &&
       !Array.isArray(parsed) &&
       Object.keys(parsed as Record<string, unknown>).length === 1 &&
-      (parsed as Record<string, unknown>).status === 'ready'
+      (parsed as Record<string, unknown>).status === "ready"
     );
   } catch {
     return false;
@@ -635,11 +719,19 @@ function fiberReady(status: number, body: string, contentType: string): boolean 
  * when the container is confirmed gone (removed or already absent). Every
  * attempt is bounded so a hung Docker daemon cannot block cleanup forever.
  */
-async function removeContainer(resources: OwnedResources, name: string): Promise<boolean> {
+async function removeContainer(
+  resources: OwnedResources,
+  name: string,
+): Promise<boolean> {
   for (let attempt = 1; attempt <= CONTAINER_RM_RETRIES; attempt++) {
-    const result = await runBounded(resources, 'docker', ['rm', '--force', name], {
-      timeoutMs: DOCKER_OP_TIMEOUT_MS,
-    });
+    const result = await runBounded(
+      resources,
+      "docker",
+      ["rm", "--force", name],
+      {
+        timeoutMs: DOCKER_OP_TIMEOUT_MS,
+      },
+    );
     if (result.status === 0) {
       log(`removed PostgreSQL container ${name}`);
       return true;
@@ -650,7 +742,7 @@ async function removeContainer(resources: OwnedResources, name: string): Promise
       return true;
     }
     log(
-      `docker rm --force ${name} failed (attempt ${attempt}/${CONTAINER_RM_RETRIES}): ${stderr || `status ${result.status}${result.timedOut ? ' (timed out)' : ''}`}`,
+      `docker rm --force ${name} failed (attempt ${attempt}/${CONTAINER_RM_RETRIES}): ${stderr || `status ${result.status}${result.timedOut ? " (timed out)" : ""}`}`,
     );
     await sleep(1_000);
   }
@@ -666,19 +758,24 @@ function snapshotOutputs(resources: OwnedResources): void {
   if (!resources.tempDir) {
     return;
   }
-  const snapshotsDir = join(resources.tempDir, 'snapshots');
+  const snapshotsDir = join(resources.tempDir, "snapshots");
   const managed = [
-    { path: GENERATED_CLIENT_DIR, label: 'generated TypeScript client' },
-    { path: TEST_RESULTS_DIR, label: 'Playwright output' },
-    { path: GENERATED_TRANSPORT_FILE, label: 'generated Go transport models' },
+    { path: GENERATED_CLIENT_DIR, label: "generated TypeScript client" },
+    { path: TEST_RESULTS_DIR, label: "Playwright output" },
+    { path: GENERATED_TRANSPORT_FILE, label: "generated Go transport models" },
   ];
   for (const output of managed) {
     const preExisted = existsSync(output.path);
     let snapshotPath: string | null = null;
     if (preExisted) {
-      snapshotPath = join(snapshotsDir, output.label.replace(/[^a-z0-9]+/gi, '-'));
+      snapshotPath = join(
+        snapshotsDir,
+        output.label.replace(/[^a-z0-9]+/gi, "-"),
+      );
       cpSync(output.path, snapshotPath, { recursive: true, force: true });
-      log(`preserving pre-existing ${output.label} at ${output.path} (snapshot ${snapshotPath})`);
+      log(
+        `preserving pre-existing ${output.label} at ${output.path} (snapshot ${snapshotPath})`,
+      );
     }
     resources.outputs.push({ ...output, preExisted, snapshotPath });
   }
@@ -709,7 +806,9 @@ async function cleanup(resources: OwnedResources): Promise<string[]> {
     if (await removeContainer(resources, name)) {
       resources.containerName = null;
     } else {
-      problems.push(`container ${name} could not be removed and is still owned`);
+      problems.push(
+        `container ${name} could not be removed and is still owned`,
+      );
     }
   }
 
@@ -717,14 +816,19 @@ async function cleanup(resources: OwnedResources): Promise<string[]> {
     try {
       if (output.preExisted && output.snapshotPath) {
         rmSync(output.path, { recursive: true, force: true });
-        cpSync(output.snapshotPath, output.path, { recursive: true, force: true });
+        cpSync(output.snapshotPath, output.path, {
+          recursive: true,
+          force: true,
+        });
         log(`restored pre-existing ${output.label} at ${output.path}`);
       } else if (existsSync(output.path)) {
         rmSync(output.path, { recursive: true, force: true });
         log(`removed invocation-created ${output.label} at ${output.path}`);
       }
     } catch (error) {
-      problems.push(`failed to ${output.preExisted ? 'restore' : 'remove'} ${output.label} at ${output.path}: ${String(error)}`);
+      problems.push(
+        `failed to ${output.preExisted ? "restore" : "remove"} ${output.label} at ${output.path}: ${String(error)}`,
+      );
     }
   }
 
@@ -732,9 +836,13 @@ async function cleanup(resources: OwnedResources): Promise<string[]> {
     const dir = resources.tempDir;
     try {
       rmSync(dir, { recursive: true, force: true });
-      log(`removed temporary directory ${dir} (build output, browser bundle, server binary, credential file)`);
+      log(
+        `removed temporary directory ${dir} (build output, browser bundle, server binary, credential file)`,
+      );
     } catch (error) {
-      problems.push(`failed to remove temporary directory ${dir}: ${String(error)}`);
+      problems.push(
+        `failed to remove temporary directory ${dir}: ${String(error)}`,
+      );
       return problems;
     }
     resources.tempDir = null;
@@ -752,7 +860,10 @@ function ensureCleanup(resources: OwnedResources): Promise<string[]> {
 }
 
 /** Requests shutdown: sets the flag and starts the one cleanup path. */
-function requestShutdown(resources: OwnedResources, signal: NodeJS.Signals): void {
+function requestShutdown(
+  resources: OwnedResources,
+  signal: NodeJS.Signals,
+): void {
   if (shutdown.signal) {
     return;
   }
@@ -765,24 +876,30 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
   const problems: string[] = [];
   for (const [pgid, group] of resources.groups) {
     if (groupAlive(pgid)) {
-      problems.push(`process group ${pgid} (${group.label}) is still alive after cleanup`);
+      problems.push(
+        `process group ${pgid} (${group.label}) is still alive after cleanup`,
+      );
     }
   }
   if (resources.containerName) {
     const inspect = await runBounded(
       resources,
-      'docker',
-      ['inspect', '--format={{.State.Running}}', resources.containerName],
+      "docker",
+      ["inspect", "--format={{.State.Running}}", resources.containerName],
       { timeoutMs: DOCKER_PROBE_TIMEOUT_MS },
     );
     if (inspect.status === 0) {
-      problems.push(`container ${resources.containerName} is still present after cleanup`);
+      problems.push(
+        `container ${resources.containerName} is still present after cleanup`,
+      );
     }
   }
   for (const output of resources.outputs) {
     const present = existsSync(output.path);
     if (output.preExisted && !present) {
-      problems.push(`${output.label} was pre-existing but is missing after cleanup`);
+      problems.push(
+        `${output.label} was pre-existing but is missing after cleanup`,
+      );
     }
     if (!output.preExisted && present) {
       problems.push(`${output.label} still exists after cleanup`);
@@ -804,7 +921,9 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
     }
   }
   if (problems.length === 0) {
-    log('cleanup verified: no owned process group, container, credential file, or generated output remains');
+    log(
+      "cleanup verified: no owned process group, container, credential file, or generated output remains",
+    );
     return true;
   }
   for (const problem of problems) {
@@ -818,9 +937,11 @@ async function runStack(resources: OwnedResources): Promise<number> {
   await preflight(resources);
   await preflightPorts();
   assertRunning();
-  log('preflight passed: required binaries present and fixed loopback application ports are free');
+  log(
+    "preflight passed: required binaries present and fixed loopback application ports are free",
+  );
 
-  const tempDir = mkdtempSync(join(tmpdir(), 'obiad-e2e-'));
+  const tempDir = mkdtempSync(join(tmpdir(), "obiad-e2e-"));
   resources.tempDir = tempDir;
   log(`owned temporary directory: ${tempDir}`);
 
@@ -830,36 +951,56 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // 3. Generate the TypeScript API client (gitignored owned output) and
   // bundle the browser entry that exposes it to Chromium for the smoke
   // scenario (ARCH-022: the generated client executes in the browser).
-  log('generating the TypeScript API client');
-  let status = await runStep(resources, 'bun', ['run', 'generate:api'], { cwd: FRONTEND });
+  log("generating the TypeScript API client");
+  let status = await runStep(resources, "bun", ["run", "generate:api"], {
+    cwd: FRONTEND,
+  });
   assertRunning();
   if (status !== 0) {
     throw new Error(`bun run generate:api failed with status ${status}`);
   }
-  log('generated client written to src/client');
-  const browserClientBundle = join(tempDir, 'browser-client.js');
-  log(`bundling the generated client for the browser into ${browserClientBundle}`);
+  log("generated client written to src/client");
+  const browserClientBundle = join(tempDir, "browser-client.js");
+  log(
+    `bundling the generated client for the browser into ${browserClientBundle}`,
+  );
   status = await runStep(
     resources,
-    'bun',
-    ['build', 'e2e/browser-client-entry.ts', '--target', 'browser', '--format', 'iife', '--outfile', browserClientBundle],
+    "bun",
+    [
+      "build",
+      "e2e/browser-client-entry.ts",
+      "--target",
+      "browser",
+      "--format",
+      "iife",
+      "--outfile",
+      browserClientBundle,
+    ],
     { cwd: FRONTEND },
   );
   assertRunning();
   if (status !== 0) {
-    throw new Error(`bundling the browser client entry failed with status ${status}`);
+    throw new Error(
+      `bundling the browser client entry failed with status ${status}`,
+    );
   }
 
   // 4. Build the optimized client before preview (ARCH-016: acceptance uses
   // the optimized Vite build through Vite preview).
-  const buildOutDir = join(tempDir, 'dist');
+  const buildOutDir = join(tempDir, "dist");
   log(`building the optimized client into ${buildOutDir}`);
-  status = await runStep(resources, 'bun', ['run', 'build', '--', '--outDir', buildOutDir], { cwd: FRONTEND });
+  status = await runStep(
+    resources,
+    "bun",
+    ["run", "build", "--", "--outDir", buildOutDir],
+    { cwd: FRONTEND },
+  );
   assertRunning();
   if (status !== 0) {
     throw new Error(`bun run build failed with status ${status}`);
   }
-  log('optimized build emitted');
+  log("optimized build emitted");
 
   // 5. Disposable loopback-only PostgreSQL 17 container on a random port.
   const containerName = `obiad-e2e-postgres-${process.pid}-${randomHex(4)}`;
@@ -867,24 +1008,24 @@ async function runStack(resources: OwnedResources): Promise<number> {
   const postgresPassword = randomHex(24);
   const dockerRun = await runBounded(
     resources,
-    'docker',
+    "docker",
     [
-      'run',
-      '--detach',
-      '--rm',
-      '--name',
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
       containerName,
-      '--env',
-      'POSTGRES_PASSWORD',
-      '--publish',
-      '127.0.0.1::5432',
+      "--env",
+      "POSTGRES_PASSWORD",
+      "--publish",
+      "127.0.0.1::5432",
       POSTGRES_IMAGE,
     ],
     { env: { ...process.env, POSTGRES_PASSWORD: postgresPassword } },
   );
   if (dockerRun.status !== 0) {
     throw new Error(
-      `failed to start the PostgreSQL container (docker status ${dockerRun.status ?? 'timeout'}${dockerRun.timedOut ? ', timed out' : ''})`,
+      `failed to start the PostgreSQL container (docker status ${dockerRun.status ?? "timeout"}${dockerRun.timedOut ? ", timed out" : ""})`,
     );
   }
   assertRunning();
@@ -898,9 +1039,9 @@ async function runStack(resources: OwnedResources): Promise<number> {
   const adminDatabaseUrl = `postgres://postgres:${postgresPassword}@127.0.0.1:${postgresPort}/postgres?sslmode=disable`;
   const ownerPassword = randomHex(24);
   const runtimePassword = randomHex(24);
-  const credentialFile = join(tempDir, 'database-urls');
-  log('running scripts/setup_local_database.sh with ephemeral credentials');
-  status = await runStep(resources, 'bash', [SETUP_SCRIPT], {
+  const credentialFile = join(tempDir, "database-urls");
+  log("running scripts/setup_local_database.sh with ephemeral credentials");
+  status = await runStep(resources, "bash", [SETUP_SCRIPT], {
     cwd: REPO,
     env: {
       ...process.env,
@@ -912,27 +1053,43 @@ async function runStack(resources: OwnedResources): Promise<number> {
   });
   assertRunning();
   if (status !== 0) {
-    throw new Error(`scripts/setup_local_database.sh failed with status ${status}`);
+    throw new Error(
+      `scripts/setup_local_database.sh failed with status ${status}`,
+    );
   }
-  const credentialContent = readFileSync(credentialFile, 'utf8');
-  const runtimeDatabaseUrl = readCredentialLine(credentialContent, 'OBIAD_RUNTIME_DATABASE_URL');
-  log('local database setup complete; seeded catalog and runtime credential ready');
+  const credentialContent = readFileSync(credentialFile, "utf8");
+  const runtimeDatabaseUrl = readCredentialLine(
+    credentialContent,
+    "OBIAD_RUNTIME_DATABASE_URL",
+  );
+  log(
+    "local database setup complete; seeded catalog and runtime credential ready",
+  );
 
   // 7. Materialize the uncommitted Go transport models, then build and start
   // the real Fiber process on the fixed loopback listener (AGENTS.md:
   // `go generate ./...` from backend/ before diagnostics or builds).
-  const serverBinary = join(tempDir, 'obiad-server');
-  log('generating the Go transport models');
-  status = await runStep(resources, 'go', ['generate', './...'], { cwd: BACKEND });
+  const serverBinary = join(tempDir, "obiad-server");
+  log("generating the Go transport models");
+  status = await runStep(resources, "go", ["generate", "./..."], {
+    cwd: BACKEND,
+  });
   assertRunning();
   if (status !== 0) {
     throw new Error(`go generate ./... failed with status ${status}`);
   }
   log(`building the Fiber server into ${serverBinary}`);
-  status = await runStep(resources, 'go', ['build', '-o', serverBinary, './cmd/server'], { cwd: BACKEND });
+  status = await runStep(
+    resources,
+    "go",
+    ["build", "-o", serverBinary, "./cmd/server"],
+    { cwd: BACKEND },
+  );
   assertRunning();
   if (status !== 0) {
-    throw new Error(`go build of the Fiber server failed with status ${status}`);
+    throw new Error(
+      `go build of the Fiber server failed with status ${status}`,
+    );
   }
   const fiber = spawnOwned(resources, serverBinary, [], {
     cwd: BACKEND,
@@ -941,42 +1098,62 @@ async function runStack(resources: OwnedResources): Promise<number> {
   if (fiber.pid === undefined) {
     throw new Error(`failed to spawn the Fiber server ${serverBinary}`);
   }
-  fiber.once('exit', () => deregisterGroupWhenGone(resources, fiber));
+  fiber.once("exit", () => deregisterGroupWhenGone(resources, fiber));
   resources.fiberStarted = true;
   log(`started real Fiber process (pid ${fiber.pid}) on ${FIBER_ADDR}`);
   await waitForService(
     `http://${FIBER_ADDR}/health`,
     fiberReady,
     () => processAlive(resources, fiber),
-    'Fiber GET /health',
+    "Fiber GET /health",
   );
-  log('Fiber is healthy: GET /health returns 200 with exactly {"status":"ready"}');
+  log(
+    'Fiber is healthy: GET /health returns 200 with exactly {"status":"ready"}',
+  );
 
   // 8. Optimized Vite preview on the strict port over the owned build output.
   const preview = spawnOwned(
     resources,
-    'bun',
-    ['x', 'vite', 'preview', '--host', '127.0.0.1', '--port', String(PREVIEW_PORT), '--strictPort', '--outDir', buildOutDir],
+    "bun",
+    [
+      "x",
+      "vite",
+      "preview",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(PREVIEW_PORT),
+      "--strictPort",
+      "--outDir",
+      buildOutDir,
+    ],
     { cwd: FRONTEND },
   );
   if (preview.pid === undefined) {
-    throw new Error('failed to spawn the Vite preview');
+    throw new Error("failed to spawn the Vite preview");
   }
-  preview.once('exit', () => deregisterGroupWhenGone(resources, preview));
+  preview.once("exit", () => deregisterGroupWhenGone(resources, preview));
   resources.previewStarted = true;
-  log(`started optimized Vite preview (pid ${preview.pid}) on ${PREVIEW_ORIGIN}`);
+  log(
+    `started optimized Vite preview (pid ${preview.pid}) on ${PREVIEW_ORIGIN}`,
+  );
   await waitForService(
     `${PREVIEW_ORIGIN}/`,
     (httpStatus) => httpStatus === 200,
     () => processAlive(resources, preview),
-    'Vite preview origin',
+    "Vite preview origin",
   );
   assertRunning();
-  log('Vite preview is serving the optimized build');
+  log("Vite preview is serving the optimized build");
 
   // 9. Ensure the pinned Playwright Chromium is installed (no-op when present).
-  log('ensuring the pinned Playwright Chromium is installed');
-  status = await runStep(resources, 'bun', ['x', 'playwright', 'install', 'chromium'], { cwd: FRONTEND });
+  log("ensuring the pinned Playwright Chromium is installed");
+  status = await runStep(
+    resources,
+    "bun",
+    ["x", "playwright", "install", "chromium"],
+    { cwd: FRONTEND },
+  );
   assertRunning();
   if (status !== 0) {
     throw new Error(`playwright install chromium failed with status ${status}`);
@@ -985,10 +1162,13 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // 10. Run the real-stack Playwright scenario; its status becomes the exit
   // status. The browser client bundle path reaches the scenario through the
   // environment; the scenario runs the generated client inside Chromium.
-  log('running the real-stack Playwright scenario');
-  return runStep(resources, 'bun', ['x', 'playwright', 'test'], {
+  log("running the real-stack Playwright scenario");
+  return runStep(resources, "bun", ["x", "playwright", "test"], {
     cwd: FRONTEND,
-    env: { ...process.env, OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle },
+    env: {
+      ...process.env,
+      OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle,
+    },
   });
 }
 
@@ -1001,8 +1181,8 @@ async function main(): Promise<number> {
     groups: new Map(),
     outputs: [],
   };
-  process.on('SIGINT', () => requestShutdown(resources, 'SIGINT'));
-  process.on('SIGTERM', () => requestShutdown(resources, 'SIGTERM'));
+  process.on("SIGINT", () => requestShutdown(resources, "SIGINT"));
+  process.on("SIGTERM", () => requestShutdown(resources, "SIGTERM"));
 
   let exitCode = 1;
   try {

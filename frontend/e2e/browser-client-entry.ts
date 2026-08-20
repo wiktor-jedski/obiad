@@ -9,6 +9,6 @@
  * same-origin `/api` proxy. This entry is never part of the application
  * bundle and performs no request at load time.
  */
-import { client } from '../src/client/client.gen';
+import { client } from "../src/client/client.gen";
 
 (globalThis as Record<string, unknown>).__obiadGeneratedClient = client;

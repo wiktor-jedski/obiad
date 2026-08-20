@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/svelte-query';
+import { QueryClient } from "@tanstack/svelte-query";
 
 /**
  * The single TanStack Query client for the Obiad browser application.

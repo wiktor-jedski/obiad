@@ -1,6 +1,6 @@
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { svelte } from "@sveltejs/vite-plugin-svelte";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
 
 /**
  * Vite configuration for the client-only Obiad browser application.
@@ -16,18 +16,18 @@ import { defineConfig } from 'vite';
  */
 
 /** The fixed loopback Fiber listener that serves the `/api` routes (ARCH-016). */
-const fiberTarget = 'http://127.0.0.1:8080';
+const fiberTarget = "http://127.0.0.1:8080";
 
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   server: {
     proxy: {
-      '/api': fiberTarget,
+      "/api": fiberTarget,
     },
   },
   preview: {
     proxy: {
-      '/api': fiberTarget,
+      "/api": fiberTarget,
     },
   },
 });

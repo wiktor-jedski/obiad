@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Playwright configuration for the client-only Obiad browser application.
@@ -11,17 +11,17 @@ import { defineConfig, devices } from '@playwright/test';
  * 127.0.0.1:4173; the launcher never starts a dev server for these tests.
  */
 export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: false,
-  reporter: [['list']],
+  testDir: "./e2e",
+  fullyParallel: true,
+  reporter: [["list"]],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
-    trace: 'retain-on-failure',
+    baseURL: "http://127.0.0.1:4173",
+    trace: "retain-on-failure",
   },
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 });

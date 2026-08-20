@@ -16,6 +16,6 @@
  * the emitted asset; the value is always a same-origin URL relative to the
  * application origin.
  */
-import foodPlaceholderPng from './food-placeholder.png';
+import foodPlaceholderPng from "./food-placeholder.png";
 
 export const foodPlaceholderUrl: string = foodPlaceholderPng;
