@@ -22,8 +22,9 @@ import { dirname } from 'node:path';
  *     request;
  *   - the centered maximum-`1280px` column cap, the responsive page gutters
  *     (`16px` below `640px`, `24px` from `640px` through `1023px`, `32px`
- *     from `1024px`), the Surface/Secondary/Text-Primary input styles, the
- *     visible Primary focus outline, and no horizontal overflow;
+ *     from `1024px`), the pill-shaped field, the Surface/Secondary/Text-Primary
+ *     input styles, a Primary focus border without an outer highlight, and no
+ *     horizontal overflow;
  *   - the Search box within `1` CSS px of the specified horizontal and
  *     `45%` of `100dvh` vertical centers;
  *   - exactly one full-page PNG review attachment per viewport (`P05-G4`),
@@ -35,6 +36,12 @@ const PREVIEW_ORIGIN = 'http://127.0.0.1:4173';
 
 /** ISSUE-006: the Search field height. */
 const FIELD_HEIGHT_PX = 56;
+
+/** A pill radius must be at least half the Search field height. */
+const FIELD_MIN_BORDER_RADIUS_PX = FIELD_HEIGHT_PX / 2;
+
+/** The text starts `0.5em` beyond the end of the `28px` pill radius. */
+const FIELD_TEXT_INSET_PX = FIELD_HEIGHT_PX / 2 + 8;
 
 /** ISSUE-006: the Search field maximum width (`min(100%, 640px)`). */
 const FIELD_MAX_WIDTH_PX = 640;
@@ -150,11 +157,14 @@ async function assertEmptyShell(
   expect(column.paddingLeft).toBe(`${vp.gutterPx}px`);
   expect(column.paddingRight).toBe(`${vp.gutterPx}px`);
 
-  // --- Input styles: Surface background, 1px Secondary border, Text-Primary. ---
+  // --- Input styles: pill shape, text inset, Surface background,
+  // 1px Secondary border, Text-Primary. ---
   const inputStyle = await input.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       backgroundColor: style.backgroundColor,
+      borderRadius: style.borderTopLeftRadius,
+      paddingLeft: style.paddingLeft,
       borderWidth: style.borderTopWidth,
       borderStyle: style.borderTopStyle,
       borderColor: style.borderTopColor,
@@ -162,6 +172,8 @@ async function assertEmptyShell(
     };
   });
   expect(inputStyle.backgroundColor).toBe(SURFACE_RGB);
+  expect(parseFloat(inputStyle.borderRadius)).toBeGreaterThanOrEqual(FIELD_MIN_BORDER_RADIUS_PX);
+  expect(inputStyle.paddingLeft).toBe(`${FIELD_TEXT_INSET_PX}px`);
   expect(inputStyle.borderWidth).toBe('1px');
   expect(inputStyle.borderStyle).toBe('solid');
   expect(inputStyle.borderColor).toBe(SECONDARY_RGB);
@@ -204,21 +216,18 @@ async function assertEmptyShell(
     expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(PREVIEW_ORIGIN);
   }
 
-  // --- Visible Primary focus treatment (keyboard focus, :focus-visible). ---
+  // --- Primary focus border without an outer highlight. ---
   await page.keyboard.press('Tab');
   await expect(input).toBeFocused();
   const focusStyle = await input.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
-      outlineWidth: style.outlineWidth,
+      borderColor: style.borderTopColor,
       outlineStyle: style.outlineStyle,
-      outlineColor: style.outlineColor,
-      outlineOffset: style.outlineOffset,
     };
   });
-  expect(focusStyle.outlineWidth).toBe('2px');
-  expect(focusStyle.outlineStyle).toBe('solid');
-  expect(focusStyle.outlineColor).toBe(PRIMARY_RGB);
+  expect(focusStyle.borderColor).toBe(PRIMARY_RGB);
+  expect(focusStyle.outlineStyle).toBe('none');
 
   // --- Review evidence: exactly one full-page PNG attachment per viewport
   // (P05-G4). Screenshots are non-gating; the assertions above are the
