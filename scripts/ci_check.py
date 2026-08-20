@@ -115,6 +115,7 @@ def run_ci_checks() -> None:
     run_checked(["bun", "install", "--frozen-lockfile"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "typecheck"], cwd=FRONTEND_ROOT)
+    run_checked(["bun", "run", "format:check"], cwd=FRONTEND_ROOT)
 
     container_name = f"obiad-ci-postgres-{os.getpid()}-{secrets.token_hex(4)}"
     password = secrets.token_urlsafe(24)

@@ -16,7 +16,7 @@ Open items: `docs/implementation/issue-tracker.md`
 
 ## Build, Test, and Development Commands
 
-Backend commands run from `backend/`: `go test ./...` runs the complete Go suite, and `go run ./cmd/dbsetup` applies embedded migrations using `OBIAD_SCHEMA_OWNER_DATABASE_URL`. The `frontend/` package does not exist yet; once added, use Bun (`bun install`, `bun test`, `bun run dev`) per `docs/architecture/tech-stack.md`.
+Backend commands run from `backend/`: `go test ./...` runs the complete Go suite, and `go run ./cmd/dbsetup` applies embedded migrations using `OBIAD_SCHEMA_OWNER_DATABASE_URL`. Frontend commands run from `frontend/`; use Bun for dependency installation and package scripts.
 
 Installed development tooling:
 
@@ -30,6 +30,15 @@ For all backend Go work, change into `backend/` before invoking Go or editor too
 - Run Neovim's Go linter across the module: `$HOME/.local/share/nvim/mason/bin/golangci-lint run ./...`. Its enabled linters include `staticcheck`, matching Neovim's `gopls.staticcheck = true`; the `gopls check` CLI does not accept that LSP setting as a flag.
 
 Treat diagnostics from these commands as required fixes. Use the explicit Mason paths because agent shells may not inherit Neovim's `PATH`.
+
+For all frontend TypeScript and Svelte work, change into `frontend/` before invoking package scripts. Install the locked dependencies with `bun install --frozen-lockfile`. Before finishing a frontend change:
+
+- Format changed supported frontend files with the project-local Prettier installation (`bun x prettier --write <changed files>`).
+- Run `bun run typecheck` for project-wide Svelte and TypeScript diagnostics.
+- Run `bun run format:check` to verify repository formatting.
+- Keep the broad `**/*.ts` and `**/*.svelte` coverage in `frontend/tsconfig.json`. Do not replace it with a list of source directories or files. New TypeScript and Svelte files must be checked automatically; only generated, dependency, and tool-output directories belong in `exclude`.
+
+Treat diagnostics and formatting failures from these commands as required fixes. Neovim can use Mason-installed `svelteserver` and `prettierd` interactively, but repository checks must use the locked project dependencies.
 
 ## Coding Style & Naming Conventions
 
