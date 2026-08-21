@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -66,12 +67,14 @@ func getSuggestionsEnvelope(t *testing.T, baseURL string, query string, language
 // assertSuccessEnvelope asserts the exact ISSUE-004 success shape of a
 // suggestion response: status 200, application/json, and a body with no
 // unknown fields at any nesting level — exactly the "items" envelope, every
-// item with exactly foodObjectId, names, and defaultQuantity, names with
-// exactly en and pl, and defaultQuantity with exactly value and unit
-// (additionalProperties: false). It decodes the body with the generated
-// FoodSuggestionsResponse type and checks that it holds exactly five
-// distinct suggestions, each with a positive Food Object ID, both nonempty
-// localized names, and a positive backend-derived default quantity value.
+// item with exactly foodObjectId, names, defaultQuantity, and
+// allowedQuantities, names with exactly en and pl, defaultQuantity with
+// exactly value and unit, and every allowed quantity with exactly unit and
+// maximumValue (additionalProperties: false). It decodes the body with the
+// generated FoodSuggestionsResponse type and checks that it holds exactly
+// five distinct suggestions, each with a positive Food Object ID, both
+// nonempty localized names, a positive backend-derived default quantity
+// value, and one or two unique allowed quantity-editor units.
 func assertSuccessEnvelope(t *testing.T, status int, body string, contentType string) transport.FoodSuggestionsResponse {
 	t.Helper()
 	if status != http.StatusOK {
@@ -90,7 +93,7 @@ func assertSuccessEnvelope(t *testing.T, status int, body string, contentType st
 		t.Fatalf("items %q is not a JSON array: %v", envelope["items"], err)
 	}
 	for i, item := range items {
-		assertExactFieldSet(t, item, "item", "foodObjectId", "names", "defaultQuantity")
+		assertExactFieldSet(t, item, "item", "foodObjectId", "names", "defaultQuantity", "allowedQuantities")
 		var names map[string]json.RawMessage
 		if err := json.Unmarshal(item["names"], &names); err != nil {
 			t.Fatalf("item %d names %q is not a JSON object: %v", i, item["names"], err)
@@ -101,6 +104,16 @@ func assertSuccessEnvelope(t *testing.T, status int, body string, contentType st
 			t.Fatalf("item %d defaultQuantity %q is not a JSON object: %v", i, item["defaultQuantity"], err)
 		}
 		assertExactFieldSet(t, quantity, "defaultQuantity", "value", "unit")
+		var allowed []map[string]json.RawMessage
+		if err := json.Unmarshal(item["allowedQuantities"], &allowed); err != nil {
+			t.Fatalf("item %d allowedQuantities %q is not a JSON array: %v", i, item["allowedQuantities"], err)
+		}
+		if len(allowed) < 1 || len(allowed) > 2 {
+			t.Fatalf("item %d has %d allowed quantities, want one or two (body %s)", i, len(allowed), body)
+		}
+		for _, quantityEntry := range allowed {
+			assertExactFieldSet(t, quantityEntry, "allowedQuantity", "unit", "maximumValue")
+		}
 	}
 	var response transport.FoodSuggestionsResponse
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
@@ -123,6 +136,9 @@ func assertSuccessEnvelope(t *testing.T, status int, body string, contentType st
 		}
 		if item.DefaultQuantity.Value < 1 {
 			t.Fatalf("suggestion ID %d has nonpositive default quantity value %v (body %s)", item.FoodObjectId, item.DefaultQuantity.Value, body)
+		}
+		if len(item.AllowedQuantities) < 1 || len(item.AllowedQuantities) > 2 {
+			t.Fatalf("suggestion ID %d has %d allowed quantities, want one or two (body %s)", item.FoodObjectId, len(item.AllowedQuantities), body)
 		}
 	}
 	return response
@@ -189,16 +205,52 @@ func assertSuggestionItem(t *testing.T, item transport.FoodSuggestion, en, pl st
 	}
 }
 
+// wantAllowedQuantity is one exact allowed quantity-editor expectation
+// (ISSUE-010): the unit and its positive whole maximum value.
+type wantAllowedQuantity struct {
+	unit         transport.AllowedQuantityUnit
+	maximumValue int32
+}
+
+// assertAllowedQuantities checks the exact ordered allowed quantity-editor
+// units of one suggestion item (task 33, ISSUE-010): one or two unique
+// entries, every maximum value positive, the default unit first, and each
+// entry exactly the given unit and maximum value.
+func assertAllowedQuantities(t *testing.T, item transport.FoodSuggestion, want ...wantAllowedQuantity) {
+	t.Helper()
+	if len(item.AllowedQuantities) != len(want) {
+		t.Fatalf("suggestion ID %d has %d allowed quantities %+v, want %d", item.FoodObjectId, len(item.AllowedQuantities), item.AllowedQuantities, len(want))
+	}
+	seen := make(map[transport.AllowedQuantityUnit]bool, len(item.AllowedQuantities))
+	for i, got := range item.AllowedQuantities {
+		if got.MaximumValue < 1 {
+			t.Fatalf("suggestion ID %d allowed quantity %d has nonpositive maximum value %d", item.FoodObjectId, i, got.MaximumValue)
+		}
+		if seen[got.Unit] {
+			t.Fatalf("suggestion ID %d repeats allowed unit %q", item.FoodObjectId, got.Unit)
+		}
+		seen[got.Unit] = true
+		if got.Unit != want[i].unit || got.MaximumValue != want[i].maximumValue {
+			t.Fatalf("suggestion ID %d allowed quantity %d is (%v, %d), want (%v, %d)", item.FoodObjectId, i, got.Unit, got.MaximumValue, want[i].unit, want[i].maximumValue)
+		}
+	}
+	if len(item.AllowedQuantities) == 2 && item.AllowedQuantities[0].Unit != transport.AllowedQuantityUnitServing {
+		t.Fatalf("suggestion ID %d: the default serving unit must be first, got %v first", item.FoodObjectId, item.AllowedQuantities[0].Unit)
+	}
+}
+
 // assertSameOrder proves that two decoded envelopes are identical item for
-// item (IDs, names, and quantities), so two query variants are normalized to
-// the same comparison and produce the same ordered suggestions (REQ-014).
+// item (IDs, names, quantities, and allowed quantities), so two query
+// variants are normalized to the same comparison and produce the same
+// ordered suggestions (REQ-014). reflect.DeepEqual compares the whole
+// generated item, including its allowed-quantities slice.
 func assertSameOrder(t *testing.T, got, want transport.FoodSuggestionsResponse) {
 	t.Helper()
 	if len(got.Items) != len(want.Items) {
 		t.Fatalf("got %d items, want %d", len(got.Items), len(want.Items))
 	}
 	for i := range got.Items {
-		if got.Items[i] != want.Items[i] {
+		if !reflect.DeepEqual(got.Items[i], want.Items[i]) {
 			t.Fatalf("item %d differs: got %+v, want %+v", i, got.Items[i], want.Items[i])
 		}
 	}
@@ -209,9 +261,11 @@ func assertSameOrder(t *testing.T, got, want transport.FoodSuggestionsResponse) 
 // by disposable real PostgreSQL (P03-G4, P03-G5, P03-G6): exactly five
 // distinct seeded suggestions for a normal query and zzzzzz in English and
 // Polish; the 1 serving, solid 100 g, and liquid 100 ml backend-derived
-// defaults with both localized names; identical ordered suggestions for
-// case and mixed-Unicode-space variants; and the one-edit-apart z/ż
-// ranking.
+// defaults with both localized names; the ISSUE-010 default-first allowed
+// quantity-editor units of solid-Serving, liquid-Serving, solid-base-only,
+// and liquid-base-only seeded Food Objects with the 100000 base maxima and
+// the floored whole Serving maxima; identical ordered suggestions for case
+// and mixed-Unicode-space variants; and the one-edit-apart z/ż ranking.
 func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
@@ -247,6 +301,35 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	milk := getSuggestionsEnvelope(t, baseURL, "milk", "en")
 	assertOrderedIDs(t, milk, 10, 14, 30, 13, 16)
 	assertSuggestionItem(t, milk.Items[0], "Milk", "Mleko", 100, transport.FoodQuantityUnitMl)
+
+	// P03-G5 extension (task 33, ISSUE-010): default-first allowed
+	// quantity-editor units for every seeded Food Object kind. Pizza
+	// Margherita is a solid with a 350 g Serving: serving first with the
+	// whole-number floor of 100000 / 350 = 285, then its g base unit with
+	// maximum 100000. Pho is a liquid with a 400 ml Serving: serving first
+	// with the whole-number floor of 100000 / 400 = 250, then ml with
+	// maximum 100000. Chicken breast is a solid without a Serving: only its
+	// g base unit with maximum 100000. Milk is a liquid without a Serving:
+	// only its ml base unit with maximum 100000. The Physical State and the
+	// stored Serving quantity never appear.
+	assertAllowedQuantities(t, pizza.Items[0],
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitServing, maximumValue: 285},
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitG, maximumValue: 100000},
+	)
+	assertAllowedQuantities(t, chicken.Items[0],
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitG, maximumValue: 100000},
+	)
+	assertAllowedQuantities(t, milk.Items[0],
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitMl, maximumValue: 100000},
+	)
+	pho := getSuggestionsEnvelope(t, baseURL, "pho", "en")
+	if pho.Items[0].FoodObjectId != 30 {
+		t.Fatalf("query \"pho\" ranks ID %d first, want the exact match Pho (ID 30)", pho.Items[0].FoodObjectId)
+	}
+	assertAllowedQuantities(t, pho.Items[0],
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitServing, maximumValue: 250},
+		wantAllowedQuantity{unit: transport.AllowedQuantityUnitMl, maximumValue: 100000},
+	)
 
 	// P03-G6: normalization — letter-case and Unicode-whitespace variants of
 	// the same query produce identical ordered suggestions (REQ-014,

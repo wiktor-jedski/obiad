@@ -17,6 +17,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -106,15 +107,17 @@ func assertSuggestion(t *testing.T, s Suggestion, en, pl string, quantityValue i
 }
 
 // assertSameSuggestions checks that two result slices are identical item for
-// item (IDs, names, and quantities), proving that two query variants are
-// normalized to the same comparison.
+// item (IDs, names, quantities, and allowed quantities), proving that two
+// query variants are normalized to the same comparison.
+// reflect.DeepEqual compares the whole domain Suggestion, including its
+// allowed-quantities slice.
 func assertSameSuggestions(t *testing.T, got, want []Suggestion) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("got %d suggestions %v, want %d suggestions %v", len(got), suggestionIDs(got), len(want), suggestionIDs(want))
 	}
 	for i := range got {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Fatalf("suggestion %d differs: got %+v, want %+v", i, got[i], want[i])
 		}
 	}

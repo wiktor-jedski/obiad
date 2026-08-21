@@ -114,12 +114,26 @@ type SubstituteItem struct {
 
 // Page is one deterministic page of display-ready Substitutes (ARCH-005):
 // the requested zero-based page index, the total eligible count, whether
-// more eligible Substitutes follow, and at most pageSize unique items.
+// more eligible Substitutes follow, the backend-derived macronutrients of
+// the Substitution Input at the committed quantity, and at most pageSize
+// unique items.
 type Page struct {
-	PageIndex          int32
-	TotalEligibleCount int
-	HasMore            bool
-	Items              []SubstituteItem
+	PageIndex           int32
+	TotalEligibleCount  int
+	HasMore             bool
+	InputMacronutrients Macronutrients
+	Items               []SubstituteItem
+}
+
+// Macronutrients is the protein, carbohydrate, and fat of one display-ready
+// quantity after the final 0.1 g display projection (REQ-039, ISSUE-010):
+// either one Substitute item scaled to its unrounded Matched Quantity or the
+// Substitution Input scaled to its committed base quantity. Every value is
+// nonnegative.
+type Macronutrients struct {
+	Protein      float64
+	Carbohydrate float64
+	Fat          float64
 }
 
 // macroProfile is one Food Object's protein, carbohydrate, and fat
@@ -443,15 +457,17 @@ func NewFindSubstitutePage(conn *pgx.Conn) (*FindSubstitutePage, error) {
 // the input and its Food Family, orders the eligible Substitutes by
 // decreasing unrounded Nutritional Similarity, the pinned English collation
 // of the stored English names, and stable Food Object ID, and returns the
-// total eligible count, hasMore, and the first zero to three unique items.
-// Every ranking and calculation stays in float64 until the final display
-// projection (REQ-040), which rounds the Matched Quantity to a whole
-// candidate base unit, the scaled macronutrients to 0.1 g, and 100 ×
-// similarity to a whole percentage (REQ-039). A schema-valid finite Macro
-// Profile whose derived calories, similarity, Matched Quantity, or scaled
-// macronutrients are not finite, or whose projected Matched Quantity does
-// not fit the int64 display range, is classified as an internal failure at
-// the Module boundary instead of reaching a page or the ranking order.
+// total eligible count, hasMore, the input macronutrients at the committed
+// quantity, and the first zero to three unique items. Every ranking and
+// calculation stays in float64 until the final display projection
+// (REQ-040), which rounds the Matched Quantity to a whole candidate base
+// unit, the scaled macronutrients — including the input macronutrients of
+// the committed Substitution Input quantity (ISSUE-010) — to 0.1 g, and
+// 100 × similarity to a whole percentage (REQ-039). A schema-valid finite
+// Macro Profile whose derived calories, similarity, Matched Quantity, or
+// scaled macronutrients are not finite, or whose projected Matched Quantity
+// does not fit the int64 display range, is classified as an internal failure
+// at the Module boundary instead of reaching a page or the ranking order.
 // Failures are stable Error values with a Code and an optional Field.
 // Catalog-independent request failures (page index, Food Object ID,
 // quantity value or unit) are rejected before the single catalog read, and
@@ -519,6 +535,21 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 			cause: fmt.Errorf("input calories %v are not finite for the seeded Macro Profile", inputCalories),
 		}
 	}
+	// ISSUE-010: the response carries the Substitution Input macronutrients
+	// scaled to the committed base quantity (protein, carbohydrate, and fat
+	// per Nutrition Basis times baseQty / 100), projected by the same 0.1 g
+	// half-up display rule as the result cards. A schema-valid extreme
+	// profile whose scaled input macronutrients are not finite is
+	// classified as an internal failure, never projected.
+	inputProtein := inputProfile.protein * baseQty / 100
+	inputCarbohydrate := inputProfile.carbohydrate * baseQty / 100
+	inputFat := inputProfile.fat * baseQty / 100
+	if !isFiniteDerived(inputProtein) || !isFiniteDerived(inputCarbohydrate) || !isFiniteDerived(inputFat) {
+		return nil, &Error{
+			Code:  CodeInternalError,
+			cause: fmt.Errorf("input macronutrients (%v, %v, %v) are not finite for the seeded Macro Profile", inputProtein, inputCarbohydrate, inputFat),
+		}
+	}
 	ranked, err := rankEligible(inputObject.id, inputObject.foodFamilyID, inputProfile, objects)
 	if err != nil {
 		return nil, &Error{Code: CodeInternalError, cause: err}
@@ -529,7 +560,12 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 		PageIndex:          pageIndex,
 		TotalEligibleCount: total,
 		HasMore:            total > pageSize,
-		Items:              make([]SubstituteItem, 0, pageSize),
+		InputMacronutrients: Macronutrients{
+			Protein:      projectMacronutrient(inputProtein),
+			Carbohydrate: projectMacronutrient(inputCarbohydrate),
+			Fat:          projectMacronutrient(inputFat),
+		},
+		Items: make([]SubstituteItem, 0, pageSize),
 	}
 	for _, r := range ranked[:min(pageSize, total)] {
 		mq := matchedQuantity(inputCalories, calories(r.profile))
