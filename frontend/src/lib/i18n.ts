@@ -38,6 +38,18 @@ export interface Messages {
   selectedFoodLabel: () => string;
   /** Localized unit label of one Serving in the read-only Substitution Input (task 28, ISSUE-008). */
   servingUnit: () => string;
+  /** Visually hidden accessible name of the quantity number field (task 34, ISSUE-010). */
+  quantityLabel: () => string;
+  /** Visually hidden accessible name of the quantity unit selector (task 34, ISSUE-010). */
+  unitLabel: () => string;
+  /** Plural selector option label of the Serving unit (task 34, ISSUE-010). */
+  servingsLabel: () => string;
+  /** Localized field message of an invalid committed quantity (task 34, REQ-026, ISSUE-010). */
+  invalidQuantityMessage: () => string;
+  /** Polite busy announcement of the initial new Search summary (task 34, ISSUE-010). */
+  loadingNutritionValues: () => string;
+  /** Polite busy announcement of a pending quantity recalculation (task 34, ISSUE-010). */
+  updatingQuantities: () => string;
   /** Visible label of the protein macronutrient row on a result card (task 29, ISSUE-008). */
   proteinLabel: () => string;
   /** Visible label of the carbohydrate macronutrient row on a result card (task 29, ISSUE-008). */
@@ -58,6 +70,12 @@ const en = {
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
+  quantityLabel: () => "Quantity",
+  unitLabel: () => "Unit",
+  servingsLabel: () => "servings",
+  invalidQuantityMessage: () => "Enter a valid quantity.",
+  loadingNutritionValues: () => "Loading nutrition values",
+  updatingQuantities: () => "Updating quantities",
   proteinLabel: () => "Protein",
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
@@ -73,6 +91,12 @@ const pl = {
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",
+  quantityLabel: () => "Ilość",
+  unitLabel: () => "Jednostka",
+  servingsLabel: () => "porcje",
+  invalidQuantityMessage: () => "Wpisz prawidłową ilość.",
+  loadingNutritionValues: () => "Ładowanie wartości odżywczych",
+  updatingQuantities: () => "Aktualizowanie ilości",
   proteinLabel: () => "Białko",
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
