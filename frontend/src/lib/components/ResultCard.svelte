@@ -34,6 +34,13 @@
    * (ARCH-015, REQ-011). The card image carries empty alternative text
    * because the adjacent card heading names the same Food Object, and a
    * failed image source resets to the same bundled placeholder.
+   *
+   * While a valid quantity recalculation is pending (task 34, ISSUE-010)
+   * the `pending` prop replaces every quantity-dependent value — Matched
+   * Quantity, protein, carbohydrate, and fat — with one aria-hidden `16px`
+   * spinner, while the name, image, labels, and quantity-independent
+   * similarity stay visible. The card never calculates or rerounds a
+   * nutrition value in either state (REQ-040).
    */
 
   interface Props {
@@ -41,9 +48,17 @@
     item: SubstituteItem;
     /** The Interface Language captured by the search (ISSUE-008). */
     language: InterfaceLanguage;
+    /**
+     * Whether a valid quantity recalculation is pending (task 34,
+     * ISSUE-010): while set, every quantity-dependent card value —
+     * Matched Quantity, protein, carbohydrate, and fat — is replaced by an
+     * aria-hidden `16px` spinner, while the name, image, labels, and
+     * quantity-independent similarity stay visible.
+     */
+    pending?: boolean;
   }
 
-  let { item, language }: Props = $props();
+  let { item, language, pending = false }: Props = $props();
 
   /** The dictionary of the captured language for the card's visible labels. */
   const dictionary = $derived(getDictionary(language));
@@ -87,7 +102,15 @@
       data-result-card-matched-quantity
       class="font-data text-sm text-dark-text-primary"
     >
-      {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
+      {#if pending}
+        <span
+          data-value-spinner
+          aria-hidden="true"
+          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+        ></span>
+      {:else}
+        {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
+      {/if}
     </p>
     <dl class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
@@ -95,7 +118,15 @@
           {dictionary.proteinLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.protein, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(item.macronutrients.protein, language)}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">
@@ -103,7 +134,18 @@
           {dictionary.carbohydratesLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.carbohydrate, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(
+              item.macronutrients.carbohydrate,
+              language,
+            )}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">
@@ -111,7 +153,15 @@
           {dictionary.fatLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.fat, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(item.macronutrients.fat, language)}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">

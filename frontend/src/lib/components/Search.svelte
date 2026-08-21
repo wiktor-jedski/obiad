@@ -315,13 +315,14 @@
   /**
    * Pointer activation of one suggestion (task 28, REQ-020, REQ-077):
    * captures the exact returned Food Object — stable ID, both localized
-   * names, returned default Food Quantity, and active Interface Language —
-   * replaces the Search Query with the returned active-language name, and
+   * names, returned default Food Quantity, returned allowed quantity-editor
+   * units (task 34, ISSUE-010), and active Interface Language — replaces
+   * the Search Query with the returned active-language name, and
    * transitions to `loadingNew`. The transition closes suggestions while
    * Search keeps focus and starts exactly one page-0 Substitution Search
-   * with the unchanged default quantity. Task 31's Enter key selects through
-   * this same transition, so keyboard and pointer activation are identical
-   * (REQ-019, REQ-020).
+   * with the unchanged default quantity. Task 31's Enter key selects
+   * through this same transition, so keyboard and pointer activation are
+   * identical (REQ-019, REQ-020).
    */
   function selectSuggestion(item: FoodSuggestion): void {
     suggestionIntent = false;
@@ -329,6 +330,7 @@
       foodObjectId: item.foodObjectId,
       names: item.names,
       quantity: item.defaultQuantity,
+      allowedQuantities: item.allowedQuantities,
       capturedLanguage: language,
     });
   }
