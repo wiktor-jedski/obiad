@@ -438,12 +438,13 @@ func strictFloat64(number json.Number, field string) (float64, error) {
 
 // substituteResponse maps the domain page returned by the Find Substitute
 // Page Module to the generated OpenAPI response envelope at the HTTP
-// boundary (ARCH-008, ISSUE-005): the echoed page index, the total eligible
-// count, hasMore, and zero to three items, each with the stable positive
-// Food Object ID, both required localized names, the optional image key
-// (omitted when the Food Object has no image, never null), the whole
-// Matched Quantity in the candidate base unit, the scaled macronutrients,
-// and the whole similarity percentage, and no unknown fields.
+// boundary (ARCH-008, ISSUE-005, ISSUE-010): the echoed page index, the
+// total eligible count, hasMore, the input macronutrients at the committed
+// quantity, and zero to three items, each with the stable positive Food
+// Object ID, both required localized names, the optional image key (omitted
+// when the Food Object has no image, never null), the whole Matched
+// Quantity in the candidate base unit, the scaled macronutrients, and the
+// whole similarity percentage, and no unknown fields.
 func substituteResponse(page *repository.Page) transport.SubstituteSearchResponse {
 	items := make([]transport.SubstituteItem, 0, len(page.Items))
 	for _, item := range page.Items {
@@ -470,6 +471,11 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 		PageIndex:          page.PageIndex,
 		TotalEligibleCount: int32(page.TotalEligibleCount),
 		HasMore:            page.HasMore,
-		Items:              items,
+		InputMacronutrients: transport.Macronutrients{
+			Protein:      page.InputMacronutrients.Protein,
+			Carbohydrate: page.InputMacronutrients.Carbohydrate,
+			Fat:          page.InputMacronutrients.Fat,
+		},
+		Items: items,
 	}
 }

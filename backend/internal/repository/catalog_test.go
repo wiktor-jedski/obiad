@@ -291,7 +291,10 @@ func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 // States, Macro Profiles, optional Servings, Food Family membership, and
 // image keys, executes exactly one embedded SELECT and no mutating statement
 // per load, and classifies real storage and catalog-invariant failures
-// without a cache or automatic retry.
+// without a cache or automatic retry. The catalog-invariant cases include
+// the ISSUE-010 Serving boundary (task-33 repair): a stored Serving whose
+// whole-number allowed maximum of 100000 divided by it is zero or beyond the
+// int32 display range is a catalog-invariant failure.
 func TestCatalogLoaderIntegration(t *testing.T) {
 	db := testdb.NewDB(t)
 	runDBSetupCommand(t, db.OwnerURL)
@@ -321,6 +324,48 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	tracer.assertSingleSelect(t, wantSQL)
 	assertIssue002Catalog(t, objects)
 
+	// Serving-boundary invariant failures (task-33 repair): the DB Serving
+	// constraint accepts any positive finite value, but the ARCH-013 catalog
+	// invariant additionally requires the whole-number allowed maximum (the
+	// floor of 100000 divided by the stored Serving base quantity) to be a
+	// positive value that fits the generated int32 display range. A valid
+	// stored Serving above 100000 has an exact floor of zero, and a tiny
+	// positive Serving has a floor beyond MaxInt32; both must fail the load
+	// as catalog-invariant failures after exactly one SELECT and no
+	// mutating statement — the loader can never hand a zero or
+	// int32-wrapping maximum to the allowed-quantity derivation or the HTTP
+	// Adapter. Each boundary row is deleted after its assertion so the
+	// later permanent invariant fixtures below fail at their own row.
+	servingBoundaryCases := []struct {
+		name    string
+		id      int32
+		serving float64
+	}{
+		{"Serving above 100000", 40, 200000},
+		{"Serving with quotient beyond int32 range", 41, 1e-5},
+	}
+	var catalogErr *loadError
+	for _, tc := range servingBoundaryCases {
+		if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES ($1, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'solid', 1, 0, 0, $2)`, tc.id, tc.serving); err != nil {
+			t.Fatalf("insert %s fixture row: %v", tc.name, err)
+		}
+		tracer.reset()
+		_, err = loader.load(ctx)
+		if !errors.As(err, &catalogErr) {
+			t.Fatalf("Load with %s row: want classified *loadError, got %v", tc.name, err)
+		}
+		if catalogErr.kind != kindInvariant {
+			t.Fatalf("%s row classified as %s, want %s (cause: %v)", tc.name, catalogErr.kind, kindInvariant, catalogErr.err)
+		}
+		if !strings.Contains(catalogErr.err.Error(), "100000") {
+			t.Fatalf("%s row did not reach the serving-maximum invariant validation: %v", tc.name, catalogErr.err)
+		}
+		tracer.assertSingleSelect(t, wantSQL)
+		if _, err := owner.Exec(ctx, "DELETE FROM food_objects WHERE id = $1", tc.id); err != nil {
+			t.Fatalf("delete %s fixture row: %v", tc.name, err)
+		}
+	}
+
 	// Catalog-invariant failure: the schema owner drops the Macro Profile
 	// "not all zero" constraint and inserts a row whose Macro Profile is all
 	// zero. PostgreSQL accepts the row, but it violates the ARCH-013 catalog
@@ -335,7 +380,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	tracer.reset()
 	_, err = loader.load(ctx)
-	var catalogErr *loadError
 	if !errors.As(err, &catalogErr) {
 		t.Fatalf("Load with an all-zero Macro Profile row: want classified *loadError, got %v", err)
 	}

@@ -58,8 +58,8 @@ paths:
             Levenshtein distance, active-language collation, and stable Food
             Object ID. The response envelope has exactly five items and no
             unknown fields; every item carries the stable positive Food Object
-            ID, both required localized names, and the backend-derived default
-            Food Quantity.
+            ID, both required localized names, the backend-derived default
+            Food Quantity, and the allowed quantity-editor units.
           content:
             application/json:
               schema:
@@ -145,10 +145,12 @@ paths:
           description: >
             The first page of display-ready Substitutes: the echoed page
             index, the total number of eligible Substitutes, whether a later
-            page exists, and zero to three unique items with stable Food
-            Object IDs, both localized names, the optional image key, the
-            whole Matched Quantity, the scaled macronutrients, and the whole
-            similarity percentage. The envelope has no unknown fields.
+            page exists, the backend-derived macronutrients of the
+            Substitution Input at the committed quantity, and zero to three
+            unique items with stable Food Object IDs, both localized names,
+            the optional image key, the whole Matched Quantity, the scaled
+            macronutrients, and the whole similarity percentage. The envelope
+            has no unknown fields.
           content:
             application/json:
               schema:
@@ -249,13 +251,15 @@ components:
             $ref: "#/components/schemas/FoodSuggestion"
     FoodSuggestion:
       description: >
-        One suggested Food Object with its stable ID, both localized names, and
-        the backend-derived default Food Quantity.
+        One suggested Food Object with its stable ID, both localized names, the
+        backend-derived default Food Quantity, and the allowed quantity-editor
+        units. The item has no unknown fields.
       type: object
       required:
         - foodObjectId
         - names
         - defaultQuantity
+        - allowedQuantities
       additionalProperties: false
       properties:
         foodObjectId:
@@ -267,6 +271,22 @@ components:
           $ref: "#/components/schemas/LocalizedNames"
         defaultQuantity:
           $ref: "#/components/schemas/FoodQuantity"
+        allowedQuantities:
+          description: >
+            The allowed quantity-editor units, default first: one or two
+            unique closed objects. A Food Object without a Serving exposes
+            only its `g` or `ml` base unit with maximum `100000`. A Food
+            Object with a Serving exposes `serving` first with the whole-
+            number floor of `100000` divided by its stored Serving base
+            quantity, then its `g` or `ml` base unit with maximum `100000`.
+            The Physical State and the stored Serving quantity are never
+            exposed.
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/AllowedQuantity"
     LocalizedNames:
       description: >
         The localized Food Object names carried by the transport. Both the
@@ -310,6 +330,38 @@ components:
             - serving
             - g
             - ml
+    AllowedQuantity:
+      description: >
+        One allowed quantity-editor unit of a suggested Food Object with its
+        positive whole maximum value (ISSUE-010). The default unit is first.
+        A Food Object without a Serving exposes only its `g` or `ml` base
+        unit with maximum `100000`. A Food Object with a Serving exposes
+        `serving` first with the maximum equal to the whole-number floor of
+        `100000` divided by its stored Serving base quantity, then its `g` or
+        `ml` base unit with maximum `100000`. The Physical State and the
+        stored Serving quantity are never exposed.
+      type: object
+      required:
+        - unit
+        - maximumValue
+      additionalProperties: false
+      properties:
+        unit:
+          description: "The quantity-editor unit: `serving`, `g`, or `ml`."
+          type: string
+          enum:
+            - serving
+            - g
+            - ml
+        maximumValue:
+          description: >
+            The largest accepted value of this unit. Positive whole 32-bit
+            integer: `100000` for the base unit, and the whole-number floor
+            of `100000` divided by the stored Serving base quantity for
+            `serving`.
+          type: integer
+          format: int32
+          minimum: 1
     SubstituteSearchRequest:
       description: >
         The closed Substitution Search request: the positive Food Object ID of
@@ -379,13 +431,16 @@ components:
     SubstituteSearchResponse:
       description: >
         The closed page-0 response: the echoed page index, the total number of
-        eligible Substitutes, whether a later page exists, and zero to three
-        unique display-ready items. The envelope has no unknown fields.
+        eligible Substitutes, whether a later page exists, the backend-derived
+        macronutrients of the Substitution Input at the committed quantity,
+        and zero to three unique display-ready items. The envelope has no
+        unknown fields.
       type: object
       required:
         - pageIndex
         - totalEligibleCount
         - hasMore
+        - inputMacronutrients
         - items
       additionalProperties: false
       properties:
@@ -406,6 +461,12 @@ components:
             Whether a page after page 0 exists. True only when more than three
             Substitutes are eligible.
           type: boolean
+        inputMacronutrients:
+          description: >
+            The protein, carbohydrate, and fat of the Substitution Input at
+            the committed Food Quantity, rounded to 0.1 g by the same backend
+            display projection as the result cards (ISSUE-010).
+          $ref: "#/components/schemas/Macronutrients"
         items:
           description: The first page of zero to three unique display-ready Substitutes.
           type: array
@@ -479,8 +540,12 @@ components:
             - ml
     Macronutrients:
       description: >
-        The protein, carbohydrate, and fat of the Substitute scaled to the
-        Matched Quantity and rounded to 0.1 g. Every value is nonnegative.
+        The protein, carbohydrate, and fat of one display-ready quantity,
+        rounded to 0.1 g by the backend projection. The result-card values
+        are the Substitute macronutrients scaled to the Matched Quantity;
+        the response-level inputMacronutrients are the Substitution Input
+        macronutrients at the committed quantity. Every value is
+        nonnegative.
       type: object
       required:
         - protein
@@ -489,17 +554,17 @@ components:
       additionalProperties: false
       properties:
         protein:
-          description: The scaled protein amount in grams. Nonnegative double.
+          description: The protein amount in grams. Nonnegative double.
           type: number
           format: double
           minimum: 0
         carbohydrate:
-          description: The scaled carbohydrate amount in grams. Nonnegative double.
+          description: The carbohydrate amount in grams. Nonnegative double.
           type: number
           format: double
           minimum: 0
         fat:
-          description: The scaled fat amount in grams. Nonnegative double.
+          description: The fat amount in grams. Nonnegative double.
           type: number
           format: double
           minimum: 0

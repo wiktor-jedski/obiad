@@ -222,12 +222,24 @@ func writeError(c fiber.Ctx, status int, code transport.ErrorCode, field *transp
 
 // suggestionsResponse maps the domain suggestions returned by the Suggest
 // Module to the generated OpenAPI response envelope at the HTTP boundary
-// (ARCH-008, ISSUE-004): exactly five items, each with the stable positive
-// Food Object ID, both required localized names, and the backend-derived
-// default Food Quantity, and no unknown fields.
+// (ARCH-008, ISSUE-004, ISSUE-010): exactly five items, each with the stable
+// positive Food Object ID, both required localized names, the backend-
+// derived default Food Quantity, and the allowed quantity-editor units, and
+// no unknown fields.
 func suggestionsResponse(suggestions []repository.Suggestion) transport.FoodSuggestionsResponse {
 	items := make([]transport.FoodSuggestion, 0, len(suggestions))
 	for _, suggestion := range suggestions {
+		allowed := make([]transport.AllowedQuantity, 0, len(suggestion.AllowedQuantities))
+		for _, quantity := range suggestion.AllowedQuantities {
+			// The Catalog Loader validates the ARCH-013 Serving invariant
+			// before any suggestion is ranked, so every maximum value is a
+			// positive whole number no larger than the int32 display range
+			// and this conversion can never wrap (task-33 repair).
+			allowed = append(allowed, transport.AllowedQuantity{
+				Unit:         transport.AllowedQuantityUnit(quantity.Unit),
+				MaximumValue: int32(quantity.MaximumValue),
+			})
+		}
 		items = append(items, transport.FoodSuggestion{
 			FoodObjectId: suggestion.FoodObjectID,
 			Names: transport.LocalizedNames{
@@ -238,6 +250,7 @@ func suggestionsResponse(suggestions []repository.Suggestion) transport.FoodSugg
 				Value: float64(suggestion.DefaultQuantity.Value),
 				Unit:  transport.FoodQuantityUnit(suggestion.DefaultQuantity.Unit),
 			},
+			AllowedQuantities: allowed,
 		})
 	}
 	return transport.FoodSuggestionsResponse{Items: items}
