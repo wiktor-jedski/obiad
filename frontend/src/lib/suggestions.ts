@@ -14,12 +14,17 @@
  * stale superseded query is garbage-collected immediately, its in-flight
  * browser request is aborted, and because every query key carries the query
  * text and language, neither an aborted request nor an out-of-order response
- * can replace the list rendered for the latest key. No normalized-empty
- * validation and no suggestion failure UI belong to this slice (Phase 9,
- * task 27 scope).
+ * can replace the list rendered for the latest key. Task 32 (Phase 9,
+ * REQ-021, ISSUE-009) gates the enabled condition on the ARCH-017
+ * normalization contract through `isNormalizedEmptySearchQuery`: a draft
+ * that normalizes to empty — including Go-compatible Unicode whitespace
+ * such as `U+0085` NEXT LINE — enables no suggestion request, while the
+ * exact raw value stays in the interaction state and the field unchanged.
+ * No suggestion failure UI belongs to this slice.
  */
 import { createQuery, keepPreviousData } from "@tanstack/svelte-query";
 import { client } from "../client/client.gen";
+import { isNormalizedEmptySearchQuery } from "./searchQuery";
 import type {
   FoodSuggestionsResponse,
   GetFoodSuggestionsData,
@@ -76,14 +81,19 @@ export interface SuggestionsQueryInput {
 /**
  * Creates the TanStack Query that owns the live suggestion list (ARCH-010,
  * ARCH-019). The query is enabled only while the Search field is focused,
- * contains nonempty text, and the Search control has an active suggestion
- * intent; it is keyed by the Search Query and the active Interface Language.
- * The last visible response remains as placeholder rows while the next key
- * loads, which keeps the dropdown mounted without suppressing or reusing the
- * fresh request. The query function passes TanStack Query's `AbortSignal`
- * through to the generated client; automatic retry and successful-response
- * reuse are disabled; and window focus never triggers a suggestion refetch,
- * so only genuine query or focus intents start requests.
+ * contains text that is nonempty after the ARCH-017 normalization contract
+ * (task 32, REQ-021, ISSUE-009), and the Search control has an active
+ * suggestion intent; it is keyed by the Search Query and the active
+ * Interface Language. A normalized-empty draft — for example ASCII spaces
+ * or Go-compatible Unicode whitespace such as `U+0085` NEXT LINE — enables
+ * no request, while the exact raw value stays unchanged in the interaction
+ * state and the field. The last visible response remains as placeholder
+ * rows while the next key loads, which keeps the dropdown mounted without
+ * suppressing or reusing the fresh request. The query function passes
+ * TanStack Query's `AbortSignal` through to the generated client;
+ * automatic retry and successful-response reuse are disabled; and window
+ * focus never triggers a suggestion refetch, so only genuine query or
+ * focus intents start requests.
  *
  * @param input - the reactive query, focus, language, and intent accessors
  * @returns the TanStack Query result owning the HTTP data and pending state
@@ -101,7 +111,10 @@ export function createSuggestionsQuery(input: SuggestionsQueryInput) {
         language: input.language(),
         signal,
       }),
-    enabled: input.active() && input.focused() && input.query().length > 0,
+    enabled:
+      input.active() &&
+      input.focused() &&
+      !isNormalizedEmptySearchQuery(input.query()),
     placeholderData: keepPreviousData,
     retry: false,
     gcTime: 0,
