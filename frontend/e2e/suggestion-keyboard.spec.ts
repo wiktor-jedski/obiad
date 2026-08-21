@@ -284,7 +284,7 @@ test.describe("suggestion keyboard control", () => {
     await search.press("Enter");
 
     await expect(page.getByRole("listbox")).toHaveCount(0);
-    await expect(search).toHaveValue("chicken");
+    await expect(search).toHaveValue("Polish chicken soup");
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("main")).toHaveAttribute(

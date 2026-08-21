@@ -284,6 +284,7 @@ Phases 4 and 6.
 - Abort stale suggestion requests.
 - Prevent stale responses from changing the list.
 - Select a suggestion with a pointer.
+- Replace the Search Query text with the selected suggestion's active-language name before starting the search.
 - Send page 0 with the returned default Food Quantity.
 - Show the new-search spinner below the Search control.
 - Show the selected Substitution Input.
@@ -314,6 +315,7 @@ Phases 4 and 6.
 - [REQ-046](../requirements/requirements.md#req-046--search-spinner)
 - [REQ-061](../requirements/requirements.md#req-061--result-state-layout)
 - [REQ-064](../requirements/requirements.md#req-064--search-focus)
+- [REQ-077](../requirements/requirements.md#req-077--selected-suggestion-in-search)
 
 Recheck REQ-039 and REQ-040 on rendered cards.
 

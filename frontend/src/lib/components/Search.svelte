@@ -48,12 +48,13 @@
    *
    * Task 28 adds the pointer-selection and new-search transition: a click
    * or tap on any option selects that exact returned Food Object without
-   * moving focus from Search, closes the suggestion list, retains the
+   * moving focus from Search, closes the suggestion list, replaces the
+   * Search Query with the selected active-language name, retains the
    * selected localized names and returned default Food Quantity as the
    * read-only Substitution Input, and starts exactly one generated-client
    * `POST /api/v1/substitutes/search` operation with that `foodObjectId`,
    * the unchanged default quantity, and `pageIndex: 0` (REQ-020, REQ-022,
-   * REQ-023, REQ-024). After completed results, draft typing keeps the
+   * REQ-023, REQ-024, REQ-077). After completed results, draft typing keeps
    * committed selected input and cards visible and overlays fresh
    * suggestions; selecting one suggestion is the commit boundary that
    * replaces the prior result. The interaction-state union gains only the
@@ -274,14 +275,15 @@
   }
 
   /**
-   * Pointer activation of one suggestion (task 28, REQ-020): captures the
-   * exact returned Food Object — stable ID, both localized names, the
-   * returned default Food Quantity, and the active Interface Language — and
-   * transitions the interaction state to `loadingNew`, which closes the
-   * suggestion list while Search keeps focus and starts exactly one page-0
-   * Substitution Search with the unchanged default quantity. Task 31's
-   * Enter key selects through this same transition, so keyboard and pointer
-   * activation are identical (REQ-019, REQ-020).
+   * Pointer activation of one suggestion (task 28, REQ-020, REQ-077):
+   * captures the exact returned Food Object — stable ID, both localized
+   * names, returned default Food Quantity, and active Interface Language —
+   * replaces the Search Query with the returned active-language name, and
+   * transitions to `loadingNew`. The transition closes suggestions while
+   * Search keeps focus and starts exactly one page-0 Substitution Search
+   * with the unchanged default quantity. Task 31's Enter key selects through
+   * this same transition, so keyboard and pointer activation are identical
+   * (REQ-019, REQ-020).
    */
   function selectSuggestion(item: FoodSuggestion): void {
     suggestionIntent = false;

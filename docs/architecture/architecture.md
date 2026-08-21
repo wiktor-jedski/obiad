@@ -174,7 +174,7 @@ An error response contains a stable `code` and an optional `field`. It never con
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-012–REQ-013, REQ-018–REQ-020, REQ-022–REQ-024 |
+| Requirements | REQ-012–REQ-013, REQ-018–REQ-020, REQ-022–REQ-024, REQ-077 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-004, ARCH-006, ARCH-008, ARCH-017 |
 
 **Responsibility:** Resolve typed Search Queries into selectable Food Object suggestions.
@@ -183,7 +183,7 @@ An error response contains a stable `code` and an optional `field`. It never con
 
 **Runtime behavior:** A focused nonempty Search Query starts a suggestion request. A later query change aborts the stale browser request. Only the latest response can update suggestions. Fiber can continue stale backend work until its deadline because a browser disconnect does not cancel a Fiber handler. The first returned item becomes active. Arrow keys move the active item. Escape closes the list. Tab moves focus. Enter or pointer activation selects the active Food Object.
 
-Selection sends the returned default Food Quantity to the Substitution Search operation and uses page index `0`. A normalized empty Search Query starts no request and uses the localized input message.
+Selection replaces the Search Query with the exact returned selected name for the active Interface Language, sends the returned default Food Quantity to the Substitution Search operation, and uses page index `0`. A normalized empty Search Query starts no request and uses the localized input message.
 
 ## ARCH-011 — Substitution Search Collaboration
 
@@ -486,3 +486,4 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
+| REQ-077 | ARCH-002, ARCH-003, ARCH-010 |

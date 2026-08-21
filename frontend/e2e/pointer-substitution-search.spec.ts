@@ -304,12 +304,12 @@ test.describe("pointer substitution search", () => {
     await expect(options.nth(2)).toHaveText("Polish chicken soup");
     await expect(options.nth(2)).toHaveAttribute("id", optionId(17));
     await options.nth(2).click();
-
-    // The suggestion list closes while Search keeps focus and text; the
-    // interaction state moves to the loadingNew transition and then to
-    // results when the page-0 response arrives (ARCH-002, ARCH-010).
+    // The suggestion list closes while Search keeps focus and replaces the
+    // unfinished query with the selected active-language name; the
+    // interaction state moves through loadingNew to results (ARCH-002,
+    // ARCH-010, REQ-077).
     await expect(page.getByRole("listbox")).toHaveCount(0);
-    await expect(search).toHaveValue("chicken");
+    await expect(search).toHaveValue("Polish chicken soup");
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("main")).toHaveAttribute(
@@ -561,6 +561,7 @@ test.describe("pointer substitution search", () => {
       observedDefaults,
     );
     await expectSelectedInput(page, COPY.pl, "Mleko · 100 ml");
+    await expect(search).toHaveValue("Mleko");
 
     // The captured Polish value survives an Interface Language switch back
     // to English; only the label follows the dictionary (ISSUE-008).

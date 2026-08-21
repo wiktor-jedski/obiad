@@ -36,7 +36,7 @@ const SELECTED: SelectedFoodObject = {
 } as const;
 
 describe("the pointer-selection and new-search transitions", () => {
-  test("a pointer selection transitions the empty state to loadingNew and retains the exact selected Food Object", () => {
+  test("a pointer selection replaces the query with the active-language name and transitions to loadingNew", () => {
     const store = createInteractionState();
     store.setQuery("chicken");
     store.setFocused(true);
@@ -49,7 +49,7 @@ describe("the pointer-selection and new-search transitions", () => {
     });
     expect(state).toEqual({
       name: "loadingNew",
-      query: "chicken",
+      query: "Butter",
       focused: true,
       selected: SELECTED,
     });
@@ -67,7 +67,7 @@ describe("the pointer-selection and new-search transitions", () => {
       state = { ...next };
     });
     expect(state.name).toBe("results");
-    expect(state.query).toBe("chicken");
+    expect(state.query).toBe("Butter");
     expect(state.selected).toEqual(SELECTED);
     // The Module never copies query results into the store (ARCH-002).
     expect("items" in state).toBe(false);
@@ -92,7 +92,7 @@ describe("the pointer-selection and new-search transitions", () => {
       state = { ...next };
     });
     expect(state.name).toBe("zeroResults");
-    expect(state.query).toBe("chicken");
+    expect(state.query).toBe("Butter");
     expect(state.selected).toEqual(SELECTED);
     expect(Object.keys(state).sort()).toEqual([
       "focused",
@@ -143,7 +143,7 @@ describe("the pointer-selection and new-search transitions", () => {
     });
     expect(state).toEqual({
       name: "loadingNew",
-      query: "milk",
+      query: "Mleko",
       focused: false,
       selected: nextSelected,
     });

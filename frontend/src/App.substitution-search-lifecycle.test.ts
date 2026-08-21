@@ -254,6 +254,7 @@ describe("the Substitution Search lifecycle", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
+      expect((search as HTMLInputElement).value).toBe("Food 6");
 
       await fireEvent.input(search, { target: { value: "olive" } });
       await settle();
@@ -276,6 +277,7 @@ describe("the Substitution Search lifecycle", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
+      expect((search as HTMLInputElement).value).toBe("Food 11");
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;

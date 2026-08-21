@@ -763,3 +763,13 @@ This document is the source of truth for the active product requirements of the 
 | Type | Behavior |
 | Status | Active |
 | Verification | API integration test: exact, full-name-prefix, substring, and fallback fixtures appear in tier order; within-tier distance and tie fixtures use the specified deterministic order; Polish query `ows` ranks `Owsianka` first. |
+
+## REQ-077 — Selected suggestion in Search
+
+**Statement:** WHEN the user selects a suggestion with Enter, click, or tap, the system shall replace the Search Query text with that suggestion's name in the active Interface Language before it starts the Substitution Search.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: Keyboard and pointer selection replace unfinished Search Query text with the exact returned English or Polish selected name before one Substitution Search starts. |
