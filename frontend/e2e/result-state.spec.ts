@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Real-stack result-state composition scenario (task 30; ARCH-001,
  * ARCH-002, ARCH-003, ARCH-011, ARCH-019, ARCH-020, ARCH-022, REQ-003,
- * REQ-044, REQ-061, ISSUE-008; P07-G1, P07-G3, P07-G4, P07-G16).
+ * REQ-044, REQ-061, REQ-062, ISSUE-008; P07-G1, P07-G3, P07-G4, P07-G16).
  *
  * `bun run test:e2e` runs these tests against the complete disposable stack
  * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
@@ -17,10 +17,10 @@ import { expect, test, type Page } from "@playwright/test";
  * and result regions in that order; the Search field's top edge `96px`
  * from the viewport top; the approved vertical gaps (the new-search
  * spinner `12px` below Search while pending, then the selected-input and
- * result regions at `24px` intervals); the three result cards in one
- * column with Search geometrically above every card; and every food-data
- * request on the Vite origin under `/api` against the seeded PostgreSQL
- * catalog (REQ-002, REQ-003, REQ-044, REQ-061).
+ * result regions at `24px` intervals); the three result cards in three
+ * equal desktop columns with Search geometrically above every card; and
+ * every food-data request on the Vite origin under `/api` against the
+ * seeded PostgreSQL catalog (REQ-002, REQ-003, REQ-044, REQ-061, REQ-062).
  */
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -106,12 +106,12 @@ async function expectEmptyStateGeometry(page: Page): Promise<void> {
 }
 
 /**
- * Asserts the result-state region composition and geometry: one primary
- * column with the distinct Search, selected-input, and result regions in
- * that order; the Search field's top edge `96px` from the viewport top;
- * the `24px` vertical gaps between the regions; exactly three cards in one
- * column; and Search geometrically above every card (REQ-003, REQ-061,
- * ISSUE-008).
+ * Asserts the desktop result-state region composition and geometry: one
+ * primary column with the distinct Search, selected-input, and result
+ * regions in that order; the Search field's top edge `96px` from the
+ * viewport top; the `24px` vertical gaps between the regions; exactly
+ * three cards in three equal columns; and Search geometrically above every
+ * card (REQ-003, REQ-061, REQ-062, ISSUE-008).
  */
 async function expectResultStateComposition(page: Page): Promise<void> {
   // One semantic primary content column (REQ-003, ARCH-001).
@@ -169,8 +169,9 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     "the result region is 24px below the selected-input region",
   ).toBeLessThanOrEqual(1);
 
-  // A successful three-item page renders exactly the three result cards,
-  // stacked in one column in ranked order (REQ-036, ISSUE-008).
+  // A successful three-item page renders exactly three equal card columns
+  // in ranked left-to-right order at the desktop viewport (REQ-036,
+  // REQ-062).
   const cards = page.locator("[data-result-card]");
   await expect(cards).toHaveCount(CARD_COUNT);
   const cardBoxes = (await Promise.all(
@@ -180,17 +181,17 @@ async function expectResultStateComposition(page: Page): Promise<void> {
   )) as Array<{ x: number; y: number; width: number; height: number }>;
   for (let index = 1; index < CARD_COUNT; index += 1) {
     expect(
-      Math.abs(cardBoxes[index].x - cardBoxes[0].x),
-      `card ${index + 1} stays in the one card column`,
+      Math.abs(cardBoxes[index].y - cardBoxes[0].y),
+      `card ${index + 1} stays in the desktop card row`,
     ).toBeLessThanOrEqual(1);
     expect(
       Math.abs(cardBoxes[index].width - cardBoxes[0].width),
     ).toBeLessThanOrEqual(1);
     expect(
-      cardBoxes[index].y,
-      `card ${index + 1} is stacked below card ${index}`,
+      cardBoxes[index].x,
+      `card ${index + 1} is after card ${index}`,
     ).toBeGreaterThanOrEqual(
-      cardBoxes[index - 1].y + cardBoxes[index - 1].height,
+      cardBoxes[index - 1].x + cardBoxes[index - 1].width,
     );
   }
 
@@ -204,12 +205,13 @@ async function expectResultStateComposition(page: Page): Promise<void> {
 }
 
 test.describe("result state", () => {
-  test("the complete anonymous pointer flow composes one primary column with distinct Search, selected-input, and result regions in order; Search sits 96px from the viewport top; the regions use the approved gaps; the three cards stay in one column above Search; and every food-data request uses /api against the seeded catalog", async ({
+  test("the complete anonymous pointer flow composes one primary column with distinct Search, selected-input, and result regions in order; Search sits 96px from the viewport top; the regions use the approved gaps; the three cards use equal desktop columns below Search; and every food-data request uses /api against the seeded catalog", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     const requestUrls: string[] = [];
     page.on("request", (request) => requestUrls.push(request.url()));
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.goto("/");
 
@@ -225,8 +227,8 @@ test.describe("result state", () => {
     // The complete anonymous pointer flow (REQ-001, REQ-020, REQ-022).
     await selectPizzaMargherita(page);
 
-    // The result-state composition and geometry (REQ-003, REQ-061,
-    // ISSUE-008, P07-G3, P07-G4).
+    // The desktop result-state composition and geometry (REQ-003, REQ-061,
+    // REQ-062, ISSUE-008, P07-G3, P07-G4).
     await expectResultStateComposition(page);
 
     // REQ-002: every food-data request stays on the Vite origin under

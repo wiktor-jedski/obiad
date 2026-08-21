@@ -28,16 +28,16 @@
    * to `results` when the page contains items and to `zeroResults` when it
    * is empty.
    *
-   * A successful three-item page renders exactly the three result cards,
-   * stacked in one column in ranked order; a successful empty page renders
-   * no cards and exactly the localized zero-result message `No substitutes
-   * found` or `Nie znaleziono zamienników` (REQ-044). The message follows
-   * the active Interface Language dictionary — it is interface text, not
-   * captured active content (ARCH-003) — while every card is frozen to the
-   * Interface Language captured by the search (ISSUE-008). The later
-   * responsive-presentation phase owns the final one-versus-three-column
-   * behavior; there is no Food Quantity edit, MORE!, failure state, result
-   * announcement, or card motion here.
+   * A successful three-item page renders exactly the three result cards in
+   * ranked order. The cards use one column from 320px through 1023px and
+   * three equal columns from 1024px (REQ-062). A successful empty page
+   * renders no cards and exactly the localized zero-result message `No
+   * substitutes found` or `Nie znaleziono zamienników` (REQ-044). The
+   * message follows the active Interface Language dictionary — it is
+   * interface text, not captured active content (ARCH-003) — while every
+   * card is frozen to the Interface Language captured by the search
+   * (ISSUE-008). There is no Food Quantity edit, MORE!, failure state,
+   * result announcement, or card motion here.
    */
 
   /** The current discriminated interaction state (ARCH-002). */
@@ -82,16 +82,15 @@
 {#if state.name === "results" && substitutionSearch.data !== undefined}
   <!--
     Result-card region (task 30; ARCH-001, ARCH-020, ARCH-022, REQ-036,
-    REQ-037, REQ-061): the successful page-0 response renders exactly its
-    zero-to-three display-ready Substitutes as one card per item, stacked
-    in one column in ranked order at `24px` below the selected-input
-    region. Each card consumes one generated `SubstituteItem` and the
-    Interface Language captured by the search (ISSUE-008); TanStack Query
-    continues to own the response data and the store receives only the
-    outcome (ARCH-002). The later responsive-presentation phase owns the
-    final one-versus-three-column behavior.
+    REQ-037, REQ-061, REQ-062): the successful page-0 response renders
+    exactly its zero-to-three display-ready Substitutes in ranked order at
+    `24px` below the selected-input region. The layout has one card column
+    below 1024px and three equal columns from 1024px. Each card consumes one
+    generated `SubstituteItem` and the Interface Language captured by the
+    search (ISSUE-008); TanStack Query continues to own the response data
+    and the store receives only the outcome (ARCH-002).
   -->
-  <div data-result-region class="mt-6 flex flex-col gap-3">
+  <div data-result-region class="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
     {#each substitutionSearch.data.items as item (item.foodObjectId)}
       <ResultCard {item} language={state.selected.capturedLanguage} />
     {/each}
