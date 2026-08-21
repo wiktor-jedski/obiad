@@ -50,19 +50,22 @@
    * or tap on any option selects that exact returned Food Object without
    * moving focus from Search, closes the suggestion list, retains the
    * selected localized names and returned default Food Quantity as the
-   * starts exactly one generated-client
+   * read-only Substitution Input, and starts exactly one generated-client
    * `POST /api/v1/substitutes/search` operation with that `foodObjectId`,
    * the unchanged default quantity, and `pageIndex: 0` (REQ-020, REQ-022,
-   * REQ-023, REQ-024). The interaction-state union gains only the required
-   * `loadingNew`, `results`, and `zeroResults` transitions; TanStack Query
-   * continues to own response data and pending state, and the new-search
-   * spinner shows `12px` below the Search field for the complete pending
-   * interval (REQ-046), after which Search keeps focus (REQ-064). The
-   * page-0 query itself and the `loadingNew` → `results`/`zeroResults`
-   * transition effect moved to the root composition with task 30, which
-   * also renders the selected-input, result-card, and zero-result regions.
-   * No Food Quantity edit, MORE!, failure state, motion, or active-content
-   * language-change behavior belongs to this task.
+   * REQ-023, REQ-024). After completed results, draft typing keeps the
+   * committed selected input and cards visible and overlays fresh
+   * suggestions; selecting one suggestion is the commit boundary that
+   * replaces the prior result. The interaction-state union gains only the
+   * required `loadingNew`, `results`, and `zeroResults` transitions;
+   * TanStack Query continues to own response data and pending state, and
+   * the new-search spinner shows `12px` below the Search field for the
+   * complete pending interval (REQ-046), after which Search keeps focus
+   * (REQ-064). The page-0 query itself and the `loadingNew` →
+   * `results`/`zeroResults` transition effect moved to the root composition
+   * with task 30, which also renders the selected-input, result-card, and
+   * zero-result regions. No Food Quantity edit, MORE!, failure state,
+   * motion, or active-content language-change behavior belongs here.
    *
    * Task 31 completes the Phase 7 suggestion control with keyboard
    * operation over the same TanStack Query list and the same selection
@@ -100,12 +103,19 @@
   /** The active dictionary for the accessible label and placeholder. */
   const dictionary = $derived(getDictionary(language));
 
+  /**
+   * Whether the current Search text is an uncommitted suggestion intent.
+   * Selection closes this lane; later typing reopens it without changing a
+   * committed `results` or `zeroResults` transition.
+   */
+  let suggestionIntent = $state(false);
+
   /** The TanStack Query owning the live suggestion list (ARCH-019). */
   const suggestions = createSuggestionsQuery({
     query: () => query,
     focused: () => focused,
     language: () => language,
-    stateName: () => interaction.name,
+    active: () => suggestionIntent,
   });
 
   /**
@@ -137,15 +147,16 @@
   let dismissed = $state(false);
 
   /**
-   * Whether the suggestion panel is open: the interaction state is `empty`
-   * (a selection has closed the list for the whole search transition), the
-   * field is focused and contains nonempty text, the latest response has
-   * arrived, and the visitor has not dismissed the list with Escape. No
-   * loading or failure surface belongs to this task, so the panel renders
-   * exactly the returned five options.
+   * Whether the suggestion panel is open: the Search field has an
+   * uncommitted suggestion intent, is focused, and contains nonempty text;
+   * the latest response has arrived; and the visitor has not dismissed the
+   * list with Escape. A completed result can remain visible beneath this
+   * panel until selection commits the next search. No loading or failure
+   * surface belongs here, so the panel renders exactly the five returned
+   * options.
    */
   const open = $derived(
-    interaction.name === "empty" &&
+    suggestionIntent &&
       focused &&
       query.length > 0 &&
       suggestionItems !== undefined &&
@@ -184,12 +195,14 @@
     }
   });
 
-  /** Applies typed Search Query text to the interaction state. */
+  /**
+   * Applies draft Search Query text to the interaction state. Changed text
+   * starts a fresh suggestion intent without changing the committed result
+   * transition or removing its selected input and cards.
+   */
   function onInput(event: Event): void {
-    // A changed Search Query is a new suggestion intent: the first option
-    // becomes active again and an earlier Escape dismissal no longer
-    // applies, so the fresh list can open for the new text (task 31).
     dismissed = false;
+    suggestionIntent = true;
     activeIndex = 0;
     interactionState.setQuery((event.currentTarget as HTMLInputElement).value);
   }
@@ -247,12 +260,15 @@
   }
 
   /**
-   * Re-focusing the field is a new suggestion intent (task 31): the first
-   * option becomes active and an earlier Escape dismissal no longer
-   * applies, so the fresh list can open again.
+   * Re-focusing an empty search resumes its suggestion intent. A completed
+   * search resumes only an existing draft intent, so focus alone never
+   * reopens suggestions for the committed query.
    */
   function onFocus(): void {
     dismissed = false;
+    if (interaction.name === "empty") {
+      suggestionIntent = true;
+    }
     activeIndex = 0;
     interactionState.setFocused(true);
   }
@@ -268,6 +284,7 @@
    * activation are identical (REQ-019, REQ-020).
    */
   function selectSuggestion(item: FoodSuggestion): void {
+    suggestionIntent = false;
     interactionState.selectSuggestion({
       foodObjectId: item.foodObjectId,
       names: item.names,
@@ -278,7 +295,7 @@
 </script>
 
 <label for="food-search" class="sr-only">{dictionary.searchLabel()}</label>
-<div data-search-region class="mx-auto w-full max-w-[640px]">
+<div data-search-region class="relative mx-auto w-full max-w-[640px]">
   <!-- svelte-ignore a11y_autofocus (Search is the page's primary action.) -->
   <input
     id="food-search"
@@ -295,7 +312,9 @@
     onfocus={onFocus}
     onblur={() => interactionState.setFocused(false)}
     onkeydown={onKeydown}
-    class="block h-14 w-full appearance-none rounded-full border border-solid border-dark-secondary bg-dark-surface pl-[calc(1.75rem+0.5em)] pr-4 text-base text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-webkit-search-results-button]:hidden [&::-webkit-search-results-decoration]:hidden"
+    class="block h-14 w-full appearance-none border border-solid border-dark-secondary bg-dark-surface pl-[calc(1.75rem+0.5em)] pr-4 text-base text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none {open
+      ? 'rounded-t-[28px] rounded-b-none'
+      : 'rounded-full'} [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-webkit-search-results-button]:hidden [&::-webkit-search-results-decoration]:hidden"
   />
   {#if open && suggestionItems}
     <SuggestionList

@@ -8,11 +8,16 @@
  * transitions (REQ-020, REQ-022): pointer selection of one suggestion
  * transitions `empty` → `loadingNew` carrying the selected Food Object, and
  * the first successful page-0 response transitions `loadingNew` → `results`
- * when it contains items or → `zeroResults` when it is empty. TanStack Query
- * continues to own HTTP response data and pending state; the Module never
- * copies query results into the store (ARCH-002, ARCH-010, ARCH-011). The
- * union has no duplicate intent, queue, automatic retry, second submit
- * action, or response-data store.
+ * when it contains items or → `zeroResults` when it is empty. Typing a
+ * changed Search Query after either completed outcome updates only the
+ * draft text: the committed selection and result transition stay visible
+ * until the visitor selects a fresh suggestion. That selection transitions
+ * `empty`, `results`, or `zeroResults` to `loadingNew`, which is the commit
+ * boundary that replaces the prior result. TanStack Query continues to own
+ * HTTP response data and pending state; the Module never copies query
+ * results into the store (ARCH-002, ARCH-010, ARCH-011). The union has no
+ * duplicate intent, queue, automatic retry, second submit action, or
+ * response-data store.
  *
  * The store pattern mirrors the persisted Interface Language store
  * (ARCH-012, ARCH-014): a factory for testable instances and the single
@@ -120,16 +125,19 @@ export type InteractionState =
 
 /** The typed Browser Interaction Module surface of the interaction state. */
 export interface InteractionStateStore extends Readable<InteractionState> {
-  /** Applies the current Search Query text without changing the transition. */
+  /**
+   * Applies draft Search Query text without changing the committed result
+   * transition or selection.
+   */
   setQuery: (query: string) => void;
   /** Applies the current Search field focus intent without changing the transition. */
   setFocused: (focused: boolean) => void;
   /**
-   * Applies a pointer (or later keyboard) selection of one suggestion:
-   * transitions the empty state to `loadingNew` with the selected Food
-   * Object, closing the suggestion list and starting the one page-0
-   * Substitution Search. No-op outside the empty state: the suggestion list
-   * is closed, so no duplicate intent can reach the store.
+   * Applies a pointer or keyboard selection of one suggestion: transitions
+   * `empty`, `results`, or `zeroResults` to `loadingNew` with the selected
+   * Food Object, closing the suggestion list and starting one page-0
+   * Substitution Search. It is a no-op only while another new search is
+   * already loading, so no duplicate intent can replace in-flight work.
    */
   selectSuggestion: (selected: SelectedFoodObject) => void;
   /**
@@ -171,7 +179,7 @@ export function createInteractionState(): InteractionStateStore {
     },
     selectSuggestion(selected) {
       update((state) => {
-        if (state.name !== "empty") {
+        if (state.name === "loadingNew") {
           return state;
         }
         return {

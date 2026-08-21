@@ -9,14 +9,20 @@
    * ARCH-020, REQ-012, REQ-013, REQ-018, REQ-020).
    *
    * Renders exactly the returned five localized options as a `listbox`
-   * panel that matches the Search field's maximum `640px` width, starts
-   * `8px` below it, and contains five `48px` rows (ISSUE-008). The panel
-   * uses Surface with a Secondary border; the keyboard-active option
-   * renders with Primary and Text-On-Bright — the first option when the
-   * panel opens (REQ-018), the Arrow-moved option thereafter (REQ-019) —
-   * and every option carries a stable DOM `id` derived from the stable
-   * Food Object ID so the Search input's `aria-activedescendant` can
-   * reference the active option (REQ-018).
+   * panel that continuously extends the Search field and contains five
+   * `48px` rows (ISSUE-008). The Search field's thin bottom border separates
+   * the query from the suggestions. The panel removes its top border and
+   * top corners, and its `28px` bottom corners match the Search field's
+   * original pill radius, so both surfaces read as one control. Every
+   * suggestion uses the Search query's `36px` left text inset. The panel is
+   * absolutely positioned above the result surface: drafting a later query
+   * does not move the result-state Search field or displace the committed
+   * selected input and cards. The panel uses Surface with a Secondary
+   * border; the keyboard-active option renders with Primary and
+   * Text-On-Bright — the first option when the panel opens (REQ-018), the
+   * Arrow-moved option thereafter (REQ-019) — and every option carries a
+   * stable DOM `id` derived from the stable Food Object ID so the Search
+   * input's `aria-activedescendant` can reference it (REQ-018).
    * Options show the active-language Food Object name (REQ-013). Task 28
    * adds pointer activation: a click or tap on any option selects that
    * exact returned Food Object through the parent's selection callback
@@ -61,7 +67,7 @@
   id={SUGGESTIONS_LISTBOX_ID}
   role="listbox"
   aria-label={dictionary.suggestionsListLabel()}
-  class="mt-2 w-full overflow-hidden rounded-2xl border border-solid border-dark-secondary bg-dark-surface"
+  class="absolute top-full left-0 z-20 w-full overflow-hidden rounded-b-[28px] border border-t-0 border-solid border-dark-secondary bg-dark-surface"
 >
   {#each items as item, index (item.foodObjectId)}
     <!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -72,7 +78,8 @@
       aria-selected={index === activeIndex}
       onmousedown={(event) => event.preventDefault()}
       onclick={() => onselect(item)}
-      class="flex h-12 items-center px-4 text-base {index === activeIndex
+      class="flex h-12 items-center pl-[calc(1.75rem+0.5em)] pr-4 text-base {index ===
+      activeIndex
         ? 'bg-dark-primary text-dark-text-on-bright'
         : 'text-dark-text-primary'}"
     >

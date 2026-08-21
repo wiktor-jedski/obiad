@@ -25,13 +25,16 @@ import { expect, test, type Page } from "@playwright/test";
  * generated-client `POST /api/v1/substitutes/search` with that option's
  * returned default quantity and page index `0` — the identical selection
  * transition a pointer click uses (REQ-020) — and loads its page-0 result
- * with the Search field still focused (REQ-064). Escape retains the Search
- * Query text and Search focus with the list closed and zero Substitution
- * Search requests; typing a new query reopens exactly five options. Tab
- * closes the list, moves focus natively to the next control, and starts
- * zero Substitution Search requests. The existing pointer scenarios in
- * `pointer-substitution-search.spec.ts` run unchanged in the same suite
- * (P07-G21).
+ * with the Search field still focused (REQ-064). Typing a draft query over
+ * those results keeps the committed selected input and cards visible,
+ * keeps the Search field at its result-state position, and overlays five
+ * suggestions above the result surface without a second POST. Escape
+ * retains the Search Query text and Search focus with the list closed and
+ * zero Substitution Search requests; typing a new query reopens exactly
+ * five options. Tab closes the list, moves focus natively to the next
+ * control, and starts zero Substitution Search requests. The existing
+ * pointer scenarios in `pointer-substitution-search.spec.ts` run unchanged
+ * in the same suite (P07-G21).
  */
 
 const OPTION_COUNT = 5;
@@ -230,7 +233,7 @@ function selectedInput(page: Page) {
 }
 
 test.describe("suggestion keyboard control", () => {
-  test("Arrow Up clamps on the first option, Arrow Down moves through all five options and clamps on the fifth, every move updates the active styling and aria-activedescendant, and Enter on the third option starts exactly one page-0 Substitution Search with the unchanged default quantity and loads its result", async ({
+  test("keyboard selection loads results, then draft typing keeps those results and overlays fresh suggestions without moving Search or starting another POST", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -308,6 +311,39 @@ test.describe("suggestion keyboard control", () => {
     await expect(selectedInput(page)).toContainText("Butter · 100 g");
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
     await expect(search).toBeFocused();
+
+    // Drafting a later query does not discard or move the committed result.
+    // The fresh panel continuously extends Search and overlays the
+    // selected-input/result surface; no second POST occurs until a
+    // suggestion is selected.
+    const committedSearchBox = await search.boundingBox();
+    await search.fill("olive");
+    const draftPanel = page.getByRole("listbox", {
+      name: COPY.en.listbox,
+    });
+    await expect(draftPanel).toBeVisible();
+    await expect(draftPanel.getByRole("option")).toHaveCount(OPTION_COUNT);
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    await expect(selectedInput(page)).toContainText("Butter · 100 g");
+    await expect(page.locator("[data-result-card]").first()).toBeVisible();
+
+    const draftSearchBox = await search.boundingBox();
+    const panelBox = await draftPanel.boundingBox();
+    const selectedBox = await selectedInput(page).boundingBox();
+    expect(draftSearchBox?.y).toBe(committedSearchBox?.y);
+    expect(
+      Math.abs(
+        (panelBox?.y ?? 0) -
+          ((draftSearchBox?.y ?? 0) + (draftSearchBox?.height ?? 0)),
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBeGreaterThan(
+      selectedBox?.y ?? Number.POSITIVE_INFINITY,
+    );
+    await expect(draftPanel).toHaveCSS("z-index", "20");
     expect(
       posts,
       "no second submit action after the successful page",

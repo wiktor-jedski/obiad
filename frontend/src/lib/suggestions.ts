@@ -7,7 +7,10 @@
  * by the Search Query text and the active Interface Language, the query
  * function passes TanStack Query's `AbortSignal` to the generated client,
  * and automatic retry and successful-response reuse are disabled (ARCH-019):
- * `retry: false`, `gcTime: 0`, and the default zero stale time. Because the
+ * `retry: false`, `gcTime: 0`, and the default zero stale time. While a
+ * changed query is pending, TanStack Query exposes the last visible response
+ * as placeholder data so the mounted dropdown remains stable; the fresh
+ * request still runs and replaces those rows when it completes. Because the
  * stale superseded query is garbage-collected immediately, its in-flight
  * browser request is aborted, and because every query key carries the query
  * text and language, neither an aborted request nor an out-of-order response
@@ -15,7 +18,7 @@
  * validation and no suggestion failure UI belong to this slice (Phase 9,
  * task 27 scope).
  */
-import { createQuery } from "@tanstack/svelte-query";
+import { createQuery, keepPreviousData } from "@tanstack/svelte-query";
 import { client } from "../client/client.gen";
 import type {
   FoodSuggestionsResponse,
@@ -24,7 +27,6 @@ import type {
   GetFoodSuggestionsResponses,
 } from "../client/types.gen";
 import type { InterfaceLanguage } from "./i18n";
-import type { InteractionState } from "./interactionState";
 
 /**
  * The stable `id` of the suggestion listbox panel; the Search input's
@@ -64,25 +66,26 @@ export interface SuggestionsQueryInput {
   /** The active Interface Language accessor. */
   language: () => InterfaceLanguage;
   /**
-   * The current interaction-state transition name accessor. The suggestion
-   * lane serves only the empty state (task 28): once a selection starts a
-   * Substitution Search, the list stays closed even though Search keeps
-   * focus and text.
+   * Whether the visitor currently has an active suggestion intent. The
+   * Search control owns this UI boundary so completed results can remain
+   * visible while draft suggestions are open.
    */
-  stateName: () => InteractionState["name"];
+  active: () => boolean;
 }
 
 /**
  * Creates the TanStack Query that owns the live suggestion list (ARCH-010,
  * ARCH-019). The query is enabled only while the Search field is focused,
- * contains nonempty text, and the interaction state is `empty`; it is keyed
- * by the Search Query and the active Interface Language; the query function
- * passes TanStack Query's `AbortSignal` through to the generated client;
- * automatic retry and successful-response reuse are disabled; and window
- * focus never triggers a suggestion refetch, so only genuine query or focus
- * intents start requests.
+ * contains nonempty text, and the Search control has an active suggestion
+ * intent; it is keyed by the Search Query and the active Interface Language.
+ * The last visible response remains as placeholder rows while the next key
+ * loads, which keeps the dropdown mounted without suppressing or reusing the
+ * fresh request. The query function passes TanStack Query's `AbortSignal`
+ * through to the generated client; automatic retry and successful-response
+ * reuse are disabled; and window focus never triggers a suggestion refetch,
+ * so only genuine query or focus intents start requests.
  *
- * @param input - the reactive query, focus, language, and state accessors
+ * @param input - the reactive query, focus, language, and intent accessors
  * @returns the TanStack Query result owning the HTTP data and pending state
  */
 export function createSuggestionsQuery(input: SuggestionsQueryInput) {
@@ -98,10 +101,8 @@ export function createSuggestionsQuery(input: SuggestionsQueryInput) {
         language: input.language(),
         signal,
       }),
-    enabled:
-      input.stateName() === "empty" &&
-      input.focused() &&
-      input.query().length > 0,
+    enabled: input.active() && input.focused() && input.query().length > 0,
+    placeholderData: keepPreviousData,
     retry: false,
     gcTime: 0,
     refetchOnWindowFocus: false,

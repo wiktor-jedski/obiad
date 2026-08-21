@@ -12,9 +12,10 @@
  * pointer selection transitions `empty` → `loadingNew` carrying the exact
  * selected Food Object, that the first page-0 outcome transitions
  * `loadingNew` → `results` or `zeroResults` while TanStack Query keeps the
- * response data (the store never copies items), that `setQuery` and
- * `setFocused` preserve the transition, and that a selection is a no-op
- * outside the empty state. Pointer activation, the pending spinner, the
+ * response data (the store never copies items), that changed draft Search
+ * Query text preserves the committed result, that `setFocused` preserves
+ * the transition, and that a fresh selection from a completed result
+ * commits the next `loadingNew` intent. Pointer activation, the pending
  * read-only Substitution Input value, and focus retention remain covered by
  * the real-stack `pointer-substitution-search.spec.ts`.
  */
@@ -101,44 +102,51 @@ describe("the pointer-selection and new-search transitions", () => {
     ]);
   });
 
-  test("setQuery and setFocused preserve the transition", () => {
+  test("changed Search Query text after results keeps the committed result and focus", () => {
     const store = createInteractionState();
+    store.setQuery("chicken");
+    store.setFocused(true);
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
 
     store.setQuery("pizza");
-    store.setFocused(false);
 
     let state: Record<string, unknown> = {};
     store.subscribe((next) => {
       state = { ...next };
     });
-    expect(state.name).toBe("results");
-    expect(state.query).toBe("pizza");
-    expect(state.focused).toBe(false);
-    expect(state.selected).toEqual(SELECTED);
+    expect(state).toEqual({
+      name: "results",
+      query: "pizza",
+      focused: true,
+      selected: SELECTED,
+    });
   });
 
-  test("a selection is a no-op outside the empty state and cannot start a second intent", () => {
+  test("a fresh selection from results commits the next loadingNew intent", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
 
-    store.selectSuggestion({
+    const nextSelected: SelectedFoodObject = {
       foodObjectId: 10,
       names: { en: "Milk", pl: "Mleko" },
       quantity: { value: 100, unit: "ml" },
       capturedLanguage: "pl",
-    });
+    };
+    store.setQuery("milk");
+    store.selectSuggestion(nextSelected);
 
     let state: Record<string, unknown> = {};
     store.subscribe((next) => {
       state = { ...next };
     });
-    // The results transition and its selected Food Object are unchanged: no
-    // duplicate intent can replace the in-flight or completed search.
-    expect(state.name).toBe("results");
-    expect(state.selected).toEqual(SELECTED);
+    expect(state).toEqual({
+      name: "loadingNew",
+      query: "milk",
+      focused: false,
+      selected: nextSelected,
+    });
   });
 
   test("applySearchResult is a no-op outside the loadingNew transition", () => {

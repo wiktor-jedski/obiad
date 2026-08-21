@@ -27,7 +27,7 @@ const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
 const FIELD_HEIGHT_PX = 56;
 const FIELD_MAX_WIDTH_PX = 640;
-const PANEL_OFFSET_PX = 8;
+const OUTER_RADIUS_PX = FIELD_HEIGHT_PX / 2;
 const ROW_HEIGHT_PX = 48;
 const OPTION_COUNT = 5;
 
@@ -122,10 +122,10 @@ async function useBrowserLanguages(
 /**
  * Asserts that the panel renders exactly the expected seeded suggestions in
  * the expected order with the approved geometry, colors, and baseline
- * combobox/listbox semantics: `OPTION_COUNT` `48px` rows in a panel that
- * matches the Search field's maximum `640px` width and starts `8px` below
- * it, Surface with a Secondary border, the first option with Primary and
- * Text-On-Bright, stable option ids, and the first option's stable id as
+ * combobox/listbox semantics: `OPTION_COUNT` `48px` rows continuously extend
+ * the Search field, retain its thin bottom border as the divider, and end in
+ * matching `28px` bottom corners. The first option uses Primary and
+ * Text-On-Bright, every option has a stable id, and the first option's id is
  * the Search input's `aria-activedescendant` (ISSUE-008, REQ-018).
  */
 async function expectSuggestionPanel(
@@ -161,8 +161,8 @@ async function expectSuggestionPanel(
   ).toBeLessThanOrEqual(1);
   expect(
     panelBox.y - (searchBox.y + searchBox.height),
-    "the panel starts 8px below the Search field",
-  ).toBe(PANEL_OFFSET_PX);
+    "the panel continuously extends the Search field",
+  ).toBe(0);
   for (let index = 0; index < OPTION_COUNT; index += 1) {
     const rowBox = (await options.nth(index).boundingBox()) as {
       height: number;
@@ -174,6 +174,35 @@ async function expectSuggestionPanel(
     // Rows fill the panel's content box: the 640px border-box panel carries
     // a 1px Secondary border on each side (ISSUE-008).
     expect(rowBox.width).toBe(FIELD_MAX_WIDTH_PX - 2);
+  }
+
+  // Search and panel form one continuous control. The Search keeps its thin
+  // bottom border as the query/suggestion divider, while only the combined
+  // outer top and bottom corners retain the original pill radius.
+  await expect(search).toHaveCSS("border-bottom-width", "1px");
+  await expect(search).toHaveCSS(
+    "border-top-left-radius",
+    `${OUTER_RADIUS_PX}px`,
+  );
+  await expect(search).toHaveCSS("border-bottom-left-radius", "0px");
+  await expect(search).toHaveCSS("border-bottom-right-radius", "0px");
+  await expect(panel).toHaveCSS("border-top-width", "0px");
+  await expect(panel).toHaveCSS("border-top-left-radius", "0px");
+  await expect(panel).toHaveCSS("border-top-right-radius", "0px");
+  await expect(panel).toHaveCSS(
+    "border-bottom-left-radius",
+    `${OUTER_RADIUS_PX}px`,
+  );
+  await expect(panel).toHaveCSS(
+    "border-bottom-right-radius",
+    `${OUTER_RADIUS_PX}px`,
+  );
+
+  // Query and suggestion labels share the same text origin: the `28px`
+  // outer radius plus the established `0.5em` inset.
+  await expect(search).toHaveCSS("padding-left", "36px");
+  for (let index = 0; index < OPTION_COUNT; index += 1) {
+    await expect(options.nth(index)).toHaveCSS("padding-left", "36px");
   }
 
   // Resting and active colors (ISSUE-008, style.md).
