@@ -354,7 +354,7 @@ Do not generate Phase 8 tasks. After the Phase 7 review, proceed directly to Pha
 
 **Goal**
 
-Reject a normalized empty Search Query in the browser.
+Treat a normalized empty Search Query as a browser no-op.
 
 **Depends on**
 
@@ -362,10 +362,11 @@ Phases 6 and 7.
 
 **Implement**
 
-- Add the localized input message.
-- Keep focus in the Search field.
-- Start no suggestion request.
-- Start no Substitution Search request.
+- Use the ARCH-017 normalization contract to decide whether the Search Query is empty.
+- Keep the exact raw value in the Search field.
+- Keep focus in the Search field and change no interaction state.
+- Start no suggestion request and no Substitution Search request.
+- Show no validation message.
 - Do not add Food Quantity validation.
 
 **Requirements that become testable**
@@ -374,7 +375,7 @@ Phases 6 and 7.
 
 **Phase gate**
 
-Run `bun run test:e2e` from `frontend/`. Submit empty, spaces-only, and mixed-Unicode-whitespace values in both languages. Verify the value, focus, localized message, and zero requests.
+Run `bun run test:e2e` from `frontend/`. In one fresh unauthenticated English browser profile, press Enter with empty, spaces-only, and mixed-Unicode-whitespace-only values. Verify that the exact raw value and Search focus remain, no validation state appears, and zero suggestion and Substitution Search requests start.
 
 **Review stop**
 
@@ -562,7 +563,7 @@ Phases 9 and 13.
 - [REQ-058](../requirements/requirements.md#req-058--current-result-translation)
 - [REQ-059](../requirements/requirements.md#req-059--search-field-language-change)
 
-Recheck REQ-013, REQ-021, REQ-026, REQ-044, REQ-050, REQ-051, REQ-056, and REQ-057 in both languages.
+Recheck REQ-013, REQ-026, REQ-044, REQ-050, REQ-051, REQ-056, and REQ-057 in both languages.
 
 **Phase gate**
 

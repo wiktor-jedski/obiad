@@ -190,3 +190,18 @@ Status: ready-for-agent
 
 - Resolved with the architecture owner on 2026-08-20. `App.result-state.test.ts` may drive a successful empty result through the production browser state and rendered components in happy-dom, without a repository fake, to verify both zero-result messages and zero cards. `ResultCard.test.ts` may render absent and unmapped image keys and dispatch an image error to verify the bundled-placeholder fallback. These are permanent component integration tests, not unit tests.
 - Every reachable suggestion, pointer and keyboard selection, pending request, default quantity, and three-card result flow remains covered in Playwright through the generated client, real Fiber, and freshly seeded PostgreSQL. The component-only exceptions above are the narrow ARCH-022 seam for states that ISSUE-003 or the placeholder-only asset policy makes unreachable in the supported real stack.
+
+## ISSUE-009: Phase 9 empty Search Query validation decisions
+
+Type: Product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the product owner on 2026-08-21. A normalized-empty Search Query is a strict browser no-op. The browser shows no localized message or invalid state and adds no Translation Module message.
+- Resolved with the product owner on 2026-08-21. The empty check matches the ARCH-017 backend normalization contract and Go-compatible Unicode whitespace semantics, including `U+0085` NEXT LINE. The exact raw value stays visible and unchanged.
+- Resolved with the product owner on 2026-08-21. Enter with no open suggestion and a normalized-empty value retains Search focus and the current interaction state and starts neither a suggestion request nor a Substitution Search request. The suggestion query is disabled while the draft is normalized-empty.
+
+### Testing coverage deviations
+
+- Resolved with the product owner on 2026-08-21. Phase 9 uses one real-stack Playwright scenario in one English browser context for empty, ASCII-spaces-only, and mixed Unicode-whitespace-only values. The no-op renders no localized text, so repeating the same matrix in Polish adds no language boundary evidence. No happy-dom component integration test is added because it would duplicate the browser-observable Enter, raw-value, focus, state, and request-silence contract. The existing `bun test` suite still runs for regression coverage.
