@@ -28,9 +28,10 @@
    * Search field's `96px` top edge and the `24px` region intervals.
    *
    * The control renders an `<input type="search">` with a visually hidden
-   * label and the placeholder from the active Interface Language
-   * dictionary, with no icon and no autofocus. The pill-shaped field is
-   * `56px` high and `min(100%, 640px)` wide; its text starts `0.5em`
+   * label, the placeholder from the active Interface Language dictionary,
+   * no icon, and initial autofocus so a visitor can type immediately. The
+   * pill-shaped field is `56px` high and `min(100%, 640px)` wide; its text
+   * starts `0.5em`
    * beyond the end radius. The field is horizontally centered; its
    * vertical placement at `45%` of `100dvh` is owned by the primary column
    * in App.svelte (ISSUE-006). Styling follows docs/requirements/style.md:
@@ -278,9 +279,11 @@
 
 <label for="food-search" class="sr-only">{dictionary.searchLabel()}</label>
 <div data-search-region class="mx-auto w-full max-w-[640px]">
+  <!-- svelte-ignore a11y_autofocus (Search is the page's primary action.) -->
   <input
     id="food-search"
     type="search"
+    autofocus
     value={query}
     placeholder={dictionary.searchPlaceholder()}
     role="combobox"

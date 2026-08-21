@@ -15,7 +15,7 @@ import { dirname } from "node:path";
  *
  *   - the exact label, placeholder, input semantics, and initial focus
  *     state (`<input type="search">`, visually hidden `Search` label,
- *     `Search foods` placeholder, no icon, no autofocus);
+ *     `Search foods` placeholder, no icon, and autofocus);
  *   - exactly one semantic primary content column and one Search control,
  *     with no excluded Phase 7 (suggestion list, selected input, result
  *     cards) region, the Phase 6 Interface Language dropdown, and no
@@ -138,14 +138,11 @@ async function assertEmptyShell(
   expect(parseFloat(labelStyle.width)).toBeLessThanOrEqual(1);
   expect(parseFloat(labelStyle.height)).toBeLessThanOrEqual(1);
 
-  // No autofocus: no attribute and the input is not the initial focus.
+  // Search is the initial focus so the visitor can type immediately.
   expect(
     await input.evaluate((element) => element.hasAttribute("autofocus")),
-  ).toBe(false);
-  await expect(input).not.toBeFocused();
-  expect(
-    await page.evaluate(() => document.activeElement === document.body),
   ).toBe(true);
+  await expect(input).toBeFocused();
 
   // No icon: no background image, no nested image markup, and the native
   // search appearance is removed.
