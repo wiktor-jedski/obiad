@@ -54,7 +54,7 @@ The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResult
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-013, REQ-021, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-067–REQ-068 |
+| Requirements | REQ-013, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-067–REQ-068 |
 | Dependencies | ARCH-001, ARCH-014 |
 
 **Responsibility:** Produce all localized interface and accessibility text.
@@ -174,7 +174,7 @@ An error response contains a stable `code` and an optional `field`. It never con
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-012–REQ-013, REQ-018–REQ-020, REQ-022–REQ-024, REQ-077 |
+| Requirements | REQ-012–REQ-013, REQ-018–REQ-024, REQ-077 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-004, ARCH-006, ARCH-008, ARCH-017 |
 
 **Responsibility:** Resolve typed Search Queries into selectable Food Object suggestions.
@@ -183,7 +183,7 @@ An error response contains a stable `code` and an optional `field`. It never con
 
 **Runtime behavior:** A focused nonempty Search Query starts a suggestion request. A later query change aborts the stale browser request. Only the latest response can update suggestions. Fiber can continue stale backend work until its deadline because a browser disconnect does not cancel a Fiber handler. The first returned item becomes active. Arrow keys move the active item. Escape closes the list. Tab moves focus. Enter or pointer activation selects the active Food Object.
 
-Selection replaces the Search Query with the exact returned selected name for the active Interface Language, sends the returned default Food Quantity to the Substitution Search operation, and uses page index `0`. A normalized empty Search Query starts no request and uses the localized input message.
+Selection replaces the Search Query with the exact returned selected name for the active Interface Language, sends the returned default Food Quantity to the Substitution Search operation, and uses page index `0`. A Search Query that is empty after ARCH-017 normalization enables no suggestion request. Enter with that value keeps the exact raw value, Search focus, and current interaction state, shows no validation message, and starts no Substitution Search request.
 
 ## ARCH-011 — Substitution Search Collaboration
 
@@ -368,7 +368,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 
 The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage.
 
-After new-search success, focus remains in the search field. After intermediate MORE! success, focus remains on MORE!. After final-page success, focus moves to the results heading. A screen-reader status region receives the localized result count or result state.
+After new-search success, focus remains in the search field. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. After intermediate MORE! success, focus remains on MORE!. After final-page success, focus moves to the results heading. A screen-reader status region receives the localized result count or result state.
 
 **Quality constraints:** All text and interactive states meet WCAG 2.1 AA contrast. Each control has a localized accessible name and visible focus indication. The required behavior works in latest stable Chromium at 320 px, 768 px, and 1280 px.
 
@@ -430,7 +430,7 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-018 | ARCH-002, ARCH-010, ARCH-020 |
 | REQ-019 | ARCH-002, ARCH-010, ARCH-020 |
 | REQ-020 | ARCH-002, ARCH-010, ARCH-011, ARCH-020 |
-| REQ-021 | ARCH-002, ARCH-003, ARCH-020 |
+| REQ-021 | ARCH-002, ARCH-010, ARCH-020 |
 | REQ-022 | ARCH-004, ARCH-010, ARCH-011 |
 | REQ-023 | ARCH-004, ARCH-010 |
 | REQ-024 | ARCH-004, ARCH-010 |

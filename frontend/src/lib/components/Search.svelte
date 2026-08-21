@@ -9,6 +9,7 @@
     createSuggestionsQuery,
     suggestionOptionId,
   } from "../suggestions";
+  import { isNormalizedEmptySearchQuery } from "../searchQuery";
   import SuggestionList from "./SuggestionList.svelte";
   import type { FoodSuggestion } from "../../client/types.gen";
 
@@ -16,10 +17,11 @@
    * Search control with the live Food Object suggestion slice, the
    * pointer-selection and new-search transition, and the keyboard
    * operation of the suggestion list (task 24, task 25, task 27,
-   * task 28, task 31; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010,
-   * ARCH-011, ARCH-012, ARCH-019, ARCH-020, REQ-012, REQ-013, REQ-018,
-   * REQ-019, REQ-020, REQ-022, REQ-023, REQ-024, REQ-046, REQ-060,
-   * REQ-064, ISSUE-006, ISSUE-007, ISSUE-008). Task 30 keeps this
+   * task 28, task 31, task 32; ARCH-001, ARCH-002, ARCH-003, ARCH-008,
+   * ARCH-010, ARCH-011, ARCH-012, ARCH-017, ARCH-019, ARCH-020, REQ-012,
+   * REQ-013, REQ-018, REQ-019, REQ-020, REQ-021, REQ-022, REQ-023,
+   * REQ-024, REQ-046, REQ-060, REQ-064, ISSUE-006, ISSUE-007, ISSUE-008,
+   * ISSUE-009). Task 30 keeps this
    * component as the
    * stable Search region of the root composition: the input, the suggestion
    * panel, and the new-search spinner. The read-only Substitution Input,
@@ -86,6 +88,23 @@
    * Escape-closed dismissal are local UI state of this open-list
    * interaction — HTTP data never leaves TanStack Query, the interaction
    * state union gains no variant, and pointer behavior is unchanged.
+   *
+   * Task 32 (Phase 9, REQ-021, ARCH-017, ISSUE-009) adds the
+   * normalized-empty browser no-op: emptiness is decided exactly by
+   * whether the ARCH-017 normalization contract produces an empty Search
+   * Query, so drafts consisting only of Go-compatible Unicode whitespace —
+   * including `U+0085` NEXT LINE, `U+00A0` NO-BREAK SPACE, `U+2003` EM
+   * SPACE, and `U+202F` NARROW NO-BREAK SPACE — are normalized-empty. The
+   * exact raw value stays unchanged in the interaction state and the
+   * field, the suggestion panel stays closed for such drafts, and the
+   * suggestion query enables no request. Enter with no open suggestion and
+   * a normalized-empty value prevents the browser action while retaining
+   * the exact raw value, Search focus, and the current interaction state;
+   * it shows no validation message or invalid state and starts neither a
+   * suggestion request nor a Substitution Search request. Enter selection
+   * of a normalized-nonempty open suggestion is unchanged, and no Food
+   * Quantity validation, translation dictionary entry, backend request,
+   * or interaction-state variant is added.
    */
 
   /**
@@ -149,17 +168,18 @@
 
   /**
    * Whether the suggestion panel is open: the Search field has an
-   * uncommitted suggestion intent, is focused, and contains nonempty text;
-   * the latest response has arrived; and the visitor has not dismissed the
-   * list with Escape. A completed result can remain visible beneath this
-   * panel until selection commits the next search. No loading or failure
-   * surface belongs here, so the panel renders exactly the five returned
-   * options.
+   * uncommitted suggestion intent, is focused, and contains text that is
+   * nonempty after the ARCH-017 normalization contract (task 32,
+   * REQ-021); the latest response has arrived; and the visitor has not
+   * dismissed the list with Escape. A completed result can remain visible
+   * beneath this panel until selection commits the next search. No loading
+   * or failure surface belongs here, so the panel renders exactly the five
+   * returned options.
    */
   const open = $derived(
     suggestionIntent &&
       focused &&
-      query.length > 0 &&
+      !isNormalizedEmptySearchQuery(query) &&
       suggestionItems !== undefined &&
       !dismissed,
   );
@@ -220,6 +240,12 @@
    * - Enter selects the active option through the identical
    *   {@link selectSuggestion} path a pointer click uses, starting the
    *   same one default-quantity page-0 Substitution Search.
+   * - Enter with no open suggestion and a value that is empty after the
+   *   ARCH-017 normalization contract (task 32, REQ-021, ISSUE-009) is a
+   *   strict no-op: `preventDefault` stops the browser action while the
+   *   exact raw value, Search focus, and the current interaction state
+   *   stay unchanged, no validation message or invalid state renders, and
+   *   neither a suggestion request nor a Substitution Search starts.
    * - Escape closes the list while retaining the Search Query text and
    *   Search focus and starts no Substitution Search. `preventDefault`
    *   also stops the browser's native `type="search"` Escape behavior,
@@ -244,11 +270,23 @@
       return;
     }
     if (key === "Enter") {
-      if (!open || suggestionItems === undefined) {
+      if (open && suggestionItems !== undefined) {
+        event.preventDefault();
+        selectSuggestion(suggestionItems[activeIndex]);
         return;
       }
-      event.preventDefault();
-      selectSuggestion(suggestionItems[activeIndex]);
+      if (isNormalizedEmptySearchQuery(query)) {
+        // Phase 9 (REQ-021, ISSUE-009): Enter with no open suggestion and
+        // a normalized-empty value is a strict browser no-op. Prevent the
+        // browser action (for example implicit form submission) while the
+        // exact raw value, Search focus, and the current interaction state
+        // stay unchanged; no validation message or invalid state renders
+        // and neither a suggestion request nor a Substitution Search
+        // request starts. The empty check uses the ARCH-017 normalization
+        // contract, including Go-compatible Unicode whitespace such as
+        // `U+0085` NEXT LINE.
+        event.preventDefault();
+      }
       return;
     }
     if (key === "Escape") {

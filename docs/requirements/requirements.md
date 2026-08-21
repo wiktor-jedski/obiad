@@ -206,13 +206,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-021 — Empty Search Query
 
-**Statement:** IF the normalized Search Query is empty, THEN the system shall cancel submission, keep focus, and show a localized input message.
+**Statement:** IF the normalized Search Query is empty, THEN the browser shall do nothing: keep the exact raw value and Search focus, show no validation message, change no interaction state, and start no Food Object suggestion or Substitution Search request.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: A space-only query keeps focus, shows the message, and starts zero requests. |
+| Verification | Playwright: Empty, spaces-only, and mixed Unicode-whitespace-only values keep their exact raw values and focus and start zero suggestion and Substitution Search requests. |
 
 ## REQ-022 — Immediate search
 
