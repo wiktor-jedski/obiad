@@ -62,11 +62,11 @@ const COPY = {
 const SEEDED_SUGGESTIONS = {
   en: {
     chicken: [
+      { foodObjectId: 5, name: "Chicken breast" },
+      { foodObjectId: 22, name: "Fried chicken wings" },
+      { foodObjectId: 17, name: "Polish chicken soup" },
       { foodObjectId: 10, name: "Milk" },
       { foodObjectId: 26, name: "Pancakes" },
-      { foodObjectId: 18, name: "Butter" },
-      { foodObjectId: 36, name: "Cheesecake" },
-      { foodObjectId: 30, name: "Pho" },
     ],
     zzzzzz: [
       { foodObjectId: 13, name: "Gyoza" },
@@ -76,20 +76,20 @@ const SEEDED_SUGGESTIONS = {
       { foodObjectId: 10, name: "Milk" },
     ],
     pizza: [
+      { foodObjectId: 1, name: "Pizza Margherita" },
+      { foodObjectId: 2, name: "Pizza Capricciosa" },
       { foodObjectId: 13, name: "Gyoza" },
       { foodObjectId: 10, name: "Milk" },
       { foodObjectId: 29, name: "Paella" },
-      { foodObjectId: 30, name: "Pho" },
-      { foodObjectId: 16, name: "Gyros" },
     ],
   },
   pl: {
     kurczak: [
+      { foodObjectId: 5, name: "Pierś z kurczaka" },
+      { foodObjectId: 22, name: "Smażone skrzydełka z kurczaka" },
       { foodObjectId: 15, name: "Kebab" },
       { foodObjectId: 36, name: "Sernik" },
       { foodObjectId: 38, name: "Gulasz" },
-      { foodObjectId: 16, name: "Gyros" },
-      { foodObjectId: 29, name: "Paella" },
     ],
     zzzzzz: [
       { foodObjectId: 38, name: "Gulasz" },
@@ -318,7 +318,7 @@ test.describe("live Food Object suggestions", () => {
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.zzzzzz, COPY.pl);
   });
 
-  test("refocusing with the same Search Query starts a fresh request and never reuses the earlier response", async ({
+  test("refocusing with the same Search Query starts a fresh request while placeholder rows keep the panel stable", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -367,17 +367,18 @@ test.describe("live Food Object suggestions", () => {
     await expect(search).not.toHaveAttribute("aria-activedescendant");
 
     // Second intent: refocus with the same text. The fresh request is held,
-    // so the earlier response must never appear: the panel stays closed
-    // until the new request returns.
+    // while the prior rows remain temporary placeholder content so the panel
+    // does not flicker. This presentation continuity does not suppress the
+    // fresh backend request.
     await search.focus();
-    await expect(panel).toHaveCount(0);
-    await page.waitForTimeout(300);
-    await expect(panel).toHaveCount(0);
-    await expect(search).not.toHaveAttribute("aria-activedescendant");
-
-    // Releasing the held response shows only the fresh intent's list.
-    releaseSecond();
     await expect(panel).toBeVisible();
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
+    await page.waitForTimeout(300);
+    await expect(panel).toBeVisible();
+
+    // Releasing the held response replaces the placeholder rows with the
+    // fresh response inside the visible panel.
+    releaseSecond();
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
 
     // Exactly one request per intent — the refocus never reused the first

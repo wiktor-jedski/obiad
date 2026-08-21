@@ -304,16 +304,16 @@ Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authenticat
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-012–REQ-017 |
+| Requirements | REQ-012–REQ-015, REQ-017, REQ-076 |
 | Dependencies | ARCH-004, ARCH-013 |
 
 **Responsibility:** Produce deterministic suggestion order from a Search Query.
 
 **Behavior:** Validate UTF-8. Normalize the Search Query and compared name to NFC. Trim and collapse Unicode whitespace to ASCII spaces. Apply Unicode lowercase mapping. Reject a normalized Search Query over 128 Unicode code points. Compute raw Levenshtein distance over Unicode code points.
 
-Sort by increasing distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. A valid seeded catalog therefore returns five suggestions for any nonempty accepted Search Query.
+Assign each name to its first applicable exact-match, full-name-prefix, substring, or fallback tier. Sort in that tier order. Within each tier, sort by increasing raw distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. A valid seeded catalog therefore returns five suggestions for any nonempty accepted Search Query.
 
-**Quality constraints:** Polish diacritics remain distinct from their base letters. Canonically equivalent Unicode text compares equally. The implementation uses bounded Levenshtein working memory and does not allocate a full distance matrix.
+**Quality constraints:** Polish diacritics remain distinct from their base letters. Canonically equivalent Unicode text compares equally. Each candidate receives one tier and one distance calculation. The implementation uses bounded Levenshtein working memory and does not allocate a full distance matrix.
 
 ## ARCH-018 — Nutrition and Paging Mechanism
 
@@ -485,3 +485,4 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-073 | ARCH-001, ARCH-015, ARCH-016, ARCH-020, ARCH-022 |
 | REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
+| REQ-076 | ARCH-004, ARCH-017 |

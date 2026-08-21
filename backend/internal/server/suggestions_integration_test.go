@@ -276,22 +276,20 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 
 // TestFoodSuggestionRankingHTTPIntegration verifies the suggestion ordering
 // contract over an actual loopback Fiber listener backed by disposable real
-// PostgreSQL (P03-G7, P03-G8): the raw code-point Levenshtein distance order
-// of the seeded catalog, and the pinned active-language collation and stable
-// Food Object ID tie orders proven with isolated fixture rows (IDs 39–42)
-// inserted into the disposable database through the schema-owner credential.
+// PostgreSQL (P03-G7, P03-G8): exact, prefix, substring, and fallback tier
+// order over the seeded catalog, and within-tier raw-distance,
+// active-language collation, and stable Food Object ID tie orders proven
+// with isolated fixture rows (IDs 39–42) inserted through the schema-owner
+// credential.
 func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	ctx := context.Background()
 	owner := connect(t, db.OwnerURL)
 
-	// P03-G7: raw-distance order — "pizza margherita" ranks the seeded Food
-	// Objects by increasing raw code-point Levenshtein distance (0, 8, 11,
-	// 12, 12; REQ-016). "pierogi" (distance 0) is followed by its distance-5
-	// tie, which the pinned English collation breaks as gyros < paella < pho
-	// and the Polish collation as gyros < mleko < paella < sernik (REQ-017,
-	// ISSUE-004).
+	// P03-G7: deterministic match-tier order (REQ-076). Exact matches rank
+	// before fallback candidates; fallback distance ties use the pinned
+	// active-language collation (REQ-017, ISSUE-004).
 	enPizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "en")
 	assertOrderedIDs(t, enPizza, 1, 2, 8, 12, 3)
 
@@ -301,11 +299,16 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	plPierogi := getSuggestionsEnvelope(t, baseURL, "pierogi", "pl")
 	assertOrderedIDs(t, plPierogi, 4, 16, 10, 29, 36)
 
+	plOws := getSuggestionsEnvelope(t, baseURL, "ows", "pl")
+	if plOws.Items[0].FoodObjectId != 28 {
+		t.Fatalf("GET suggestions for Polish ows first ID = %d, want Owsianka ID 28 (full order %v)", plOws.Items[0].FoodObjectId, responseIDs(plOws))
+	}
+
 	// Isolated database fixtures: the schema owner inserts four Food Objects
 	// into this disposable database — two with identical localized names
 	// (IDs 39 and 40) and two whose names "źle" and "żaba" tie at the same
-	// distance but order differently under the pinned English and Polish
-	// collations.
+	// distance within one fallback tier but order differently under the
+	// pinned English and Polish collations.
 	fixtures := []struct {
 		id int32
 		en string
@@ -335,17 +338,16 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	dupPl := getSuggestionsEnvelope(t, baseURL, "sernik duplikat", "pl")
 	assertOrderedIDs(t, dupPl, 39, 40, 36, 34, 23)
 
-	// P03-G8: active-language collation — for the query "a", "źle" and
-	// "żaba" tie at distance 3. The pinned English collator orders "żaba"
-	// before "źle" (ID 42 before 41), while the pinned Polish collator
-	// orders "źle" before "żaba" (ID 41 before 42): the same pair ranks
-	// differently per language, proving the tie follows the Interface
-	// Language (REQ-017, ISSUE-004).
-	aEn := getSuggestionsEnvelope(t, baseURL, "a", "en")
-	assertOrderedIDs(t, aEn, 30, 42, 41, 13, 15)
-	assertSuggestionItem(t, aEn.Items[1], "żaba", "Żaba", 100, transport.FoodQuantityUnitG)
-	assertSuggestionItem(t, aEn.Items[2], "źle", "Źle", 100, transport.FoodQuantityUnitG)
+	// P03-G8: active-language collation — for the query "ac", "źle" and
+	// "żaba" tie at distance 3 in the fallback tier. The pinned English
+	// collator orders "żaba" before "źle" (ID 42 before 41), while the
+	// pinned Polish collator orders "źle" before "żaba" (ID 41 before 42):
+	// the same pair ranks differently per language (REQ-017, ISSUE-004).
+	acEn := getSuggestionsEnvelope(t, baseURL, "ac", "en")
+	assertOrderedIDs(t, acEn, 30, 42, 41, 15, 10)
+	assertSuggestionItem(t, acEn.Items[1], "żaba", "Żaba", 100, transport.FoodQuantityUnitG)
+	assertSuggestionItem(t, acEn.Items[2], "źle", "Źle", 100, transport.FoodQuantityUnitG)
 
-	aPl := getSuggestionsEnvelope(t, baseURL, "a", "pl")
-	assertOrderedIDs(t, aPl, 41, 42, 15, 18, 38)
+	acPl := getSuggestionsEnvelope(t, baseURL, "ac", "pl")
+	assertOrderedIDs(t, acPl, 41, 42, 15, 18, 38)
 }

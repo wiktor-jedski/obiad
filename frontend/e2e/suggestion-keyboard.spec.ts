@@ -54,24 +54,23 @@ const COPY = {
 
 /**
  * The deterministic seeded suggestion list for the `chicken` query the
- * scenarios drive (verified against the real Fiber process and the freshly
- * seeded PostgreSQL catalog; seed migration `0005_seed_food_catalog.sql`).
- * The third option is Butter, Food Object 18.
+ * scenarios drive (verified against real Fiber and freshly seeded
+ * PostgreSQL). The exact, prefix, substring, and fallback policy puts Polish
+ * chicken soup third (REQ-076).
  */
 const CHICKEN_SUGGESTIONS = [
+  { foodObjectId: 5, name: "Chicken breast" },
+  { foodObjectId: 22, name: "Fried chicken wings" },
+  { foodObjectId: 17, name: "Polish chicken soup" },
   { foodObjectId: 10, name: "Milk" },
   { foodObjectId: 26, name: "Pancakes" },
-  { foodObjectId: 18, name: "Butter" },
-  { foodObjectId: 36, name: "Cheesecake" },
-  { foodObjectId: 30, name: "Pho" },
 ] as const;
 
 /**
- * The backend-derived default Food Quantity the suggestion response carries
- * for Butter (verified against the real stack): the `100 g` Nutrition Basis
- * of the solid (REQ-023, REQ-024).
+ * The backend-derived default Food Quantity for Polish chicken soup: one
+ * returned Serving (REQ-023, REQ-024).
  */
-const BUTTER_DEFAULT = { value: 100, unit: "g" } as const;
+const CHICKEN_SOUP_DEFAULT = { value: 1, unit: "serving" } as const;
 
 /** The stable option DOM id of one suggestion (suggestions.ts). */
 function optionId(foodObjectId: number): string {
@@ -271,17 +270,17 @@ test.describe("suggestion keyboard control", () => {
     await expectActiveOption(page, 4);
     await expect(page.getByRole("listbox")).toHaveCount(1);
 
-    // Move back to the third option (Butter, Food Object 18).
+    // Move back to the third option (Polish chicken soup, Food Object 17).
     await search.press("ArrowUp");
     await expectActiveOption(page, 3);
     await search.press("ArrowUp");
     await expectActiveOption(page, 2);
 
     // Enter selects the active option through the same selection transition
-    // a pointer click uses: exactly one generated-client POST with the
-    // third option's Food Object ID, the unchanged 100 g default, and page
-    // 0, and the page-0 result loads with Search still focused (REQ-019,
-    // REQ-020, REQ-022, REQ-023, REQ-024, REQ-064).
+    // a pointer click uses: exactly one generated-client POST with the third
+    // option's Food Object ID, unchanged one-serving default, and page 0.
+    // The page-0 result loads with Search still focused (REQ-019, REQ-020,
+    // REQ-022, REQ-023, REQ-024, REQ-064).
     await search.press("Enter");
 
     await expect(page.getByRole("listbox")).toHaveCount(0);
@@ -295,20 +294,23 @@ test.describe("suggestion keyboard control", () => {
 
     expect(posts, "exactly one Substitution Search POST").toHaveLength(1);
     expect(posts[0].body).toEqual({
-      foodObjectId: 18,
-      quantity: BUTTER_DEFAULT,
+      foodObjectId: 17,
+      quantity: CHICKEN_SOUP_DEFAULT,
       pageIndex: 0,
     });
-    // The quantity is unchanged: it equals the default the real suggestion
-    // response returned for the same Food Object (REQ-023, REQ-024).
-    await expect.poll(() => observedDefaults.get(18)).toEqual(BUTTER_DEFAULT);
+    // The quantity equals the default returned for the same Food Object.
+    await expect
+      .poll(() => observedDefaults.get(17))
+      .toEqual(CHICKEN_SOUP_DEFAULT);
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
 
     // The page-0 result loaded: the read-only Substitution Input retains
     // the selected localized name and default quantity, the result region
     // renders the result cards, and Search keeps focus (REQ-064).
     await expect(selectedInput(page)).toContainText(COPY.en.selectedFood);
-    await expect(selectedInput(page)).toContainText("Butter · 100 g");
+    await expect(selectedInput(page)).toContainText(
+      "Polish chicken soup · 1 serving",
+    );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
     await expect(search).toBeFocused();
 
@@ -327,7 +329,9 @@ test.describe("suggestion keyboard control", () => {
       "data-interaction-state",
       "results",
     );
-    await expect(selectedInput(page)).toContainText("Butter · 100 g");
+    await expect(selectedInput(page)).toContainText(
+      "Polish chicken soup · 1 serving",
+    );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
 
     const draftSearchBox = await search.boundingBox();

@@ -232,7 +232,6 @@ async function assertControlAtViewport(
   await expect(languageSelect).toHaveCSS("background-color", TRANSPARENT_RGBA);
   await expect(languageSelect).toHaveCSS("color", TEXT_PRIMARY_RGB);
 
-  await page.keyboard.press("Tab");
   await expect(searchInput).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(languageSelect).toBeFocused();

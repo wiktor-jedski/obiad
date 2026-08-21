@@ -58,11 +58,11 @@ const COPY = {
 const SEEDED_SUGGESTIONS = {
   en: {
     chicken: [
+      { foodObjectId: 5, name: "Chicken breast" },
+      { foodObjectId: 22, name: "Fried chicken wings" },
+      { foodObjectId: 17, name: "Polish chicken soup" },
       { foodObjectId: 10, name: "Milk" },
       { foodObjectId: 26, name: "Pancakes" },
-      { foodObjectId: 18, name: "Butter" },
-      { foodObjectId: 36, name: "Cheesecake" },
-      { foodObjectId: 30, name: "Pho" },
     ],
     margherita: [
       { foodObjectId: 1, name: "Pizza Margherita" },
@@ -101,6 +101,7 @@ const SEEDED_SUGGESTIONS = {
  */
 const SEEDED_DEFAULTS = {
   1: { value: 1, unit: "serving" },
+  17: { value: 1, unit: "serving" },
   5: { value: 100, unit: "g" },
   10: { value: 100, unit: "ml" },
   18: { value: 100, unit: "g" },
@@ -295,13 +296,13 @@ test.describe("pointer substitution search", () => {
       "empty",
     );
 
-    // Select the third displayed option (Butter, Food Object 18) with a
-    // pointer (REQ-020, P07-G8).
+    // Select the third displayed option (Polish chicken soup, Food Object
+    // 17) with a pointer (REQ-020, P07-G8).
     const options = page
       .getByRole("listbox", { name: COPY.en.listbox })
       .getByRole("option");
-    await expect(options.nth(2)).toHaveText("Butter");
-    await expect(options.nth(2)).toHaveAttribute("id", optionId(18));
+    await expect(options.nth(2)).toHaveText("Polish chicken soup");
+    await expect(options.nth(2)).toHaveAttribute("id", optionId(17));
     await options.nth(2).click();
 
     // The suggestion list closes while Search keeps focus and text; the
@@ -317,21 +318,20 @@ test.describe("pointer substitution search", () => {
     );
 
     // Exactly one generated-client POST with the third option's Food Object
-    // ID, the unchanged 100 g default, and page 0 (REQ-022, REQ-023,
+    // ID, the unchanged one-serving default, and page 0 (REQ-022, REQ-023,
     // REQ-024, P07-G9, P07-G10).
     await expectSubstitutePost(
       posts,
-      18,
-      SEEDED_DEFAULTS[18],
+      17,
+      SEEDED_DEFAULTS[17],
       observedDefaults,
     );
 
     // The read-only Substitution Input retains the selected localized name
     // and the returned default Food Quantity (ISSUE-008, REQ-023, REQ-024).
-    await expectSelectedInput(page, COPY.en, "Butter · 100 g");
+    await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
-    // The successful page and the selected-input region identify the same
-    // Food Object: the POST body carries Food Object 18 and the region shows
+    // Food Object: the POST body carries Food Object 17 and the region shows
     // its name, with no second submit action (REQ-020, REQ-022, P07-G11).
     await page.waitForTimeout(400);
     expect(
@@ -396,10 +396,11 @@ test.describe("pointer substitution search", () => {
       ) as HTMLElement;
       return {
         offset: spin.offsetTop - (input.offsetTop + input.offsetHeight),
-        parent: spin.offsetParent?.tagName,
+        parentIsSearchRegion:
+          spin.offsetParent?.hasAttribute("data-search-region") ?? false,
       };
     });
-    expect(spinnerLayout.parent).toBe("MAIN");
+    expect(spinnerLayout.parentIsSearchRegion).toBe(true);
     expect(
       spinnerLayout.offset,
       "the spinner layout box starts 12px below the Search field",
@@ -407,7 +408,7 @@ test.describe("pointer substitution search", () => {
 
     // The read-only Substitution Input is already visible during the pending
     // interval (task 28).
-    await expectSelectedInput(page, COPY.en, "Butter · 100 g");
+    await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
     // Fulfillment removes the spinner, completes the transition to results,
     // and leaves the Search field as the active element (REQ-046, REQ-064,
@@ -420,7 +421,7 @@ test.describe("pointer substitution search", () => {
     );
     await expect(search).toBeFocused();
     await expect(page.locator("[data-selected-input]")).toContainText(
-      "Butter · 100 g",
+      "Polish chicken soup · 1 serving",
     );
     expect(posts).toHaveLength(1);
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);

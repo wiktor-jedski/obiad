@@ -35,7 +35,7 @@ import {
 } from "./lib/interactionState";
 import { interfaceLanguage } from "./lib/interfaceLanguage";
 
-/** A captured selection: the third seeded suggestion for `chicken` (Butter). */
+/** A captured Butter selection fixture for result-state rendering. */
 const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
   names: { en: "Butter", pl: "Masło" },

@@ -109,7 +109,7 @@ Phase 2.
 - Apply Unicode lowercase mapping.
 - Reject a normalized Search Query longer than 128 Unicode code points.
 - Calculate raw Levenshtein distance with bounded working memory.
-- Sort by distance, active-language collation, and stable Food Object ID.
+- Sort by exact-match, full-name-prefix, substring, and fallback tier; within each tier sort by distance, active-language collation, and stable Food Object ID.
 - Return both localized names and the default Food Quantity.
 - Use the stable errors and deadlines from ARCH-008 and ARCH-019.
 - Keep Fiber on loopback.
@@ -122,18 +122,18 @@ Phase 2.
 - [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
 - [REQ-014](../requirements/requirements.md#req-014--query-normalization)
 - [REQ-015](../requirements/requirements.md#req-015--polish-characters)
-- [REQ-016](../requirements/requirements.md#req-016--levenshtein-order)
 - [REQ-017](../requirements/requirements.md#req-017--suggestion-tie-order)
+- [REQ-076](../requirements/requirements.md#req-076--autocomplete-match-order)
 
 Collect backend evidence for REQ-002, REQ-012, REQ-013, REQ-023, and REQ-024. Do not mark REQ-002, REQ-012, REQ-013, REQ-023, or REQ-024 as complete.
 
 **Phase gate**
 
-Generate and compile both clients. Run `go test ./...` from `backend/`. Call `/health`. For one solid fixture, verify a default of 100 g. For one liquid fixture, verify a default of 100 ml. Verify that case and space variants give the same ordered suggestions. Verify that `z` and `ż` have an edit distance of one. Verify the expected distance order and both tie orders. Check empty, overlong, decomposed Unicode, and invalid input. Verify the specified stable errors.
+Generate and compile both clients. Run `go test ./...` from `backend/`. Call `/health`. For one solid fixture, verify a default of 100 g. For one liquid fixture, verify a default of 100 ml. Verify that case and space variants give the same ordered suggestions. Verify that `z` and `ż` have an edit distance of one. Verify exact, prefix, substring, and fallback tier order, within-tier distance order, and both tie orders. Check empty, overlong, decomposed Unicode, and invalid input. Verify the specified stable errors.
 
 **Review stop**
 
-Read the Phase 3 diff. Record REQ-007 and REQ-014 through REQ-017 as verified before Phase 4 tasks are generated.
+Read the Phase 3 diff. Record REQ-007, REQ-014, REQ-015, REQ-017, and REQ-076 as verified before Phase 4 tasks are generated.
 
 ## Phase 4 — First Substitute page API
 

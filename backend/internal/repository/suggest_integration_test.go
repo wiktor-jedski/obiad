@@ -141,10 +141,11 @@ func assertStableError(t *testing.T, err error, wantCode Code, wantField string)
 // SELECT-only runtime credential: exactly five distinct suggestions for
 // normal and no-close-match queries in both languages; all three default Food
 // Quantities; normalization of case, Unicode whitespace, and canonically
-// equivalent (NFC/NFD) text; Polish-diacritic distance; raw-distance order;
-// active-language and ID tie order; the stable validation failures; the fresh
-// loader; and the storage-failure classification. Every successful Run
-// executes exactly one fresh embedded SELECT and no mutating statement.
+// equivalent (NFC/NFD) text; Polish-diacritic distance; exact, prefix,
+// substring, and fallback tier order; within-tier raw-distance,
+// active-language, and ID tie order; stable validation failures; the fresh
+// loader; and storage-failure classification. Every successful Run executes
+// exactly one fresh embedded SELECT and no mutating statement.
 func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	db, suggest, tracer, wantSQL, owner := setupSuggestFixture(t)
 	ctx := context.Background()
@@ -164,8 +165,8 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 
 	// Normal query, both languages: the same query text is compared against
 	// the English names in English mode and the Polish names in Polish mode
-	// (REQ-013). Each language yields exactly five distinct suggestions whose
-	// order is derived from raw code-point Levenshtein distance (REQ-016).
+	// (REQ-013). Each language yields exactly five distinct suggestions in
+	// deterministic match-tier order (REQ-076).
 	enPizza, err := run("pizza margherita", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(pizza margherita, English): %v", err)
@@ -197,6 +198,18 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	// Distance-5 tie broken by Polish collation: gyros < mleko < paella <
 	// sernik.
 	assertIDs(t, plPierogi, 4, 16, 10, 29, 36)
+
+	// Prefix intent outranks raw length-biased distance (REQ-076): the
+	// normalized Polish name "owsianka" starts with "ows", so it ranks before
+	// shorter unrelated names such as "gyros", "masło", and "omlet".
+	plOws, err := run("ows", LanguagePolish)
+	if err != nil {
+		t.Fatalf("Run(ows, Polish): %v", err)
+	}
+	assertDistinctFive(t, plOws)
+	if plOws[0].FoodObjectID != 28 {
+		t.Fatalf("Run(ows, Polish) first ID = %d, want Owsianka ID 28 (full order %v)", plOws[0].FoodObjectID, suggestionIDs(plOws))
+	}
 
 	// No-close-match query, both languages: "zzzzzz" matches nothing, yet a
 	// valid catalog returns exactly five distinct suggestions (REQ-012). The
@@ -329,27 +342,27 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertDistinctFive(t, dupPl)
 	assertIDs(t, dupPl, 39, 40, 36, 34, 23)
 
-	// Equal distance with different names breaks by the pinned active-language
-	// collation of the normalized names. For the query "a", "źle" and "żaba"
-	// tie at distance 3: the English collator orders "żaba" before "źle"
-	// (ID 42 before 41), while the Polish collator orders "źle" before
-	// "żaba" (ID 41 before 42) — the same pair ranks differently per
-	// language, proving the pinned collation follows the Interface Language.
-	aEn, err := run("a", LanguageEnglish)
+	// Equal distance within the same fallback tier breaks by the pinned
+	// active-language collation of the normalized names. For query "ac",
+	// "źle" and "żaba" both have distance 3 and neither contains the query:
+	// the English collator orders "żaba" before "źle" (ID 42 before 41),
+	// while the Polish collator orders "źle" before "żaba" (ID 41 before
+	// 42) — the same pair ranks differently per language.
+	acEn, err := run("ac", LanguageEnglish)
 	if err != nil {
-		t.Fatalf("Run(a, English): %v", err)
+		t.Fatalf("Run(ac, English): %v", err)
 	}
-	assertDistinctFive(t, aEn)
-	assertIDs(t, aEn, 30, 42, 41, 13, 15)
-	assertSuggestion(t, aEn[1], "żaba", "Żaba", 100, UnitGram)
-	assertSuggestion(t, aEn[2], "źle", "Źle", 100, UnitGram)
+	assertDistinctFive(t, acEn)
+	assertIDs(t, acEn, 30, 42, 41, 15, 10)
+	assertSuggestion(t, acEn[1], "żaba", "Żaba", 100, UnitGram)
+	assertSuggestion(t, acEn[2], "źle", "Źle", 100, UnitGram)
 
-	aPl, err := run("a", LanguagePolish)
+	acPl, err := run("ac", LanguagePolish)
 	if err != nil {
-		t.Fatalf("Run(a, Polish): %v", err)
+		t.Fatalf("Run(ac, Polish): %v", err)
 	}
-	assertDistinctFive(t, aPl)
-	assertIDs(t, aPl, 41, 42, 15, 18, 38)
+	assertDistinctFive(t, acPl)
+	assertIDs(t, acPl, 41, 42, 15, 18, 38)
 
 	// Stable validation failures: invalid UTF-8, normalized-empty queries
 	// (ASCII and Unicode whitespace), and an over-128-code-point query are

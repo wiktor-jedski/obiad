@@ -159,12 +159,14 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | API test: A known fixture has the expected distance order. |
+| Status | Deprecated |
+| Verification | Historical API test: A known fixture has the expected raw-distance order. |
+
+**Notes:** Deprecated because raw distance penalizes untyped suffixes and gives counter-intuitive autocomplete results. Replaced by REQ-076.
 
 ## REQ-017 — Suggestion tie order
 
-**Statement:** For equal distances, the system shall sort suggestions by active-language name and then by stable Food Object ID.
+**Statement:** Within one suggestion match tier, for equal raw Levenshtein distances, the system shall sort suggestions by active-language name and then by stable Food Object ID.
 
 | Attribute | Value |
 | --- | --- |
@@ -751,3 +753,13 @@ This document is the source of truth for the active product requirements of the 
 | Type | Quality (Performance) |
 | Status | Active |
 | Verification | Browser performance check: Each of 20 searches meets the limit. |
+
+## REQ-076 — Autocomplete match order
+
+**Statement:** The system shall assign each normalized active-language Food Object name to its first applicable exact-match, full-name-prefix, substring, or fallback tier; sort those tiers in that order; and sort suggestions within each tier by increasing raw Levenshtein distance.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | API integration test: exact, full-name-prefix, substring, and fallback fixtures appear in tier order; within-tier distance and tie fixtures use the specified deterministic order; Polish query `ows` ranks `Owsianka` first. |

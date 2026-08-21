@@ -67,7 +67,6 @@ const VIEWPORTS = [
  * the Search field must resolve to, as `getComputedStyle` serializes them.
  */
 const SURFACE_RGB = "rgb(22, 29, 22)"; // #161D16
-const SECONDARY_RGB = "rgb(134, 239, 172)"; // #86EFAC
 const TEXT_PRIMARY_RGB = "rgb(243, 244, 246)"; // #F3F4F6
 const PRIMARY_RGB = "rgb(74, 222, 128)"; // #4ADE80
 
@@ -198,7 +197,7 @@ async function assertEmptyShell(
   expect(inputStyle.paddingLeft).toBe(`${FIELD_TEXT_INSET_PX}px`);
   expect(inputStyle.borderWidth).toBe("1px");
   expect(inputStyle.borderStyle).toBe("solid");
-  expect(inputStyle.borderColor).toBe(SECONDARY_RGB);
+  expect(inputStyle.borderColor).toBe(PRIMARY_RGB);
   expect(inputStyle.color).toBe(TEXT_PRIMARY_RGB);
 
   // --- Geometry: 56px high, min(100%, 640px) wide, horizontal and 45% of
@@ -250,7 +249,6 @@ async function assertEmptyShell(
   }
 
   // --- Primary focus border without an outer highlight. ---
-  await page.keyboard.press("Tab");
   await expect(input).toBeFocused();
   const focusStyle = await input.evaluate((element) => {
     const style = getComputedStyle(element);

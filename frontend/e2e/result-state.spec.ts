@@ -281,13 +281,15 @@ test.describe("result state", () => {
     await expect(spinner).toBeVisible();
     await expect(page.locator("[data-selected-input-region]")).toBeVisible();
 
-    // The layout distances are measured with offsetTop/offsetHeight: the
-    // spinner's CSS rotation animation makes `boundingBox()` report the
-    // transformed axis-aligned box, which moves with the rotation phase,
-    // while the layout box stays exact. All three elements share the
-    // positioned `main` as offsetParent, so the deltas are comparable.
+    // The spinner uses offsets within the positioned Search region so its
+    // animation transform cannot affect the measurement. The selected-input
+    // region uses `main` as its offset parent, so translate the spinner's
+    // Search-local bottom edge into the same coordinate system.
     const layout = await page.evaluate(() => {
       const input = document.getElementById("food-search") as HTMLElement;
+      const searchRegion = document.querySelector(
+        "[data-search-region]",
+      ) as HTMLElement;
       const spin = document.querySelector(
         "[data-new-search-spinner]",
       ) as HTMLElement;
@@ -296,7 +298,9 @@ test.describe("result state", () => {
       ) as HTMLElement;
       return {
         spinnerOffset: spin.offsetTop - (input.offsetTop + input.offsetHeight),
-        selectedGap: selected.offsetTop - (spin.offsetTop + spin.offsetHeight),
+        selectedGap:
+          selected.offsetTop -
+          (searchRegion.offsetTop + spin.offsetTop + spin.offsetHeight),
       };
     });
     expect(

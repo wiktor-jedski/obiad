@@ -13,13 +13,14 @@
 // The package also implements the concrete Suggest Food Objects Module
 // (ARCH-004). Its one Run operation validates and normalizes a raw Search
 // Query, ranks the request-local snapshot loaded through the private Loader
-// by raw code-point Levenshtein distance, the ISSUE-004-pinned
-// active-language collation, and stable Food Object ID, and returns exactly
-// five distinct suggestions carrying both localized names and the
-// backend-derived default Food Quantity. The Module's exported surface is
-// the concrete Suggest type and its domain values and stable failure codes;
-// the normalization, distance, and ranking internals stay private, and no
-// generated transport value enters the Module.
+// by exact, full-name-prefix, substring, and fallback match tier, then by raw
+// code-point Levenshtein distance, the ISSUE-004-pinned active-language
+// collation, and stable Food Object ID, and returns exactly five distinct
+// suggestions carrying both localized names and the backend-derived default
+// Food Quantity. The Module's exported surface is the concrete Suggest type
+// and its domain values and stable failure codes. The normalization,
+// matching, distance, and ranking internals stay private, and no generated
+// transport value enters the Module.
 //
 // The package also implements the concrete Find Substitute Page Module
 // (ARCH-005). Its one Run operation validates the Food Object ID, page
