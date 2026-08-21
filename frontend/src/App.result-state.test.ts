@@ -1,0 +1,164 @@
+/**
+ * Result-state composition — happy-dom component integration scenario
+ * (task 30; ARCH-001, ARCH-002, ARCH-003, ARCH-011, ARCH-019, ARCH-020,
+ * ARCH-022, REQ-003, REQ-044, REQ-061, ISSUE-003, ISSUE-008).
+ *
+ * `bun test` runs this file with the pinned `happy-dom` and
+ * `@testing-library/svelte` packages. ISSUE-003 records that zero eligible
+ * Substitutes are unreachable in the supported real stack with the
+ * deterministic catalog, so the real-stack Playwright scenario cannot drive
+ * the successful empty response; this narrow ARCH-022 seam drives it through
+ * the production browser interaction state, the rendered root application
+ * and its production components, and the generated client — with no
+ * repository fake — and observes the exact localized zero-result message
+ * with zero cards in English and Polish (REQ-044, ISSUE-008). The scenario
+ * stubs only the network boundary (the generated client's `fetch`), exactly
+ * like the Substitution Search lifecycle scenario; no fake data layer or
+ * repository replaces the store or the query (ARCH-022).
+ *
+ * The scenario selects a suggestion through the production interaction
+ * state, lets the generated-client page-0 request resolve to a successful
+ * empty envelope, and proves that the root application composes the
+ * zero-result surface: no result cards, exactly the active-dictionary
+ * message `No substitutes found` / `Nie znaleziono zamienników`, the
+ * read-only selected-input region still present, and the main element's
+ * `data-interaction-state` at `zeroResults`.
+ */
+
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { cleanup, render } from "@testing-library/svelte";
+import { tick } from "svelte";
+import App from "./App.svelte";
+import {
+  interactionState,
+  type SelectedFoodObject,
+} from "./lib/interactionState";
+import { interfaceLanguage } from "./lib/interfaceLanguage";
+
+/** A captured Butter selection fixture for result-state rendering. */
+const SELECTED: SelectedFoodObject = {
+  foodObjectId: 18,
+  names: { en: "Butter", pl: "Masło" },
+  quantity: { value: 100, unit: "g" },
+  capturedLanguage: "en",
+} as const;
+
+/** A successful page-0 Substitute Search response with zero items (REQ-044). */
+const EMPTY_RESPONSE_BODY = JSON.stringify({
+  pageIndex: 0,
+  totalEligibleCount: 0,
+  hasMore: false,
+  items: [],
+});
+
+/**
+ * The minimal `Request` stand-in happy-dom needs to run the generated
+ * client: the real constructor rejects relative URLs on its `about:blank`
+ * document location. The client only builds the request to hand it to
+ * `fetch`, so a url/method carrier is sufficient.
+ */
+class HappyDomRequest {
+  readonly url: string;
+  readonly method: string;
+
+  constructor(url: string | URL, init?: RequestInit) {
+    this.url = String(url);
+    this.method = init?.method ?? "GET";
+  }
+}
+
+/** Yields to the event loop so pending fetch promises and effects settle. */
+async function settle(): Promise<void> {
+  await tick();
+  await new Promise((resolve) => setTimeout(resolve, 25));
+}
+
+describe("the root result-state composition", () => {
+  beforeEach(() => {
+    // Deterministic shared stores before each rendered test: the persisted
+    // Interface Language store resets to English (ISSUE-007), and the
+    // single application interaction-state store resets to its initial
+    // empty state. Bun's test runner reuses worker processes across files,
+    // so the shared interaction state may carry a selection left by another
+    // scenario (task 30); the reset makes this scenario order-independent
+    // exactly like the Interface Language reset.
+    interfaceLanguage.set("en");
+    interactionState.reset();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  test("a successful empty response drives the production state to zeroResults and renders the exact localized zero-result message with zero cards in English and Polish", async () => {
+    // Count every generated-client POST through a fetch stub; no real
+    // network is touched. The stub returns a successful empty page-0
+    // response so the production state machine reaches the zeroResults
+    // transition (REQ-044, ISSUE-003).
+    const postUrls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    const OriginalRequest = globalThis.Request;
+    globalThis.Request = HappyDomRequest as unknown as typeof Request;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string" ? input : (input as { url: string }).url;
+      if (url.includes("/api/v1/substitutes/search")) {
+        postUrls.push(url);
+        return new Response(EMPTY_RESPONSE_BODY, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      // A selection exists before the first application mount (REQ-022):
+      // the interaction state is the loadingNew transition.
+      interactionState.selectSuggestion(SELECTED);
+      render(App);
+      await settle();
+
+      // The page-0 empty response transitions the state to zeroResults:
+      // the root main element exposes the transition name and the region
+      // composition follows the state.
+      expect(postUrls, "one POST for the selection").toHaveLength(1);
+      expect(
+        document.querySelector("main")?.getAttribute("data-interaction-state"),
+      ).toBe("zeroResults");
+
+      // The read-only Substitution Input region is still present after a
+      // selection (task 28), and the result area is replaced by the
+      // localized zero-result message with zero cards (REQ-044).
+      expect(document.querySelector("[data-selected-input-region]")).not.toBe(
+        null,
+      );
+      expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
+      expect(document.querySelectorAll("[data-result-region]")).toHaveLength(0);
+
+      const zeroRegion = document.querySelector("[data-zero-result-region]");
+      expect(zeroRegion).not.toBeNull();
+      expect(zeroRegion?.textContent).toBe("No substitutes found");
+
+      // The zero-result message follows the active Interface Language
+      // dictionary (ARCH-003): switching to Polish re-renders the exact
+      // Polish message without touching the captured selection.
+      interfaceLanguage.set("pl");
+      await tick();
+      expect(
+        document.querySelector("[data-zero-result-region]")?.textContent,
+      ).toBe("Nie znaleziono zamienników");
+      expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
+      expect(
+        document.querySelector("main")?.getAttribute("data-interaction-state"),
+      ).toBe("zeroResults");
+    } finally {
+      cleanup();
+      globalThis.fetch = originalFetch;
+      globalThis.Request = OriginalRequest;
+    }
+  });
+});

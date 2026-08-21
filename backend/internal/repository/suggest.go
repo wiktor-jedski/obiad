@@ -143,12 +143,12 @@ func NewSuggest(conn *pgx.Conn) (*Suggest, error) {
 // Run implements the Suggest Food Objects operation (ARCH-004, ARCH-017):
 // it validates the raw Search Query UTF-8 encoding and the Interface
 // Language, normalizes the query, performs one fresh catalog read through
-// the Catalog Loader, ranks the snapshot by raw code-point Levenshtein
-// distance, the pinned active-language collation, and stable Food Object ID,
-// and returns exactly five distinct suggestions. Every suggestion carries
-// the stable Food Object ID, both localized names, and the backend-derived
-// default Food Quantity. Failures are stable Error values with a Code and an
-// optional Field.
+// the Catalog Loader, assigns exact, prefix, substring, and fallback match
+// tiers, then ranks within each tier by raw code-point Levenshtein distance,
+// the pinned active-language collation, and stable Food Object ID. It returns
+// exactly five distinct suggestions carrying the stable Food Object ID, both
+// localized names, and the backend-derived default Food Quantity. Failures
+// are stable Error values with a Code and an optional Field.
 func (s *Suggest) Run(ctx context.Context, rawQuery string, lang Language) ([]Suggestion, error) {
 	if lang != LanguageEnglish && lang != LanguagePolish {
 		return nil, &Error{
@@ -212,7 +212,7 @@ func normalize(s string) string {
 }
 
 // levenshtein returns the raw code-point Levenshtein distance between a and
-// b (ARCH-017, REQ-016): the minimum number of single code-point insertions,
+// b (ARCH-017, REQ-076): the minimum number of single code-point insertions,
 // deletions, or substitutions. Polish diacritics remain distinct from their
 // base letters, so "z" and "ż" are one edit apart (REQ-015). Working memory
 // is bounded by the shorter input: only two distance rows are kept, each
@@ -248,21 +248,34 @@ func levenshtein(a, b []rune) int {
 	return prev[len(a)]
 }
 
+// matchTier is the autocomplete relevance class of one normalized candidate.
+// Lower values rank first (ARCH-017, REQ-076).
+type matchTier uint8
+
+const (
+	matchExact matchTier = iota
+	matchPrefix
+	matchSubstring
+	matchFallback
+)
+
 // ranked is one candidate suggestion before slicing: the Food Object, its
-// raw code-point Levenshtein distance, and its normalized active-language
-// name.
+// first applicable autocomplete match tier, raw code-point Levenshtein
+// distance, and normalized active-language name.
 type ranked struct {
 	object   foodObject
+	tier     matchTier
 	distance int
 	normName string
 }
 
-// rank orders the catalog snapshot by increasing raw code-point Levenshtein
-// distance, the ISSUE-004-pinned active-language collation of the normalized
-// names (collate.New(language.English) or collate.New(language.Polish) with
-// no options), and stable Food Object ID (ARCH-017, REQ-016, REQ-017), then
-// returns the five best suggestions with their backend-derived default Food
-// Quantities. No match threshold is applied, so a valid seeded catalog
+// rank orders the catalog snapshot by exact match, full-name prefix,
+// substring, and fallback tier. Within each tier it sorts by increasing raw
+// code-point Levenshtein distance, the ISSUE-004-pinned active-language
+// collation (collate.New(language.English) or collate.New(language.Polish)
+// with no options), and stable Food Object ID (ARCH-017, REQ-017, REQ-076).
+// It returns the five best suggestions with their backend-derived default
+// Food Quantities. No match threshold is applied, so a valid seeded catalog
 // returns five suggestions for any accepted nonempty query.
 func rank(objects []foodObject, query string, lang Language) []Suggestion {
 	collator := collate.New(language.English)
@@ -279,12 +292,16 @@ func rank(objects []foodObject, query string, lang Language) []Suggestion {
 		normName := normalize(name)
 		rankedList = append(rankedList, ranked{
 			object:   object,
+			tier:     classifyMatch(normName, query),
 			distance: levenshtein(q, []rune(normName)),
 			normName: normName,
 		})
 	}
 	sort.Slice(rankedList, func(i, j int) bool {
 		a, b := rankedList[i], rankedList[j]
+		if a.tier != b.tier {
+			return a.tier < b.tier
+		}
 		if a.distance != b.distance {
 			return a.distance < b.distance
 		}
@@ -306,6 +323,21 @@ func rank(objects []foodObject, query string, lang Language) []Suggestion {
 		})
 	}
 	return suggestions
+}
+
+// classifyMatch assigns one normalized name to its first applicable
+// autocomplete tier (ARCH-017, REQ-076).
+func classifyMatch(name, query string) matchTier {
+	switch {
+	case name == query:
+		return matchExact
+	case strings.HasPrefix(name, query):
+		return matchPrefix
+	case strings.Contains(name, query):
+		return matchSubstring
+	default:
+		return matchFallback
+	}
 }
 
 // defaultQuantity derives the backend default Food Quantity (ARCH-004,

@@ -15,7 +15,7 @@ import { dirname } from "node:path";
  *
  *   - the exact label, placeholder, input semantics, and initial focus
  *     state (`<input type="search">`, visually hidden `Search` label,
- *     `Search foods` placeholder, no icon, no autofocus);
+ *     `Search foods` placeholder, no icon, and autofocus);
  *   - exactly one semantic primary content column and one Search control,
  *     with no excluded Phase 7 (suggestion list, selected input, result
  *     cards) region, the Phase 6 Interface Language dropdown, and no
@@ -67,7 +67,6 @@ const VIEWPORTS = [
  * the Search field must resolve to, as `getComputedStyle` serializes them.
  */
 const SURFACE_RGB = "rgb(22, 29, 22)"; // #161D16
-const SECONDARY_RGB = "rgb(134, 239, 172)"; // #86EFAC
 const TEXT_PRIMARY_RGB = "rgb(243, 244, 246)"; // #F3F4F6
 const PRIMARY_RGB = "rgb(74, 222, 128)"; // #4ADE80
 
@@ -138,14 +137,11 @@ async function assertEmptyShell(
   expect(parseFloat(labelStyle.width)).toBeLessThanOrEqual(1);
   expect(parseFloat(labelStyle.height)).toBeLessThanOrEqual(1);
 
-  // No autofocus: no attribute and the input is not the initial focus.
+  // Search is the initial focus so the visitor can type immediately.
   expect(
     await input.evaluate((element) => element.hasAttribute("autofocus")),
-  ).toBe(false);
-  await expect(input).not.toBeFocused();
-  expect(
-    await page.evaluate(() => document.activeElement === document.body),
   ).toBe(true);
+  await expect(input).toBeFocused();
 
   // No icon: no background image, no nested image markup, and the native
   // search appearance is removed.
@@ -201,7 +197,7 @@ async function assertEmptyShell(
   expect(inputStyle.paddingLeft).toBe(`${FIELD_TEXT_INSET_PX}px`);
   expect(inputStyle.borderWidth).toBe("1px");
   expect(inputStyle.borderStyle).toBe("solid");
-  expect(inputStyle.borderColor).toBe(SECONDARY_RGB);
+  expect(inputStyle.borderColor).toBe(PRIMARY_RGB);
   expect(inputStyle.color).toBe(TEXT_PRIMARY_RGB);
 
   // --- Geometry: 56px high, min(100%, 640px) wide, horizontal and 45% of
@@ -253,7 +249,6 @@ async function assertEmptyShell(
   }
 
   // --- Primary focus border without an outer highlight. ---
-  await page.keyboard.press("Tab");
   await expect(input).toBeFocused();
   const focusStyle = await input.evaluate((element) => {
     const style = getComputedStyle(element);

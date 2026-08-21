@@ -109,7 +109,7 @@ Phase 2.
 - Apply Unicode lowercase mapping.
 - Reject a normalized Search Query longer than 128 Unicode code points.
 - Calculate raw Levenshtein distance with bounded working memory.
-- Sort by distance, active-language collation, and stable Food Object ID.
+- Sort by exact-match, full-name-prefix, substring, and fallback tier; within each tier sort by distance, active-language collation, and stable Food Object ID.
 - Return both localized names and the default Food Quantity.
 - Use the stable errors and deadlines from ARCH-008 and ARCH-019.
 - Keep Fiber on loopback.
@@ -122,18 +122,18 @@ Phase 2.
 - [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
 - [REQ-014](../requirements/requirements.md#req-014--query-normalization)
 - [REQ-015](../requirements/requirements.md#req-015--polish-characters)
-- [REQ-016](../requirements/requirements.md#req-016--levenshtein-order)
 - [REQ-017](../requirements/requirements.md#req-017--suggestion-tie-order)
+- [REQ-076](../requirements/requirements.md#req-076--autocomplete-match-order)
 
 Collect backend evidence for REQ-002, REQ-012, REQ-013, REQ-023, and REQ-024. Do not mark REQ-002, REQ-012, REQ-013, REQ-023, or REQ-024 as complete.
 
 **Phase gate**
 
-Generate and compile both clients. Run `go test ./...` from `backend/`. Call `/health`. For one solid fixture, verify a default of 100 g. For one liquid fixture, verify a default of 100 ml. Verify that case and space variants give the same ordered suggestions. Verify that `z` and `ż` have an edit distance of one. Verify the expected distance order and both tie orders. Check empty, overlong, decomposed Unicode, and invalid input. Verify the specified stable errors.
+Generate and compile both clients. Run `go test ./...` from `backend/`. Call `/health`. For one solid fixture, verify a default of 100 g. For one liquid fixture, verify a default of 100 ml. Verify that case and space variants give the same ordered suggestions. Verify that `z` and `ż` have an edit distance of one. Verify exact, prefix, substring, and fallback tier order, within-tier distance order, and both tie orders. Check empty, overlong, decomposed Unicode, and invalid input. Verify the specified stable errors.
 
 **Review stop**
 
-Read the Phase 3 diff. Record REQ-007 and REQ-014 through REQ-017 as verified before Phase 4 tasks are generated.
+Read the Phase 3 diff. Record REQ-007, REQ-014, REQ-015, REQ-017, and REQ-076 as verified before Phase 4 tasks are generated.
 
 ## Phase 4 — First Substitute page API
 
@@ -261,7 +261,7 @@ Read the Phase 6 diff. Record REQ-056 and REQ-057 as verified before Phase 7 tas
 
 **Goal**
 
-Let an anonymous visitor select a suggestion with a pointer and see the first result state.
+Let an anonymous visitor operate suggestions with a pointer or keyboard and see the first result state.
 
 **Depends on**
 
@@ -276,9 +276,15 @@ Phases 4 and 6.
 - Request suggestions when a focused Search field has a nonempty Search Query.
 - Show exactly five suggestions.
 - Highlight the first suggestion.
+- Use combobox and listbox active-descendant semantics with stable option IDs.
+- Move the active option with Arrow Up and Arrow Down, clamping at the first and fifth options.
+- Select the active option with Enter.
+- Close the suggestions with Escape while retaining Search focus and text.
+- Close the suggestions with Tab and allow native focus movement.
 - Abort stale suggestion requests.
 - Prevent stale responses from changing the list.
 - Select a suggestion with a pointer.
+- Replace the Search Query text with the selected suggestion's active-language name before starting the search.
 - Send page 0 with the returned default Food Quantity.
 - Show the new-search spinner below the Search control.
 - Show the selected Substitution Input.
@@ -286,7 +292,7 @@ Phases 4 and 6.
 - Use the result-state layout.
 - Show the placeholder for an absent, unknown, or failed image.
 - Keep focus in the Search field after success.
-- Do not add keyboard suggestion control, Food Quantity edits, MORE!, request failures, motion, or active-content language changes.
+- Do not add Food Quantity edits, MORE!, request failures, motion, or active-content language changes.
 
 **Requirements that become testable**
 
@@ -297,6 +303,7 @@ Phases 4 and 6.
 - [REQ-012](../requirements/requirements.md#req-012--five-suggestions)
 - [REQ-013](../requirements/requirements.md#req-013--interface-language-search)
 - [REQ-018](../requirements/requirements.md#req-018--first-suggestion-highlight)
+- [REQ-019](../requirements/requirements.md#req-019--suggestion-keyboard-control)
 - [REQ-020](../requirements/requirements.md#req-020--pointer-suggestion-selection)
 - [REQ-022](../requirements/requirements.md#req-022--immediate-search)
 - [REQ-023](../requirements/requirements.md#req-023--serving-default)
@@ -308,22 +315,23 @@ Phases 4 and 6.
 - [REQ-046](../requirements/requirements.md#req-046--search-spinner)
 - [REQ-061](../requirements/requirements.md#req-061--result-state-layout)
 - [REQ-064](../requirements/requirements.md#req-064--search-focus)
+- [REQ-077](../requirements/requirements.md#req-077--selected-suggestion-in-search)
 
 Recheck REQ-039 and REQ-040 on rendered cards.
 
 **Phase gate**
 
-Run `bun test` and `bun run test:e2e` from `frontend/`. Use a new browser profile with no authentication. Verify one primary column with the Search, selected-input, and result regions. Verify that the Search is above the cards in the result state. Verify that a normal Search Query and `zzzzzz` each show five suggestions. Verify English and Polish name matching. Verify that the first suggestion is active and is the active descendant. Select the third suggestion with a pointer. Verify that the loaded results use the selected Food Object. Verify one Substitution Search request with no second submit action. Use designated fixtures to verify 1 Serving, 100 g, and 100 ml defaults. Verify expected ranks 1 through 3. Verify each card field in English and Polish. Verify g and ml card units with no Serving equivalent. Verify that an image-less fixture has a placeholder and a valid card. Verify both localized zero-result messages. Keep a real request pending. Verify that the spinner stays below the Search control until the request ends. Verify Search field focus after success. Verify that each food-data request uses `/api` and the seeded PostgreSQL catalog.
+Run `bun test` and `bun run test:e2e` from `frontend/`. Use a new browser profile with no authentication. Verify one primary column with the Search, selected-input, and result regions. Verify that the Search is above the cards in the result state. Verify that a normal Search Query and `zzzzzz` each show five suggestions. Verify English and Polish name matching. Verify that the first suggestion is active and is the active descendant. Select the third suggestion with a pointer. Verify that the loaded results use the selected Food Object. Verify one Substitution Search request with no second submit action. Use designated fixtures to verify 1 Serving, 100 g, and 100 ml defaults. Verify expected ranks 1 through 3. Verify each card field in English and Polish. Verify g and ml card units with no Serving equivalent. Verify that an image-less fixture has a placeholder and a valid card. Verify both localized zero-result messages. Keep a real request pending. Verify that the spinner stays below the Search control until the request ends. Verify Search field focus after success. Verify that each food-data request uses `/api` and the seeded PostgreSQL catalog. Verify that Arrow Up and Arrow Down clamp at both list boundaries, Enter selects the active suggestion, Escape closes the list while retaining Search focus and text, and Tab closes the list while allowing native focus movement.
 
 **Review stop**
 
-Read the Phase 7 diff. Record the listed requirements as verified before Phase 8 tasks are generated.
+Read the Phase 7 diff. Record the listed requirements as verified before Phase 9 tasks are generated; Phase 8 is reserved.
 
-## Phase 8 — Suggestion keyboard control
+## Phase 8 — Reserved after keyboard merge
 
 **Goal**
 
-Operate the suggestion list with the keyboard.
+Preserve phase numbering after suggestion keyboard control moved into Phase 7.
 
 **Depends on**
 
@@ -331,26 +339,16 @@ Phase 7.
 
 **Implement**
 
-- Add the combobox and listbox active-descendant behavior.
-- Add Arrow Up and Arrow Down transitions.
-- Add Enter selection.
-- Add Escape close behavior.
-- Add Tab focus movement.
-- Do not change pointer selection.
-
-**Requirements that become testable**
-
-- [REQ-019](../requirements/requirements.md#req-019--suggestion-keyboard-control)
-
-Recheck REQ-018.
+- Add no behavior, task, or test.
+- Phase 7 owns the complete combobox, listbox, active-descendant, pointer, Arrow Up, Arrow Down, Enter, Escape, and Tab behavior.
 
 **Phase gate**
 
-Run `bun run test:e2e` from `frontend/`. Check first-item highlight, both arrows at list boundaries, Enter, Escape, Tab, and the active descendant value.
+No separate gate. The Phase 7 gate verifies the merged keyboard behavior.
 
 **Review stop**
 
-Read the Phase 8 diff. Record REQ-019 as verified before Phase 9 tasks are generated.
+Do not generate Phase 8 tasks. After the Phase 7 review, proceed directly to Phase 9.
 
 ## Phase 9 — Empty Search Query validation
 
@@ -360,7 +358,7 @@ Reject a normalized empty Search Query in the browser.
 
 **Depends on**
 
-Phases 6 and 8.
+Phases 6 and 7.
 
 **Implement**
 

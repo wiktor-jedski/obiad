@@ -77,17 +77,16 @@ test.describe("real-stack smoke", () => {
       expect(["g", "ml", "serving"]).toContain(item.defaultQuantity.unit);
     }
 
-    // The deterministic seeded catalog ranks these five Food Objects first
-    // for the English query "chicken" (verified against the real Fiber
-    // process): Milk (10), Pancakes (26), Butter (18), Cheesecake (36), and
-    // Pho (30). Milk is a liquid without a Serving, so its derived default
-    // quantity is 100 ml (ARCH-004).
+    // Tiered autocomplete ranks the English query "chicken" as the
+    // full-name prefix Chicken breast, then the two substring matches, then
+    // the best fallback candidates (REQ-076). Chicken breast has no Serving,
+    // so its default is 100 g (ARCH-004).
     expect(suggestions.items.map((item) => item.foodObjectId)).toEqual([
-      10, 26, 18, 36, 30,
+      5, 22, 17, 10, 26,
     ]);
     expect(suggestions.items[0].defaultQuantity).toEqual({
       value: 100,
-      unit: "ml",
+      unit: "g",
     });
 
     // The generated-client request ran in the browser and crossed the

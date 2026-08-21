@@ -133,8 +133,21 @@ test.describe("Interface Language selection", () => {
     const languageSelect = page.getByRole("combobox", {
       name: COPY.en.control,
     });
+
+    // Task 27: a focused nonempty Search Query starts exactly one live
+    // suggestion request, so the suggestion panel opens while the field is
+    // focused (ARCH-010, REQ-012).
     await searchInput.fill("abc");
+    await expect(page.getByRole("listbox")).toBeVisible();
+    const requestsAfterTyping = requestUrls.length;
+
+    // Moving focus to the language control closes the suggestion list
+    // (REQ-059); the language change retains the unfinished text, leaves
+    // focus on the dropdown, and starts no further application request
+    // because the Search field is not focused.
     await languageSelect.focus();
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(searchInput).not.toHaveAttribute("aria-activedescendant");
     await languageSelect.selectOption("pl");
 
     await expect(searchInput).toHaveValue("abc");
@@ -144,7 +157,11 @@ test.describe("Interface Language selection", () => {
     await expect(page.locator("button, [role='listbox'], ul, ol")).toHaveCount(
       0,
     );
-    expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+    expect(
+      requestUrls
+        .slice(requestsAfterTyping)
+        .some((url) => url.includes("/api/")),
+    ).toBe(false);
   });
 });
 
@@ -215,7 +232,6 @@ async function assertControlAtViewport(
   await expect(languageSelect).toHaveCSS("background-color", TRANSPARENT_RGBA);
   await expect(languageSelect).toHaveCSS("color", TEXT_PRIMARY_RGB);
 
-  await page.keyboard.press("Tab");
   await expect(searchInput).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(languageSelect).toBeFocused();
