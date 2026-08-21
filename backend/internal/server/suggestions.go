@@ -231,6 +231,10 @@ func suggestionsResponse(suggestions []repository.Suggestion) transport.FoodSugg
 	for _, suggestion := range suggestions {
 		allowed := make([]transport.AllowedQuantity, 0, len(suggestion.AllowedQuantities))
 		for _, quantity := range suggestion.AllowedQuantities {
+			// The Catalog Loader validates the ARCH-013 Serving invariant
+			// before any suggestion is ranked, so every maximum value is a
+			// positive whole number no larger than the int32 display range
+			// and this conversion can never wrap (task-33 repair).
 			allowed = append(allowed, transport.AllowedQuantity{
 				Unit:         transport.AllowedQuantityUnit(quantity.Unit),
 				MaximumValue: int32(quantity.MaximumValue),

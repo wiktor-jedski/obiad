@@ -14,23 +14,22 @@ package repository
 // The test proves the accepted inputs — positive integer direct g and ml
 // values, dot-decimal Serving counts, and both 100,000 g / 100,000 ml
 // converted-value boundaries (including a Serving conversion that lands
-// exactly on the limit and the smallest positive subnormal converted
-// value) — and the exact ISSUE-005 stable failures for nonpositive,
-// fractional, or nonfinite base values, unsupported units, invalid Serving
-// values, Physical State unit mismatch, missing Serving, over-limit
-// converted values, a converted value that underflows to zero, nonpositive
-// or absent Food Object IDs, negative pages, and every nonzero page. A
-// per-request statement tracer proves no retry and at most one fresh
-// SELECT: catalog-independent request failures (page index, Food Object ID,
-// quantity value or unit) are rejected before any catalog read and record
-// zero statements; object-dependent failures (absent ID, unit mismatch,
-// unavailable Serving, converted-value range) record exactly one fresh
-// embedded SELECT and no second read; and every accepted request records
-// exactly one fresh embedded SELECT. No fake Adapter, exported seam, or
-// test hook is added: the test sits in the same package. The admin
-// connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style
-// environment variables; no credential is committed and tests skip when no
-// server is reachable.
+// exactly on the limit and a tiny positive converted value) — and the exact
+// ISSUE-005 stable failures for nonpositive, fractional, or nonfinite base
+// values, unsupported units, invalid Serving values, Physical State unit
+// mismatch, missing Serving, over-limit converted values, a converted value
+// that underflows to zero, nonpositive or absent Food Object IDs, negative
+// pages, and every nonzero page. A per-request statement tracer proves no
+// retry and at most one fresh SELECT: catalog-independent request failures
+// (page index, Food Object ID, quantity value or unit) are rejected before
+// any catalog read and record zero statements; object-dependent failures
+// (absent ID, unit mismatch, unavailable Serving, converted-value range)
+// record exactly one fresh embedded SELECT and no second read; and every
+// accepted request records exactly one fresh embedded SELECT. No fake
+// Adapter, exported seam, or test hook is added: the test sits in the same
+// package. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or
+// from libpq-style environment variables; no credential is committed and
+// tests skip when no server is reachable.
 
 import (
 	"context"
@@ -107,32 +106,35 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 
 	// Converted-value lower bound (ARCH-018: the converted base quantity
 	// must be strictly positive and finite). The schema owner inserts an
-	// isolated artificial fixture — a schema-valid smallest-subnormal stored
-	// Serving on Food Object 39 — that the production seed never contains
-	// (ISSUE-002, ARCH-018 quality constraints). A smallest-subnormal
-	// Serving count times that stored Serving underflows to exactly zero,
-	// which must be classified as the ISSUE-005 stable INVALID_QUANTITY with
-	// field quantity.value (a nonpositive base quantity) after exactly one
-	// fresh SELECT instead of returning a false successful zero-quantity
-	// page. A Serving count of 1 against the same fixture converts to the
-	// smallest positive subnormal (strictly positive), proving the guard
-	// rejects only the underflowed zero product, not every subnormal
-	// converted value.
+	// isolated artificial fixture — a schema-valid tiny stored Serving of
+	// 1e-4 on Food Object 39 — that the production seed never contains
+	// (ISSUE-002, ARCH-018 quality constraints). The value is small enough
+	// that a smallest-subnormal Serving count times it underflows to exactly
+	// zero, yet large enough to satisfy the ISSUE-010 Serving invariant
+	// (the whole-number maximum floor(100000 / 1e-4) = 1000000000 fits the
+	// int32 display range), so the row passes the Catalog Loader and reaches
+	// the converted-value guard. The underflowed zero product must be
+	// classified as the ISSUE-005 stable INVALID_QUANTITY with field
+	// quantity.value (a nonpositive base quantity) after exactly one fresh
+	// SELECT instead of returning a false successful zero-quantity page. A
+	// Serving count of 1 against the same fixture converts to 1e-4
+	// (strictly positive), proving the guard rejects only the underflowed
+	// zero product, not every tiny converted value.
 	if _, err := owner.Exec(ctx,
 		`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving)
 		 VALUES ($1, $2::jsonb, 'solid', 1, 1, 1, $3)`,
-		39, `{"en": "Subnormal Serving fixture", "pl": "Subnormalna porcja"}`, math.SmallestNonzeroFloat64,
+		39, `{"en": "Tiny Serving fixture", "pl": "Drobna porcja"}`, 1e-4,
 	); err != nil {
-		t.Fatalf("owner subnormal-Serving fixture insert: %v", err)
+		t.Fatalf("owner tiny-Serving fixture insert: %v", err)
 	}
-	t.Run("accept smallest positive subnormal converted Serving", func(t *testing.T) {
+	t.Run("accept tiny positive converted Serving", func(t *testing.T) {
 		tracer.reset()
 		page, err := module.Run(ctx, SubstituteInput{FoodObjectID: 39, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 0)
 		if err != nil {
-			t.Fatalf("Run(subnormal-Serving fixture, 1 serving): %v", err)
+			t.Fatalf("Run(tiny-Serving fixture, 1 serving): %v", err)
 		}
 		if page.TotalEligibleCount != 38 {
-			t.Fatalf("subnormal-Serving fixture: total eligible count %d, want 38 (39 rows minus the input)", page.TotalEligibleCount)
+			t.Fatalf("tiny-Serving fixture: total eligible count %d, want 38 (39 rows minus the input)", page.TotalEligibleCount)
 		}
 		tracer.assertSingleSelect(t, wantSQL)
 	})
@@ -140,7 +142,7 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		tracer.reset()
 		page, err := module.Run(ctx, SubstituteInput{FoodObjectID: 39, Quantity: FoodQuantity{Value: math.SmallestNonzeroFloat64, Unit: UnitServing}}, 0)
 		if page != nil {
-			t.Fatalf("Run(subnormal-Serving fixture, subnormal serving) returned a page, want the stable failure INVALID_QUANTITY with field quantity.value")
+			t.Fatalf("Run(tiny-Serving fixture, subnormal serving) returned a page, want the stable failure INVALID_QUANTITY with field quantity.value")
 		}
 		assertStableFailure(t, err, CodeInvalidQuantity, "quantity.value")
 		tracer.assertSingleSelect(t, wantSQL)

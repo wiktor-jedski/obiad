@@ -370,13 +370,35 @@ func defaultQuantity(object foodObject) Quantity {
 	return Quantity{Value: 100, Unit: UnitGram}
 }
 
+// servingMaximum returns the whole-number floor of maxBaseQuantity divided
+// by a stored Serving base quantity: the ISSUE-010 allowed maximum of the
+// serving unit. The exact positive floor is the largest whole Serving count
+// whose converted base quantity stays at most 100,000 g or 100,000 ml.
+func servingMaximum(serving float64) float64 {
+	return math.Floor(maxBaseQuantity / serving)
+}
+
+// servingMaximumIsRepresentable reports whether the ISSUE-010 serving
+// maximum of a stored Serving base quantity is a positive whole value that
+// fits the generated int32 display range. The catalog Serving invariant
+// (ARCH-013, task-33 repair) requires it, so a validated catalog row can
+// never produce a zero maximum or a maximum that wraps in the HTTP Adapter's
+// int32 mapping.
+func servingMaximumIsRepresentable(serving float64) bool {
+	maximum := servingMaximum(serving)
+	return maximum >= 1 && maximum <= math.MaxInt32
+}
+
 // allowedQuantities derives the allowed quantity-editor units of one Food
 // Object, default first (ISSUE-010): a Food Object without a Serving exposes
 // only its g or ml base unit with maximum 100000; a Food Object with a
 // Serving exposes serving first with the maximum equal to the whole-number
 // floor of 100000 divided by its stored Serving base quantity, then its g or
 // ml base unit with maximum 100000. The Physical State and the stored Serving
-// quantity are never exposed.
+// quantity are never exposed. The Catalog Loader validated the ARCH-013
+// Serving invariant before this function runs, so servingMaximum is always
+// a positive whole value within the int32 display range and the values never
+// need a second guard here.
 func allowedQuantities(object foodObject) []AllowedQuantity {
 	baseUnit := UnitGram
 	if object.physicalState == stateLiquid {
@@ -386,7 +408,7 @@ func allowedQuantities(object foodObject) []AllowedQuantity {
 		return []AllowedQuantity{{Unit: baseUnit, MaximumValue: maxBaseQuantity}}
 	}
 	return []AllowedQuantity{
-		{Unit: UnitServing, MaximumValue: int(math.Floor(maxBaseQuantity / *object.serving))},
+		{Unit: UnitServing, MaximumValue: int(servingMaximum(*object.serving))},
 		{Unit: baseUnit, MaximumValue: maxBaseQuantity},
 	}
 }

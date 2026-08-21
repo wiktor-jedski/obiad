@@ -284,6 +284,7 @@ components:
           type: array
           minItems: 1
           maxItems: 2
+          uniqueItems: true
           items:
             $ref: "#/components/schemas/AllowedQuantity"
     LocalizedNames:

@@ -434,3 +434,49 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	acPl := getSuggestionsEnvelope(t, baseURL, "ac", "pl")
 	assertOrderedIDs(t, acPl, 41, 42, 15, 18, 38)
 }
+
+// TestFoodSuggestionAllowedQuantityBoundaryHTTPIntegration verifies the
+// ISSUE-010 allowed-quantity Serving boundary over real PostgreSQL and Fiber
+// (task-33 repair): a stored Serving that satisfies the DB constraint
+// (strictly positive and finite) but whose whole-number maximum of 100000
+// divided by it is zero (a Serving above 100000) or beyond the generated
+// int32 display range (a tiny positive Serving) is a catalog-invariant
+// failure. Both operations load the catalog through the shared Loader, so
+// both return the exact stable 500 INTERNAL_ERROR error envelope — never an
+// invalid success JSON carrying a zero or int32-wrapped allowed maximum.
+func TestFoodSuggestionAllowedQuantityBoundaryHTTPIntegration(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name    string
+		serving float64
+	}{
+		{"serving above 100000", 200000},
+		{"quotient beyond int32 range", 1e-5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newSetupDB(t)
+			baseURL, _ := startServer(t, db.RuntimeURL)
+			owner := connect(t, db.OwnerURL)
+			if _, err := owner.Exec(ctx,
+				`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES (39, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'solid', 10, 5, 1, $1)`,
+				tc.serving,
+			); err != nil {
+				t.Fatalf("insert %s fixture row: %v", tc.name, err)
+			}
+
+			// GET /api/v1/food-suggestions: the whole catalog load fails as
+			// a catalog-invariant failure, so the request returns the exact
+			// stable 500 INTERNAL_ERROR envelope with no field and no
+			// internal cause, and no success JSON is emitted.
+			status, body, contentType := getSuggestions(t, baseURL, "pizza", "en")
+			assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusInternalServerError, "INTERNAL_ERROR", "")
+
+			// POST /api/v1/substitutes/search fails the same way through
+			// the shared Loader, so the boundary can never reach the
+			// substitute success envelope either.
+			status, body, contentType = postSubstitutes(t, baseURL, "application/json", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
+			assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusInternalServerError, "INTERNAL_ERROR", "")
+		})
+	}
+}
