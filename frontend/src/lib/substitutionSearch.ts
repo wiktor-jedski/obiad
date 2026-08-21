@@ -33,7 +33,7 @@
  * retained previous page from the current response so the `loadingNew`
  * transition effect never fires on retained data.
  */
-import { createQuery } from "@tanstack/svelte-query";
+import { createQuery, keepPreviousData } from "@tanstack/svelte-query";
 import { client } from "../client/client.gen";
 import type {
   SearchSubstitutesData,
@@ -119,7 +119,7 @@ export function createSubstitutionSearchQuery(
         });
       },
       enabled: committed !== undefined,
-
+      placeholderData: keepPreviousData,
       retry: false,
       retryOnMount: false,
       refetchOnMount: false,

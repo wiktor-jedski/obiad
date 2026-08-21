@@ -235,6 +235,27 @@ function formatMacronutrient(value: number, locale: "en" | "pl"): string {
   }).format(value)} g`;
 }
 
+/**
+ * Asserts that a recalculation value is the expected proportion of the
+ * original value within the backend display-rounding tolerance (REQ-028,
+ * ARCH-018): the whole Matched Quantity is rounded once per response
+ * (tolerance `1`), and every macronutrient is rounded to `0.1 g` once per
+ * response (tolerance `0.1`), so a doubled input produces each value
+ * within one rounding step of exactly twice the original.
+ */
+function expectProportional(
+  actual: number,
+  original: number,
+  factor: number,
+  tolerance: number,
+  what: string,
+): void {
+  expect(
+    Math.abs(actual - factor * original),
+    `${what} must be ${factor}x the first response within the display rounding tolerance`,
+  ).toBeLessThanOrEqual(tolerance);
+}
+
 test.describe("food quantity editing", () => {
   test("the four seeded input kinds render the complete disabled initial summary with three compact spinners and the localized loading status, then the default-first selector order, plural serving labels, and static single base units", async ({
     page,
@@ -408,30 +429,58 @@ test.describe("food quantity editing", () => {
     expect(second.pageIndex).toBe(0);
     expect(second.items.map((item) => item.foodObjectId)).toEqual([13, 29, 26]);
     for (let index = 0; index < first.items.length; index += 1) {
-      expect(second.items[index].matchedQuantity.value).toBe(
-        2 * first.items[index].matchedQuantity.value,
+      expectProportional(
+        second.items[index].matchedQuantity.value,
+        first.items[index].matchedQuantity.value,
+        2,
+        1,
+        `rank ${index + 1} Matched Quantity`,
       );
-      expect(second.items[index].macronutrients.protein).toBe(
-        2 * first.items[index].macronutrients.protein,
+      expectProportional(
+        second.items[index].macronutrients.protein,
+        first.items[index].macronutrients.protein,
+        2,
+        0.1,
+        `rank ${index + 1} protein`,
       );
-      expect(second.items[index].macronutrients.carbohydrate).toBe(
-        2 * first.items[index].macronutrients.carbohydrate,
+      expectProportional(
+        second.items[index].macronutrients.carbohydrate,
+        first.items[index].macronutrients.carbohydrate,
+        2,
+        0.1,
+        `rank ${index + 1} carbohydrate`,
       );
-      expect(second.items[index].macronutrients.fat).toBe(
-        2 * first.items[index].macronutrients.fat,
+      expectProportional(
+        second.items[index].macronutrients.fat,
+        first.items[index].macronutrients.fat,
+        2,
+        0.1,
+        `rank ${index + 1} fat`,
       );
       expect(second.items[index].similarityPercent).toBe(
         first.items[index].similarityPercent,
       );
     }
-    expect(second.inputMacronutrients.protein).toBe(
-      2 * first.inputMacronutrients.protein,
+    expectProportional(
+      second.inputMacronutrients.protein,
+      first.inputMacronutrients.protein,
+      2,
+      0.1,
+      "input protein",
     );
-    expect(second.inputMacronutrients.carbohydrate).toBe(
-      2 * first.inputMacronutrients.carbohydrate,
+    expectProportional(
+      second.inputMacronutrients.carbohydrate,
+      first.inputMacronutrients.carbohydrate,
+      2,
+      0.1,
+      "input carbohydrate",
     );
-    expect(second.inputMacronutrients.fat).toBe(
-      2 * first.inputMacronutrients.fat,
+    expectProportional(
+      second.inputMacronutrients.fat,
+      first.inputMacronutrients.fat,
+      2,
+      0.1,
+      "input fat",
     );
 
     // The rendered summary shows only the current response's backend
