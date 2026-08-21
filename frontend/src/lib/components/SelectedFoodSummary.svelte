@@ -26,7 +26,7 @@
    * backend-provided protein, carbohydrate, and fat rows using the
    * existing captured-language labels and one-decimal formatting. The
    * existing `Selected food` / `Wybrany produkt` region name, the number
-   * field's `Quantity` / `Ilość` name, and the selector's `Unit` /
+   * field's `Quantity` / `Ilość` name, and the unit control's `Unit` /
    * `Jednostka` name stay as visually hidden accessible text; the selector
    * options are labeled `g`, `ml`, `servings`, or `porcje`. The captured
    * `localized name · quantity unit` value stays present as accessible
@@ -285,11 +285,28 @@
         {/each}
       </select>
     {:else}
+      <!--
+        One-unit static presentation (ISSUE-010): the visible `g` or `ml`
+        value keeps the visually hidden localized `Unit` / `Jednostka`
+        label associated through `aria-labelledby`, mirroring the label
+        the two-unit selector receives, so a screen reader never hears an
+        unlabeled adjacent unit text.
+      -->
       <span
-        data-quantity-static-unit
-        class="font-data text-sm text-dark-text-primary"
-        >{allowedQuantities[0].unit}</span
+        data-quantity-unit-presentation
+        role="group"
+        aria-labelledby="quantity-static-unit-label"
+        class="inline-flex items-baseline gap-1"
       >
+        <span id="quantity-static-unit-label" class="sr-only"
+          >{dictionary.unitLabel()}</span
+        >
+        <span
+          data-quantity-static-unit
+          class="font-data text-sm text-dark-text-primary"
+          >{allowedQuantities[0].unit}</span
+        >
+      </span>
     {/if}
   </div>
 

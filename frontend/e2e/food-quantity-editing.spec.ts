@@ -340,20 +340,29 @@ test.describe("food quantity editing", () => {
     ]);
 
     // The seeded solid-base-only input: Chicken breast (Food Object 5)
-    // shows only the static `g` base unit and no selector.
+    // shows only the static `g` base unit, carrying the visually hidden
+    // `Unit` accessible label so a screen reader never hears an unlabeled
+    // adjacent unit text (P10-G2, ISSUE-010).
     await selectFoodObject(page, "chicken breast", 5, COPY.en);
     await expect(summary(page)).toContainText("Chicken breast");
     await expect(numberInput(page)).toHaveValue("100");
     await expect(unitSelect(page)).toHaveCount(0);
     await expect(staticUnit(page)).toHaveText("g");
+    await expect(page.getByRole("group", { name: COPY.en.unit })).toContainText(
+      "g",
+    );
 
     // The seeded liquid-base-only input: Milk (Food Object 10) shows only
-    // the static `ml` base unit and no selector.
+    // the static `ml` base unit with the same visually hidden `Unit`
+    // accessible label.
     await selectFoodObject(page, "milk", 10, COPY.en);
     await expect(summary(page)).toContainText("Milk");
     await expect(numberInput(page)).toHaveValue("100");
     await expect(unitSelect(page)).toHaveCount(0);
     await expect(staticUnit(page)).toHaveText("ml");
+    await expect(page.getByRole("group", { name: COPY.en.unit })).toContainText(
+      "ml",
+    );
   });
 
   test("a changed valid commit sends exactly one request with the selected Food Object ID, the selected unit, the committed number, and page 0; the response and rendered summary and cards show proportional values with unchanged IDs, order, similarity, and page", async ({
@@ -675,6 +684,9 @@ test.describe("food quantity editing", () => {
       "results",
     );
     await expect(staticUnit(page)).toHaveText("ml");
+    await expect(page.getByRole("group", { name: COPY.pl.unit })).toContainText(
+      "ml",
+    );
     const plInput = numberInput(page);
     await plInput.fill("2,5");
     await commitWithEnter(plInput);

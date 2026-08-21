@@ -134,11 +134,14 @@ export function createSubstitutionSearchQuery(
  * Executes one `POST /api/v1/substitutes/search` request through the
  * generated TypeScript client (ARCH-001, ARCH-008) with TanStack Query's
  * `AbortSignal`. The body carries the selected Food Object ID, the
- * unchanged returned default Food Quantity, and page index `0` (ARCH-010,
- * ARCH-011). Generated transport values never leave this boundary typed as
- * Module values.
+ * committed transport Food Quantity, and the current page index
+ * (ARCH-010, ARCH-011, ISSUE-010): the initial selection sends the
+ * returned default quantity on page 0, and each changed valid quantity
+ * commit sends the newly committed quantity on the current page.
+ * Generated transport values never leave this boundary typed as Module
+ * values.
  *
- * @param options - the Food Object ID, Food Quantity, page index, and abort signal
+ * @param options - the Food Object ID, committed Food Quantity, page index, and abort signal
  * @returns the page-0 Substitute Search response envelope
  */
 export function searchSubstitutes(options: {

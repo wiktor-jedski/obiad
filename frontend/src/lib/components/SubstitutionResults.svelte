@@ -3,7 +3,7 @@
   import SelectedFoodSummary from "./SelectedFoodSummary.svelte";
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
-  import { interactionState, type QuantityUnit } from "../interactionState";
+  import { interactionState } from "../interactionState";
   import { createSubstitutionSearchQuery } from "../substitutionSearch";
 
   /**
