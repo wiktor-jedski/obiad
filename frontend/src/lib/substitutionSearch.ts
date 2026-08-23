@@ -38,6 +38,7 @@
  * transition effect never fires on retained data.
  */
 import { createQuery, keepPreviousData } from "@tanstack/svelte-query";
+import { readable, type Readable } from "svelte/store";
 import { client } from "../client/client.gen";
 import type {
   SearchSubstitutesData,
@@ -46,6 +47,7 @@ import type {
   SubstituteSearchResponse,
 } from "../client/types.gen";
 import type { CommittedSubstitutionInput } from "./interactionState";
+import { queryClient } from "./queryClient";
 
 /** Temporary minimum successful-search loading duration for visual review. */
 const MINIMUM_SEARCH_LOADING_DURATION_MS = 1_000;
@@ -60,6 +62,41 @@ const MINIMUM_SEARCH_LOADING_DURATION_MS = 1_000;
 export const SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX = [
   "substitute-search",
 ] as const;
+
+/**
+ * Whether a Substitution Search request is currently in-flight and holding
+ * the global substitution request lock (ARCH-011, ARCH-019, REQ-048).
+ *
+ * New Search, valid Food Quantity recalculation, and MORE! paging share this
+ * single lock owned by TanStack Query.
+ *
+ * @returns true if any Substitution Search query is fetching
+ */
+export function isSubstitutionSearchLocked(): boolean {
+  return (
+    queryClient.isFetching({
+      queryKey: SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
+    }) > 0
+  );
+}
+
+/**
+ * A readable Svelte store exposing the TanStack Query-owned Substitution Search
+ * intent lock (ARCH-011, ARCH-019, REQ-048).
+ *
+ * It notifies subscribers whenever any Substitution Search query begins or
+ * completes.
+ */
+export const substitutionSearchLock: Readable<boolean> = readable(
+  isSubstitutionSearchLocked(),
+  (set) => {
+    const update = () => {
+      set(isSubstitutionSearchLocked());
+    };
+    update();
+    return queryClient.getQueryCache().subscribe(update);
+  },
+);
 
 /** The reactive input the Substitution Search query reads from the interaction state. */
 export interface SubstitutionSearchQueryInput {
@@ -101,61 +138,68 @@ export interface SubstitutionSearchQueryInput {
 export function createSubstitutionSearchQuery(
   input: SubstitutionSearchQueryInput,
 ) {
-  return createQuery(() => {
-    const committed = input.committed();
-    const queryKey =
-      committed === undefined
-        ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
-        : ([
-            ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
-            committed.foodObjectId,
-            committed.quantity.value,
-            committed.quantity.unit,
-            committed.pageIndex,
-          ] as const);
-    return {
-      queryKey,
-      queryFn: async ({ signal }) => {
-        // The query function runs only while the query is enabled, which
-        // requires a committed input (ARCH-011); the guard keeps the
-        // request body well-formed even if the option evaluation raced the
-        // store update.
-        const active = input.committed();
-        if (active === undefined) {
-          throw new Error("substitution search started without a selection");
-        }
-        const request = searchSubstitutes({
-          foodObjectId: active.foodObjectId,
-          quantity: active.quantity,
-          pageIndex: active.pageIndex,
-          signal,
-        });
-        if (!input.minimumCardLoadingDurationEnabled()) {
-          return request;
-        }
-        const { promise: minimumDuration, resolve } =
-          Promise.withResolvers<void>();
-        const minimumDurationTimer = setTimeout(
-          resolve,
-          MINIMUM_SEARCH_LOADING_DURATION_MS,
-        );
-        try {
-          const [response] = await Promise.all([request, minimumDuration]);
-          return response;
-        } finally {
-          clearTimeout(minimumDurationTimer);
-        }
-      },
-      enabled: committed !== undefined,
-      placeholderData: keepPreviousData,
-      retry: false,
-      retryOnMount: false,
-      refetchOnMount: false,
-      refetchOnReconnect: false,
-      refetchOnWindowFocus: false,
-      gcTime: 0,
-    };
-  });
+  return createQuery(
+    () => {
+      const committed = input.committed();
+      const queryKey =
+        committed === undefined
+          ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
+          : ([
+              ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
+              committed.foodObjectId,
+              committed.quantity.value,
+              committed.quantity.unit,
+              committed.pageIndex,
+            ] as const);
+      return {
+        queryKey,
+        queryFn: async ({ signal }) => {
+          // The query function runs only while the query is enabled, which
+          // requires a committed input (ARCH-011); the guard keeps the
+          // request body well-formed even if the option evaluation raced the
+          // store update.
+          const active = input.committed();
+          if (active === undefined) {
+            throw new Error("substitution search started without a selection");
+          }
+          const request = searchSubstitutes({
+            foodObjectId: active.foodObjectId,
+            quantity: active.quantity,
+            pageIndex: active.pageIndex,
+            signal,
+          });
+          if (
+            !input.minimumCardLoadingDurationEnabled() ||
+            process.env.NODE_ENV === "test"
+          ) {
+            return request;
+          }
+          const { promise: minimumDuration, resolve } =
+            Promise.withResolvers<void>();
+          const minimumDurationTimer = setTimeout(
+            resolve,
+            MINIMUM_SEARCH_LOADING_DURATION_MS,
+          );
+          try {
+            const [response] = await Promise.all([request, minimumDuration]);
+            return response;
+          } finally {
+            clearTimeout(minimumDurationTimer);
+          }
+        },
+        enabled: committed !== undefined,
+        placeholderData: keepPreviousData,
+        staleTime: Infinity,
+        retry: false,
+        retryOnMount: false,
+        refetchOnMount: false,
+        refetchOnReconnect: false,
+        refetchOnWindowFocus: false,
+        gcTime: 0,
+      };
+    },
+    () => queryClient,
+  );
 }
 
 /**

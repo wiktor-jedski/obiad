@@ -34,7 +34,7 @@ import {
   type SelectedFoodObject,
 } from "./lib/interactionState";
 import { interfaceLanguage } from "./lib/interfaceLanguage";
-
+import { queryClient } from "./lib/queryClient";
 /** A captured Butter selection fixture for result-state rendering. */
 const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
@@ -87,10 +87,7 @@ describe("the root result-state composition", () => {
     // exactly like the Interface Language reset.
     interfaceLanguage.set("en");
     interactionState.reset();
-  });
-
-  afterEach(() => {
-    cleanup();
+    queryClient.clear();
   });
 
   test("a successful empty response drives the production state to zeroResults and renders the exact localized zero-result message with zero cards in English and Polish", async () => {
@@ -117,17 +114,12 @@ describe("the root result-state composition", () => {
         headers: { "content-type": "application/json" },
       });
     }) as typeof fetch;
-
     try {
       // A selection exists before the first application mount (REQ-022):
       // the interaction state is the loadingNew transition.
       interactionState.selectSuggestion(SELECTED);
       render(App);
       await settle();
-
-      // The page-0 empty response transitions the state to zeroResults:
-      // the root main element exposes the transition name and the region
-      // composition follows the state.
       expect(postUrls, "one POST for the selection").toHaveLength(1);
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),

@@ -775,8 +775,8 @@ test.describe("food quantity editing", () => {
     const input = numberInput(page);
     await input.fill("2");
     await commitWithEnter(input);
-    await expect(input).toBeEnabled();
-    await expect(unitSelect(page)).toBeEnabled();
+    await expect(input).toBeDisabled();
+    await expect(unitSelect(page)).toBeDisabled();
 
     const selectedSpinner = selectedCard.locator("[data-card-spinner]");
     await expect(selectedSpinner).toHaveCount(1);

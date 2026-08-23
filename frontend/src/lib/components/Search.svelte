@@ -10,9 +10,9 @@
     suggestionOptionId,
   } from "../suggestions";
   import { isNormalizedEmptySearchQuery } from "../searchQuery";
+  import { substitutionSearchLock } from "../substitutionSearch";
   import SuggestionList from "./SuggestionList.svelte";
   import type { FoodSuggestion } from "../../client/types.gen";
-
   /**
    * Search control with the live Food Object suggestion slice, the
    * pointer-selection and new-search transition, and the keyboard
@@ -282,6 +282,9 @@
     if (key === "Enter") {
       if (open && suggestionItems !== undefined) {
         event.preventDefault();
+        if ($substitutionSearchLock) {
+          return;
+        }
         selectSuggestion(suggestionItems[activeIndex]);
         return;
       }
@@ -335,6 +338,9 @@
    * identical (REQ-019, REQ-020).
    */
   function selectSuggestion(item: FoodSuggestion): void {
+    if ($substitutionSearchLock) {
+      return;
+    }
     suggestionIntent = false;
     interactionState.selectSuggestion({
       foodObjectId: item.foodObjectId,
@@ -373,6 +379,7 @@
     <SuggestionList
       items={suggestionItems}
       {activeIndex}
+      locked={$substitutionSearchLock}
       onselect={selectSuggestion}
     />
   {/if}
