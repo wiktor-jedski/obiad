@@ -44,12 +44,10 @@
    * three equal columns from 1024px (REQ-062). A successful empty page
    * renders no cards and exactly the localized zero-result message `No
    * substitutes found` or `Nie znaleziono zamienników` (REQ-044). The
-   * message follows the active Interface Language dictionary — it is
-   * interface text, not captured active content (ARCH-003) — while every
-   * card and the summary's name and macronutrient labels are frozen to the
-   * Interface Language captured by the search (ISSUE-008). There is no
-   * MORE!, failure state, result announcement, or card motion here; Phase
-   * 12 owns request-failure presentation.
+   * message, selected-food summary, and cards follow the active Interface
+   * Language dictionary and localized Food Object names (ARCH-003,
+   * REQ-058). There is no MORE!, failure state, result announcement, or card
+   * motion here; Phase 12 owns request-failure presentation.
    */
 
   /** The current discriminated interaction state (ARCH-002). */
@@ -157,13 +155,12 @@
 {#if state.name === "results" && substitutionSearch.data !== undefined}
   <!--
     Result-card region (task 30; ARCH-001, ARCH-020, ARCH-022, REQ-036,
-    REQ-037, REQ-061, REQ-062): the successful page-0 response renders
-    exactly its zero-to-three display-ready Substitutes in ranked order at
-    `24px` below the selected-input region. The layout has one card column
-    below 1024px and three equal columns from 1024px. Each card consumes one
-    generated `SubstituteItem` and the Interface Language captured by the
-    search (ISSUE-008); TanStack Query continues to own the response data
-    and the store receives only the outcome (ARCH-002). While a valid
+    REQ-037, REQ-058, REQ-061, REQ-062): the successful page-0 response
+    renders exactly its zero-to-three display-ready Substitutes in ranked
+    order at `24px` below the selected-input region. The layout has one card
+    column below 1024px and three equal columns from 1024px. Each card uses
+    the active Interface Language, so current names, labels, and localized
+    numeric values update locally without another request. While a valid
     quantity recalculation is pending (task 34), the retained previous page
     stays rendered with every quantity-dependent card value replaced by an
     aria-hidden `16px` spinner (`pending`), while names, images, labels,
@@ -180,7 +177,7 @@
       {#each substitutionSearch.data.items as item (item.foodObjectId)}
         <ResultCard
           {item}
-          language={state.selected.capturedLanguage}
+          language={$interfaceLanguage}
           pending={recalculating}
         />
       {/each}

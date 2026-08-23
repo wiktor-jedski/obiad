@@ -14,23 +14,19 @@
    * REQ-040, ISSUE-008).
    *
    * The component consumes one generated display-ready `SubstituteItem`
-   * plus the Interface Language captured by the search (task 28,
-   * ISSUE-008) and renders the approved card field order — image,
-   * localized name, whole Matched Quantity, centered calories, protein,
-   * carbohydrate, fat, and similarity — with no browser-side nutrition
-   * calculation or rerounding: every displayed number is the
-   * backend-rounded value formatted for display only (ARCH-001, REQ-040).
+   * and the active Interface Language. It renders the approved card field
+   * order — image, localized name, whole Matched Quantity, centered
+   * calories, protein, carbohydrate, fat, and similarity — with no
+   * browser-side nutrition calculation or rerounding: every displayed number
+   * is backend-rounded and formatted only for display (ARCH-001, REQ-040).
    *
-   * The whole card is frozen to the captured Interface Language: the Food
-   * Object name, the visible `Protein`, `Carbohydrates`, `Fat`, and
-   * `Similarity` labels (`Białko`, `Węglowodany`, `Tłuszcz`,
-   * `Podobieństwo` in Polish), and the one active-locale decimal place
-   * (`35.0 g` in English, `35,0 g` in Polish) never re-translate with the
-   * current Interface Language — there is no current-result language-change
-   * transition (ISSUE-008). Matched Quantity stays whole with only `g` or
-   * `ml` (REQ-038) and similarity stays a whole percentage. There is no
-   * Serving equivalent, card action, paging control, animation, or
-   * persisted display value.
+   * The card updates its Food Object name, visible `Protein`,
+   * `Carbohydrates`, `Fat`, and `Similarity` labels (`Białko`,
+   * `Węglowodany`, `Tłuszcz`, `Podobieństwo` in Polish), and one localized
+   * decimal place when the Interface Language changes (REQ-058). Matched
+   * Quantity stays whole with only `g` or `ml` (REQ-038) and similarity stays
+   * a whole percentage. There is no Serving equivalent, card action, paging
+   * control, animation, or persisted display value.
    *
    * The supported image-key map is empty (ISSUE-008): an absent key, one
    * of the four seeded opaque keys, and every other unmapped key resolve to
@@ -50,7 +46,7 @@
   interface Props {
     /** One display-ready generated Substitute (ARCH-005, ARCH-008). */
     item: SubstituteItem;
-    /** The Interface Language captured by the search (ISSUE-008). */
+    /** The active Interface Language used for the card's visible text. */
     language: InterfaceLanguage;
     /**
      * Whether a valid quantity recalculation is pending (task 34,
@@ -64,7 +60,7 @@
 
   let { item, language, pending = false }: Props = $props();
 
-  /** The dictionary of the captured language for the card's visible labels. */
+  /** The active-language dictionary for the card's visible labels. */
   const dictionary = $derived(getDictionary(language));
   /**
    * The resolved card image. The supported image-key map is empty, so an

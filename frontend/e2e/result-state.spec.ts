@@ -324,7 +324,7 @@ test.describe("result state", () => {
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
   });
 
-  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and captured-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
+  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and active-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -373,8 +373,8 @@ test.describe("result state", () => {
       "Calories",
     );
 
-    // Switching interface language locally translates the heading (interface text)
-    // while retaining captured active content (ISSUE-008, ARCH-003, ARCH-012).
+    // REQ-058: switching the Interface Language updates interface and
+    // current Food Object accessibility text without another request.
     await page
       .getByRole("combobox", { name: "Interface language" })
       .selectOption("pl");
@@ -383,10 +383,11 @@ test.describe("result state", () => {
     );
     await expect(page.locator("[data-input-calories]")).toHaveAttribute(
       "aria-label",
-      "Calories",
+      "Kalorie",
     );
 
-    // A fresh search in Polish captures Polish as the active content language (P19-G3, P19-G5).
+    // A fresh search in Polish keeps the same active-language accessibility
+    // label (P19-G3, P19-G5).
     const searchPl = page.getByRole("combobox", { name: "Szukaj" });
     await searchPl.fill("margherita");
     const panelPl = page.getByRole("listbox", { name: "Podpowiedzi" });

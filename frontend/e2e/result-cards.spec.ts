@@ -48,6 +48,7 @@ const COPY = {
     fat: "Fat",
     calories: "Calories",
     similarity: "Similarity",
+    foundSubstitutions: "Found substitutions",
   },
   pl: {
     search: "Szukaj",
@@ -58,6 +59,7 @@ const COPY = {
     fat: "Tłuszcz",
     calories: "Kalorie",
     similarity: "Podobieństwo",
+    foundSubstitutions: "Znalezione zamienniki",
   },
 } as const;
 
@@ -317,20 +319,21 @@ test.describe("result cards", () => {
       `${paella.matchedQuantity.value} g`,
     );
 
-    // No current-result language-change transition (ISSUE-008): switching
-    // the Interface Language after the results arrive leaves the cards
-    // exactly as captured by the search.
+    // REQ-058: current cards keep their IDs and order, then update every
+    // visible name, macronutrient label, and localized value in place.
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
-    await expect(page.locator("[data-result-card]").first()).toContainText(
-      "Gyoza",
+    await expect(page.locator("[data-substitutions-heading]")).toHaveText(
+      COPY.pl.foundSubstitutions,
     );
-    await expect(page.locator("[data-result-card]").first()).toContainText(
-      "Protein",
-    );
-    await expect(page.locator("[data-result-card]").first()).not.toContainText(
-      "Białko",
+    await expectRankedCards(
+      page,
+      [13, 29, 26],
+      items,
+      COPY.pl,
+      "pl",
+      placeholderUrl,
     );
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",

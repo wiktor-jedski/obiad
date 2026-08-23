@@ -142,14 +142,13 @@ export function getDictionary(language: InterfaceLanguage): Messages {
 }
 
 /**
- * Formats one captured Food Quantity as the read-only Substitution Input
- * value (task 28, ISSUE-008). Serving renders with the localized unit of
- * the given language (`1 serving` or `1 porcja`); `g` and `ml` stay
- * invariant. The caller passes the Interface Language captured at selection
- * so the value never re-translates with the active Interface Language.
+ * Formats one Food Quantity as the selected-food summary value. Serving
+ * renders with the localized unit of the given language (`1 serving` or
+ * `1 porcja`); `g` and `ml` stay invariant. The caller supplies the active
+ * Interface Language so the summary updates without a new search (REQ-058).
  *
- * @param quantity - the captured default Food Quantity
- * @param language - the Interface Language captured at selection
+ * @param quantity - the current Food Quantity
+ * @param language - the active Interface Language
  * @returns the formatted `value unit` string
  */
 export function formatFoodQuantityValue(
@@ -165,15 +164,14 @@ export function formatFoodQuantityValue(
 
 /**
  * Formats one display-ready macronutrient value for a result card (task 29;
- * REQ-037, REQ-039, REQ-040, ISSUE-008): exactly one active-locale decimal
- * place followed by the invariant `g` unit, for example `35.0 g` in English
- * and `35,0 g` in Polish. The value arrives already rounded to `0.1 g` by
- * the backend (ARCH-001, ARCH-005); the browser never recalculates or
- * rerounds nutrition (REQ-040), it only applies the localized display
- * formatting.
+ * REQ-037, REQ-039, REQ-040): exactly one active-locale decimal place
+ * followed by the invariant `g` unit, for example `35.0 g` in English and
+ * `35,0 g` in Polish. The value arrives already rounded to `0.1 g` by the
+ * backend (ARCH-001, ARCH-005); the browser never recalculates or rerounds
+ * nutrition, it only applies the localized display formatting.
  *
  * @param value - the backend-rounded macronutrient value in grams
- * @param language - the Interface Language captured by the search (ISSUE-008)
+ * @param language - the active Interface Language
  * @returns the formatted `value g` string with one localized decimal place
  */
 export function formatMacronutrientValue(

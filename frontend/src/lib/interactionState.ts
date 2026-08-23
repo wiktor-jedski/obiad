@@ -46,10 +46,10 @@ export type QuantityUnit = "serving" | "g" | "ml";
  * REQ-020, REQ-022, REQ-023, REQ-024). It retains the exact returned
  * suggestion: the stable Food Object ID, both localized names, the returned
  * default Food Quantity, the returned allowed quantity-editor units
- * (task 34, ISSUE-010), and the Interface Language active at selection so
- * the read-only Substitution Input value never re-translates with the
- * current Interface Language (ISSUE-008). The Module keeps these selected
- * values and no response data.
+ * (task 34, ISSUE-010), and the Interface Language active at selection for
+ * the Search Query transition. The summary and result cards use the active
+ * Interface Language with the retained names (REQ-058). The Module keeps
+ * these selected values and no response data.
  */
 export interface SelectedFoodObject {
   /** The stable Food Object ID of the selected suggestion. */
@@ -64,7 +64,7 @@ export interface SelectedFoodObject {
    * renders the selector options from this list.
    */
   readonly allowedQuantities: readonly AllowedQuantity[];
-  /** The Interface Language captured at selection for the active-content value. */
+  /** The Interface Language used for the Search Query at selection time. */
   readonly capturedLanguage: InterfaceLanguage;
 }
 

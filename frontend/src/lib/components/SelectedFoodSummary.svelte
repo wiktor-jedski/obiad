@@ -21,18 +21,16 @@
    * REQ-025, REQ-026, REQ-027, REQ-028).
    *
    * From selection onward the region renders one unbordered five-row
-   * summary at every supported width: the captured localized food name;
-   * the number field with a current-unit-first selector when two units are
+   * summary at every supported width: the active localized food name; the
+   * number field with a current-unit-first selector when two units are
    * allowed or static `g`/`ml` text when only one is allowed; then the
-   * backend-provided protein, carbohydrate, and fat rows using the
-   * existing captured-language labels and one-decimal formatting. The
-   * existing `Selected food` / `Wybrany produkt` region name, the number
-   * field's `Quantity` / `Ilość` name, and the unit control's `Unit` /
-   * `Jednostka` name stay as visually hidden accessible text; the selector
-   * options are labeled `g`, `ml`, `servings`, or `porcje`. The captured
-   * `localized name · quantity unit` value stays present as accessible
-   * text so the region's selection summary never re-translates with the
-   * active Interface Language (ISSUE-008).
+   * backend-provided protein, carbohydrate, and fat rows using active-language
+   * labels and one-decimal formatting. The `Selected food` / `Wybrany
+   * produkt` region name, the number field's `Quantity` / `Ilość` name, and
+   * the unit control's `Unit` / `Jednostka` name stay visually hidden
+   * accessible text; the selector options are labeled `g`, `ml`, `servings`,
+   * or `porcje`. The `localized name · quantity unit` accessible value
+   * updates with the active Interface Language (REQ-058).
    *
    * During the initial new Search the complete summary renders with
    * disabled controls, one aria-hidden `16px` spinner in each
@@ -81,28 +79,16 @@
 
   /** The active dictionary for the region's interface and validation text. */
   const dictionary = $derived(getDictionary($interfaceLanguage));
+  /** The selected Food Object name in the active Interface Language. */
+  const selectedName = $derived(interaction.selected.names[$interfaceLanguage]);
   /**
-   * The dictionary of the captured Interface Language for the food name
-   * and macronutrient labels and values (ISSUE-008).
+   * The selected Food Object's accessible value in the active Interface
+   * Language (REQ-058).
    */
-  const capturedDictionary = $derived(
-    getDictionary(interaction.selected.capturedLanguage),
-  );
-  /** The captured localized food name (ISSUE-008). */
-  const capturedName = $derived(
-    interaction.selected.names[interaction.selected.capturedLanguage],
-  );
-  /**
-   * The captured `localized name · quantity unit` accessible value
-   * (ISSUE-008): the same combined value the read-only Substitution Input
-   * rendered before Phase 10, computed from the committed transport
-   * quantity and the Interface Language captured at selection so it never
-   * re-translates with the active Interface Language.
-   */
-  const capturedValue = $derived(
-    `${capturedName} · ${formatFoodQuantityValue(
+  const selectedValue = $derived(
+    `${selectedName} · ${formatFoodQuantityValue(
       { value: interaction.committedValue, unit: interaction.committedUnit },
-      interaction.selected.capturedLanguage,
+      $interfaceLanguage,
     )}`,
   );
   /** The selected suggestion's allowed quantity-editor units (task 33). */
@@ -225,20 +211,18 @@
   class="flex w-full max-w-md flex-col gap-3 rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
 >
   <!--
-    Visually hidden region label and captured selection summary (ISSUE-008,
-    ISSUE-010): the `Selected food` / `Wybrany produkt` region name and the
-    captured `localized name · quantity unit` value stay accessible text,
-    so the selection summary never re-translates with the active Interface
-    Language.
+    Visually hidden region label and localized selection summary (REQ-058).
+    The active dictionary and Food Object name update together when the
+    Interface Language changes.
   -->
-  <span class="sr-only">{dictionary.selectedFoodLabel()}: {capturedValue}</span>
+  <span class="sr-only">{dictionary.selectedFoodLabel()}: {selectedValue}</span>
 
-  <!-- Row 1: the captured localized food name (ISSUE-010). -->
+  <!-- Row 1: the active localized Food Object name (REQ-058). -->
   <div
     data-selected-name
     class="text-center text-base font-medium text-dark-text-primary"
   >
-    {capturedName}
+    {selectedName}
   </div>
 
   <!--
@@ -315,7 +299,7 @@
   </div>
   <p
     data-input-calories
-    aria-label={capturedDictionary.caloriesLabel()}
+    aria-label={dictionary.caloriesLabel()}
     class="text-center font-data text-sm text-dark-text-primary"
   >
     {#if busy || inputCalories === undefined}
@@ -347,16 +331,16 @@
   {/if}
 
   <!--
-    The backend-provided input macronutrients at the committed quantity
-    (task 33, ISSUE-010) use captured-language labels and one-decimal
-    formatting. While a value is pending — the initial new Search or a
-    recalculation — each value position shows one aria-hidden `16px` spinner
-    instead; the browser never calculates or rerounds nutrition (REQ-040).
+    The backend-provided input macronutrients at the committed quantity use
+    active-language labels and one-decimal formatting (REQ-058). While a
+    value is pending — the initial new Search or a recalculation — each value
+    position shows one aria-hidden `16px` spinner instead; the browser never
+    calculates or rerounds nutrition (REQ-040).
   -->
   <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
     <div class="flex items-baseline justify-between gap-4">
       <dt class="font-medium text-dark-text-muted">
-        {capturedDictionary.proteinLabel()}
+        {dictionary.proteinLabel()}
       </dt>
       <dd data-input-macro-protein class="text-right text-dark-text-primary">
         {#if busy || inputMacros === undefined}
@@ -366,16 +350,13 @@
             class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
           ></span>
         {:else}
-          {formatMacronutrientValue(
-            inputMacros.protein,
-            interaction.selected.capturedLanguage,
-          )}
+          {formatMacronutrientValue(inputMacros.protein, $interfaceLanguage)}
         {/if}
       </dd>
     </div>
     <div class="flex items-baseline justify-between gap-4">
       <dt class="font-medium text-dark-text-muted">
-        {capturedDictionary.carbohydratesLabel()}
+        {dictionary.carbohydratesLabel()}
       </dt>
       <dd
         data-input-macro-carbohydrate
@@ -390,14 +371,14 @@
         {:else}
           {formatMacronutrientValue(
             inputMacros.carbohydrate,
-            interaction.selected.capturedLanguage,
+            $interfaceLanguage,
           )}
         {/if}
       </dd>
     </div>
     <div class="flex items-baseline justify-between gap-4">
       <dt class="font-medium text-dark-text-muted">
-        {capturedDictionary.fatLabel()}
+        {dictionary.fatLabel()}
       </dt>
       <dd data-input-macro-fat class="text-right text-dark-text-primary">
         {#if busy || inputMacros === undefined}
@@ -407,10 +388,7 @@
             class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
           ></span>
         {:else}
-          {formatMacronutrientValue(
-            inputMacros.fat,
-            interaction.selected.capturedLanguage,
-          )}
+          {formatMacronutrientValue(inputMacros.fat, $interfaceLanguage)}
         {/if}
       </dd>
     </div>

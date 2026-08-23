@@ -38,8 +38,8 @@
   znaleziono zamienników` (REQ-044). Search stays above every result card,
   and the Search field keeps focus through the whole new-search transition
   (REQ-064). No Food Quantity edit, MORE!, request failure state, result
-  announcement, card motion, or active-content language change belongs to
-  this task.
+  announcement, or card motion belongs to this task. Current visible Food
+  Object names and localized text update locally with the Interface Language.
 
   The Interface Language control (task 26) is the only additional surface:
   a borderless native dropdown absolutely positioned in the primary
