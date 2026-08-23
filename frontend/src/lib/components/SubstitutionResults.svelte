@@ -114,29 +114,38 @@
    * region stays busy, and quantity-dependent values show spinners.
    */
   const recalculating = $derived(
-    state.name !== "loadingNew" && substitutionSearch.isPlaceholderData,
+    state.name === "results" && substitutionSearch.isPlaceholderData,
   );
 
   /**
-   * Result transition (task 28, ARCH-002): the first page-0 response data
-   * arriving while the state is `loadingNew` transitions the union to
-   * `results` when the page contains items and to `zeroResults` when it is
-   * empty. The response data itself stays in TanStack Query; the store
-   * receives only the outcome, and the spinner covers the complete pending
-   * interval. The guard on `isPlaceholderData` (task 34) keeps retained
-   * previous-page rows — visible while a fresh selection or recalculation
-   * is pending — from ever driving a transition.
+   * Result transition (task 28, task 37; ARCH-002): the first page-0
+   * response data arriving while the state is `loadingNew` transitions the
+   * union to `results` when the page contains items and to `zeroResults`
+   * when it is empty. A subsequent page response arriving while the state
+   * is `loadingMore` transitions the union back to `results` (REQ-041). The
+   * response data itself stays in TanStack Query; the store receives only
+   * the outcome.
    */
   $effect(() => {
     const data = substitutionSearch.data;
     if (
-      state.name === "loadingNew" &&
+      (state.name === "loadingNew" || state.name === "loadingMore") &&
       data !== undefined &&
       !substitutionSearch.isPlaceholderData
     ) {
       interactionState.applySearchResult(data.items.length > 0);
     }
   });
+
+  /**
+   * Next-page request handler (task 37, REQ-041): activates MORE! from a
+   * completed result state, committing `pageIndex + 1`.
+   */
+  function onMoreClick(): void {
+    if (state.name === "results") {
+      interactionState.loadNextPage();
+    }
+  }
 </script>
 
 {#if state.name !== "empty"}
@@ -152,19 +161,29 @@
     />
   </div>
 {/if}
-{#if state.name === "results" && substitutionSearch.data !== undefined}
+{#if (state.name === "results" || state.name === "loadingMore") && substitutionSearch.data !== undefined}
   <!--
-    Result-card region (task 30; ARCH-001, ARCH-020, ARCH-022, REQ-036,
-    REQ-037, REQ-058, REQ-061, REQ-062): the successful page-0 response
-    renders exactly its zero-to-three display-ready Substitutes in ranked
-    order at `24px` below the selected-input region. The layout has one card
-    column below 1024px and three equal columns from 1024px. Each card uses
-    the active Interface Language, so current names, labels, and localized
-    numeric values update locally without another request. While a valid
-    quantity recalculation is pending (task 34), the retained previous page
-    stays rendered with every quantity-dependent card value replaced by an
-    aria-hidden `16px` spinner (`pending`), while names, images, labels,
-    and quantity-independent similarity stay visible (ISSUE-010).
+    Result-card region (task 30, task 37; ARCH-001, ARCH-002, ARCH-003,
+    ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037, REQ-041,
+    REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-065, ISSUE-008,
+    ISSUE-011): the successful page response renders exactly its
+    zero-to-three display-ready Substitutes in ranked order at `24px` below
+    the selected-input region. The layout has one card column below 1024px
+    and three equal columns from 1024px. Each card uses the active
+    Interface Language, so current names, labels, and localized numeric
+    values update locally without another request. While a valid quantity
+    recalculation is pending (task 34), the retained previous page stays
+    rendered with every quantity-dependent card value replaced by an
+    aria-hidden `16px` spinner (`pending`), while names, images, labels, and
+    quantity-independent similarity stay visible (ISSUE-010).
+
+    Task 37 renders one visible and accessibly named `MORE!` button after
+    the result grid whenever a later page exists (`hasMore: true`). While a
+    next-page request is pending (`loadingMore`), the current cards remain
+    visible and an aria-hidden spinner replaces the visible button label
+    inside the control (REQ-047). On intermediate success, the requested
+    page's cards replace the previous cards and focus stays on the MORE!
+    button (REQ-041, REQ-065).
   -->
   <div data-result-region aria-busy={recalculating} class="mt-6">
     <h2
@@ -182,6 +201,27 @@
         />
       {/each}
     </div>
+    {#if substitutionSearch.data.hasMore || state.name === "loadingMore"}
+      <div class="mt-6 flex justify-center">
+        <button
+          type="button"
+          data-more-button
+          aria-label={dictionary.moreButtonLabel()}
+          onclick={onMoreClick}
+          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded bg-dark-primary px-6 py-2.5 font-ui text-sm font-semibold text-dark-text-on-bright transition-colors duration-200 hover:bg-dark-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary"
+        >
+          {#if state.name === "loadingMore"}
+            <span
+              data-more-spinner
+              aria-hidden="true"
+              class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-solid border-dark-text-on-bright/30 border-t-dark-text-on-bright"
+            ></span>
+          {:else}
+            {dictionary.moreButtonLabel()}
+          {/if}
+        </button>
+      </div>
+    {/if}
   </div>
 {/if}
 {#if state.name === "zeroResults"}
