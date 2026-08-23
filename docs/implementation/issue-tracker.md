@@ -224,3 +224,12 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Resolved with the project owner on 2026-08-21. Add no happy-dom component integration test for Phase 10. Real-PostgreSQL backend integration tests cover `allowedQuantities` and `inputMacronutrients`, and real-stack Playwright scenario `food-quantity-editing.spec.ts` covers the production control, state, generated client, Fiber Adapter, initial and recalculation spinners, validation, localization, focus, request counts, maximum clamping, and result updates. A fetch-stub component scenario would duplicate observable behavior and give weaker ARCH-022 evidence. The existing `bun test` component integration suite still runs for regression coverage.
+
+## ISSUE-011: Phase 11 MORE! paging test boundary
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Testing coverage deviations
+
+- Resolved with the project owner on 2026-08-23. Phase 11 adds no happy-dom or `@testing-library/svelte` component integration scenario. Extended real-PostgreSQL Module and HTTP integration tests cover page bounds, complete deterministic ranking fixtures, exclusions, uniqueness, projections, and stable errors. The real-stack Playwright scenario `more-result-paging.spec.ts` covers the production state transitions, generated client, Fiber Adapter, retained pending cards, in-control spinner, replacement pages, full and partial last pages, complete-search uniqueness, new-search reset, and focus. A fetch-stub component scenario would duplicate these observable contracts and give weaker ARCH-022 evidence. The existing `bun test` component integration suite still runs for regression coverage.
