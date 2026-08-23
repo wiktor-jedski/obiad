@@ -119,9 +119,9 @@ paths:
       operationId: searchSubstitutes
       summary: Search Substitutes
       description: >
-        Return the first page of display-ready Substitutes for a Substitution
-        Input. The backend converts the Food Quantity to its base unit,
-        derives the input calories as 4 × protein + 4 × carbohydrate + 9 ×
+        Return one deterministic page of display-ready Substitutes for a
+        Substitution Input. The backend converts the Food Quantity to its base
+        unit, derives the input calories as 4 × protein + 4 × carbohydrate + 9 ×
         fat, calculates the Nutritional Similarity as the cosine similarity of
         the input and candidate Macro Profiles, excludes the input Food Object
         and every other member of its Food Family, orders the eligible
@@ -143,7 +143,7 @@ paths:
       responses:
         "200":
           description: >
-            The first page of display-ready Substitutes: the echoed page
+            One deterministic page of display-ready Substitutes: the echoed page
             index, the total number of eligible Substitutes, whether a later
             page exists, the backend-derived macronutrients and whole calories
             of the Substitution Input at the committed quantity, and zero to
@@ -198,8 +198,8 @@ paths:
             quantity over 100,000 g or 100,000 ml returns
             `QUANTITY_OUT_OF_RANGE` with `field` `quantity.value`; a negative
             page returns `INVALID_PAGE_INDEX` with `field` `pageIndex`; and
-            every page after page 0 returns `PAGE_OUT_OF_RANGE` with `field`
-            `pageIndex` until Phase 11.
+            a nonzero page whose first rank does not exist returns
+            `PAGE_OUT_OF_RANGE` with `field` `pageIndex`.
           content:
             application/json:
               schema:
@@ -395,8 +395,9 @@ components:
           $ref: "#/components/schemas/SubstitutionQuantity"
         pageIndex:
           description: >
-            The zero-based page index. Only page 0 is valid; every page after
-            page 0 is out of range until Phase 11.
+            The zero-based page index. Page 0 is valid when zero eligible
+            Substitutes exist; a nonzero page whose first rank does not exist
+            returns `PAGE_OUT_OF_RANGE`.
           type: integer
           format: int32
           minimum: 0
@@ -430,8 +431,8 @@ components:
             - ml
     SubstituteSearchResponse:
       description: >
-        The closed page-0 response: the echoed page index, the total number of
-        eligible Substitutes, whether a later page exists, the backend-derived
+        The closed Substitute response: the echoed page index, the total number
+        of eligible Substitutes, whether a later page exists, the backend-derived
         macronutrients and whole calories of the Substitution Input at the
         committed quantity, and zero to three unique display-ready items. The
         envelope has no unknown fields.
@@ -459,8 +460,9 @@ components:
           minimum: 0
         hasMore:
           description: >
-            Whether a page after page 0 exists. True only when more than three
-            Substitutes are eligible.
+            Whether a later page of eligible Substitutes exists. True only when
+            at least one eligible Substitute rank exists after the returned
+            page.
           type: boolean
         inputMacronutrients:
           description: >
@@ -479,7 +481,7 @@ components:
           format: int64
           minimum: 0
         items:
-          description: The first page of zero to three unique display-ready Substitutes.
+          description: The requested page of zero to three unique display-ready Substitutes.
           type: array
           minItems: 0
           maxItems: 3

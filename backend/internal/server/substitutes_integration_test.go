@@ -206,14 +206,14 @@ func assertSubstituteItem(t *testing.T, item transport.SubstituteItem, want want
 	}
 }
 
-// assertSubstitutePage checks the exact page-0 envelope of a decoded
-// substitute response: the echoed page index 0, the total eligible count,
-// hasMore, exactly three unique items in the designated order, and each
-// item's exact values.
-func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchResponse, totalEligibleCount int32, hasMore bool, wants ...wantSubstituteItem) {
+// assertSubstitutePage checks the exact envelope of a decoded substitute
+// response: the echoed page index, the total eligible count, hasMore, exactly
+// the expected unique items in the designated order, and each item's exact
+// values.
+func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchResponse, pageIndex, totalEligibleCount int32, hasMore bool, wants ...wantSubstituteItem) {
 	t.Helper()
-	if response.PageIndex != 0 {
-		t.Fatalf("pageIndex %d, want 0", response.PageIndex)
+	if response.PageIndex != pageIndex {
+		t.Fatalf("pageIndex %d, want %d", response.PageIndex, pageIndex)
 	}
 	if response.TotalEligibleCount != totalEligibleCount {
 		t.Fatalf("totalEligibleCount %d, want %d", response.TotalEligibleCount, totalEligibleCount)
@@ -222,12 +222,12 @@ func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchRespo
 		t.Fatalf("hasMore %v, want %v", response.HasMore, hasMore)
 	}
 	if len(response.Items) != len(wants) {
-		t.Fatalf("page 0 has %d items, want %d", len(response.Items), len(wants))
+		t.Fatalf("page %d has %d items, want %d", pageIndex, len(response.Items), len(wants))
 	}
 	seen := make(map[int32]bool, len(response.Items))
 	for i, want := range wants {
 		if seen[response.Items[i].FoodObjectId] {
-			t.Fatalf("page 0 item ID %d is not unique", response.Items[i].FoodObjectId)
+			t.Fatalf("page %d item ID %d is not unique", pageIndex, response.Items[i].FoodObjectId)
 		}
 		seen[response.Items[i].FoodObjectId] = true
 		assertSubstituteItem(t, response.Items[i], want)
@@ -271,35 +271,60 @@ func assertInvalidRequest(t *testing.T, status int, body string, contentType str
 
 // TestSubstituteSearchHTTPIntegration verifies the Fiber Adapter for
 // POST /api/v1/substitutes/search over an actual loopback Fiber listener
-// backed by disposable real PostgreSQL (P04-G4): the strict page-0 success
-// field sets with no unknown fields, the designated page-0 order and exact
-// display values for the three seeded inputs, three unique items,
+// backed by disposable real PostgreSQL (P04-G4, P11-G1): the strict page
+// success field sets with no unknown fields, the designated page order and
+// exact display values for the three seeded inputs, unique items,
 // totalEligibleCount, hasMore, both localized names, omitted and present
-// image keys, serving/g/ml inputs, and solid g plus liquid ml whole Matched
-// Quantity outputs.
+// image keys, serving/g/ml inputs, solid g plus liquid ml whole Matched
+// Quantity outputs, and valid intermediate, full-last, and partial-last pages.
 func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	const jsonType = "application/json"
 
-	// P04-G4: Pizza Margherita at one Serving (350 g) — the designated
-	// eligible count 36, hasMore true, the designated page-0 order [13, 29,
-	// 26], three unique items, both localized names, the present gyoza
-	// image key on ID 13 and omitted image keys on IDs 29 and 26, and whole
-	// solid-gram Matched Quantities with the exact scaled macronutrients
-	// and whole similarity percentages. The ISSUE-010 inputMacronutrients
-	// are the input macros scaled to the committed 350 g and projected to
-	// 0.1 g: protein 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and
-	// fat 10 × 3.5 = 35.0.
+	// Pizza Margherita at one Serving (350 g), page 0: designated eligible
+	// count 36, hasMore true, designated page-0 order [13, 29, 26], three
+	// unique items, both localized names, the present gyoza image key on
+	// ID 13 and omitted image keys on IDs 29 and 26, and whole solid-gram
+	// Matched Quantities with the exact scaled macronutrients and whole
+	// similarity percentages. The ISSUE-010 inputMacronutrients are the input
+	// macros scaled to the committed 350 g and projected to 0.1 g: protein
+	// 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and fat 10 × 3.5 = 35.0.
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
 	pizza := assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	assertInputMacronutrients(t, pizza, 35.0, 105.0, 35.0)
 	assertInputCalories(t, pizza, 875)
-	assertSubstitutePage(t, pizza, 36, true,
+	assertSubstitutePage(t, pizza, 0, 36, true,
 		wantSubstituteItem{id: 13, en: "Gyoza", pl: "Pierożki gyoza", imageKey: strPtr("gyoza"), matchedValue: 438, matchedUnit: transport.MatchedQuantityUnitG, protein: 35, carbohydrate: 105, fat: 35, calories: 875, similarityPercent: 100},
 		wantSubstituteItem{id: 29, en: "Paella", pl: "Paella", matchedValue: 557, matchedUnit: transport.MatchedQuantityUnitG, protein: 44.6, carbohydrate: 111.5, fat: 27.9, calories: 875, similarityPercent: 100},
 		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", matchedValue: 440, matchedUnit: transport.MatchedQuantityUnitG, protein: 26.4, carbohydrate: 123.1, fat: 30.8, calories: 875, similarityPercent: 99},
+	)
+
+	// Valid intermediate page: Pizza Margherita page 1 (ranks 4 through 6,
+	// hasMore true).
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
+		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":1}`)
+	pizzaPage1 := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, pizzaPage1, 35.0, 105.0, 35.0)
+	assertInputCalories(t, pizzaPage1, 875)
+	assertSubstitutePage(t, pizzaPage1, 1, 36, true,
+		wantSubstituteItem{id: 30, en: "Pho", pl: "Zupa pho", matchedValue: 1522, matchedUnit: transport.MatchedQuantityUnitMl, protein: 45.7, carbohydrate: 121.7, fat: 22.8, calories: 875, similarityPercent: 99},
+		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 486, matchedUnit: transport.MatchedQuantityUnitG, protein: 43.8, carbohydrate: 87.5, fat: 38.9, calories: 875, similarityPercent: 99},
+		wantSubstituteItem{id: 35, en: "Pastel de nata", pl: "Pastel de nata", matchedValue: 306, matchedUnit: transport.MatchedQuantityUnitG, protein: 15.3, carbohydrate: 107.1, fat: 42.8, calories: 875, similarityPercent: 98},
+	)
+
+	// Valid full-last page: Pizza Margherita page 11 (ranks 34 through 36,
+	// hasMore false).
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
+		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":11}`)
+	pizzaLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, pizzaLast, 35.0, 105.0, 35.0)
+	assertInputCalories(t, pizzaLast, 875)
+	assertSubstitutePage(t, pizzaLast, 11, 36, false,
+		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 653, matchedUnit: transport.MatchedQuantityUnitG, protein: 189.4, carbohydrate: 0, fat: 13.1, calories: 875, similarityPercent: 32},
+		wantSubstituteItem{id: 18, en: "Butter", pl: "Masło", matchedValue: 118, matchedUnit: transport.MatchedQuantityUnitG, protein: 0.6, carbohydrate: 0.6, fat: 96.7, calories: 875, similarityPercent: 31},
+		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", matchedValue: 106, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0, carbohydrate: 0, fat: 97.2, calories: 875, similarityPercent: 30},
 	)
 
 	// A changed accepted quantity of the same input: Pizza Margherita at
@@ -320,7 +345,7 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		}
 	}
 
-	// P04-G4: Chicken breast at 100 g — the designated eligible count 37,
+	// Chicken breast at 100 g, page 0: designated eligible count 37,
 	// hasMore true, page-0 IDs [23, 11, 6], and every image key omitted
 	// (none of the three candidates has a seeded image). The input
 	// macronutrients at the committed 100 g are the seeded per-100 g
@@ -330,27 +355,49 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	chicken := assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	assertInputMacronutrients(t, chicken, 31.0, 0.0, 3.6)
 	assertInputCalories(t, chicken, 156)
-	assertSubstitutePage(t, chicken, 37, true,
+	assertSubstitutePage(t, chicken, 0, 37, true,
 		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 117, matchedUnit: transport.MatchedQuantityUnitG, protein: 33.8, carbohydrate: 0, fat: 2.3, calories: 156, similarityPercent: 100},
 		wantSubstituteItem{id: 11, en: "Skyr yogurt", pl: "Jogurt skyr", matchedValue: 253, matchedUnit: transport.MatchedQuantityUnitG, protein: 27.8, carbohydrate: 10.1, fat: 0.5, calories: 156, similarityPercent: 94},
 		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", matchedValue: 67, matchedUnit: transport.MatchedQuantityUnitG, protein: 18, carbohydrate: 0, fat: 9.4, calories: 156, similarityPercent: 93},
 	)
 
-	// P04-G4: Milk at 100 ml — the designated eligible count 37, hasMore
-	// true, page-0 IDs [33, 3, 21], and whole Matched Quantity outputs in
-	// both candidate base units: millilitres for the liquid Mondongo and
-	// grams for the solid Lasagna and Beef cheeseburger (ARCH-013). The
-	// input macronutrients at the committed 100 ml are the seeded per-
-	// 100 ml values: 3.4, 4.8, and 2.0.
+	// Valid partial-last page: Chicken breast page 12 (rank 37, hasMore false,
+	// exactly 1 item).
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
+		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":12}`)
+	chickenLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, chickenLast, 31.0, 0.0, 3.6)
+	assertInputCalories(t, chickenLast, 156)
+	assertSubstitutePage(t, chickenLast, 12, 37, false,
+		wantSubstituteItem{id: 9, en: "Apple juice", pl: "Sok jabłkowy", matchedValue: 345, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0.3, carbohydrate: 38, fat: 0.3, calories: 156, similarityPercent: 1},
+	)
+
+	// Milk at 100 ml, page 0: designated eligible count 37, hasMore true,
+	// page-0 IDs [33, 3, 21], and whole Matched Quantity outputs in both
+	// candidate base units: millilitres for the liquid Mondongo and grams for
+	// the solid Lasagna and Beef cheeseburger (ARCH-013). The input
+	// macronutrients at the committed 100 ml are the seeded per-100 ml
+	// values: 3.4, 4.8, and 2.0.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":0}`)
 	milk := assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	assertInputMacronutrients(t, milk, 3.4, 4.8, 2.0)
 	assertInputCalories(t, milk, 51)
-	assertSubstitutePage(t, milk, 37, true,
+	assertSubstitutePage(t, milk, 0, 37, true,
 		wantSubstituteItem{id: 33, en: "Mondongo", pl: "Zupa mondongo", matchedValue: 53, matchedUnit: transport.MatchedQuantityUnitMl, protein: 3.7, carbohydrate: 4.2, fat: 2.1, calories: 51, similarityPercent: 99},
 		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 28, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 5.1, fat: 2.3, calories: 51, similarityPercent: 99},
 		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", matchedValue: 19, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 4.6, fat: 2.5, calories: 51, similarityPercent: 99},
+	)
+
+	// Valid partial-last page: Milk page 12 (rank 37, hasMore false, exactly
+	// 1 item).
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
+		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":12}`)
+	milkLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, milkLast, 3.4, 4.8, 2.0)
+	assertInputCalories(t, milkLast, 51)
+	assertSubstitutePage(t, milkLast, 12, 37, false,
+		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", matchedValue: 6, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0, carbohydrate: 0, fat: 5.6, calories: 51, similarityPercent: 32},
 	)
 }
 

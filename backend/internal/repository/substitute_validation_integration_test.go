@@ -1,36 +1,38 @@
 package repository
 
-// Integration test for Phase 4 (task 18): the Find Substitute Page input
-// validation and stable Module failures (ARCH-005, ARCH-006, ARCH-008,
-// ARCH-018, ARCH-022, P04-G4). It requires a real PostgreSQL server: it
-// reuses the shared task-16 fixture setupSubstituteFixture, which creates an
-// isolated disposable database plus the schema-owner, SELECT-only runtime,
-// and unprivileged login roles through the shared testdb support, runs the
-// real setup command against it, grants the runtime catalog read through
-// the same embedded privilege SQL the local deployment setup applies,
-// connects the SELECT-only runtime credential with a statement tracer, and
-// builds a Find Substitute Page Module over that connection.
+// Integration test for Phase 4 (task 18) and Phase 11 (task 36): the Find
+// Substitute Page input validation and stable Module failures (ARCH-005,
+// ARCH-006, ARCH-008, ARCH-018, ARCH-022, P04-G4, P11-G1). It requires a
+// real PostgreSQL server: it reuses the shared task-16 fixture
+// setupSubstituteFixture, which creates an isolated disposable database plus
+// the schema-owner, SELECT-only runtime, and unprivileged login roles through
+// the shared testdb support, runs the real setup command against it, grants
+// the runtime catalog read through the same embedded privilege SQL the local
+// deployment setup applies, connects the SELECT-only runtime credential with
+// a statement tracer, and builds a Find Substitute Page Module over that
+// connection.
 //
 // The test proves the accepted inputs — positive integer direct g and ml
-// values, dot-decimal Serving counts, and both 100,000 g / 100,000 ml
+// values, dot-decimal Serving counts, both 100,000 g / 100,000 ml
 // converted-value boundaries (including a Serving conversion that lands
-// exactly on the limit and a tiny positive converted value) — and the exact
-// ISSUE-005 stable failures for nonpositive, fractional, or nonfinite base
-// values, unsupported units, invalid Serving values, Physical State unit
-// mismatch, missing Serving, over-limit converted values, a converted value
-// that underflows to zero, nonpositive or absent Food Object IDs, negative
-// pages, and every nonzero page. A per-request statement tracer proves no
-// retry and at most one fresh SELECT: catalog-independent request failures
-// (page index, Food Object ID, quantity value or unit) are rejected before
-// any catalog read and record zero statements; object-dependent failures
-// (absent ID, unit mismatch, unavailable Serving, converted-value range)
-// record exactly one fresh embedded SELECT and no second read; and every
-// accepted request records exactly one fresh embedded SELECT. No fake
+// exactly on the limit and a tiny positive converted value), and page 0
+// for zero eligible Substitutes — and the exact ISSUE-005 stable failures
+// for nonpositive, fractional, or nonfinite base values, unsupported units,
+// invalid Serving values, Physical State unit mismatch, missing Serving,
+// over-limit converted values, a converted value that underflows to zero,
+// nonpositive or absent Food Object IDs, negative pages, and out-of-range
+// nonzero pages (including the first page after the last page and
+// math.MaxInt32). A per-request statement tracer proves no retry and at most
+// one fresh SELECT: catalog-independent request failures (negative page
+// index, Food Object ID, quantity value or unit) are rejected before any
+// catalog read and record zero statements; object-dependent failures (absent
+// ID, unit mismatch, unavailable Serving, converted-value range, page out of
+// range) record exactly one fresh embedded SELECT and no second read; and
+// every accepted request records exactly one fresh embedded SELECT. No fake
 // Adapter, exported seam, or test hook is added: the test sits in the same
 // package. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or
 // from libpq-style environment variables; no credential is committed and
 // tests skip when no server is reachable.
-
 import (
 	"context"
 	"errors"
@@ -147,6 +149,9 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		assertStableFailure(t, err, CodeInvalidQuantity, "quantity.value")
 		tracer.assertSingleSelect(t, wantSQL)
 	})
+	if _, err := owner.Exec(ctx, "DELETE FROM food_objects WHERE id = 39"); err != nil {
+		t.Fatalf("delete tiny-Serving fixture: %v", err)
+	}
 
 	// Catalog-independent failures: rejected before the single catalog read,
 	// recording zero statements (no read at all, no retry). These cover the
@@ -180,9 +185,6 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		{"positive infinity Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: math.Inf(1), Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
 		{"negative infinity Serving count", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: math.Inf(-1), Unit: UnitServing}}, 0, CodeInvalidQuantity, "quantity.value"},
 		{"negative page index", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, -1, CodeInvalidPageIndex, "pageIndex"},
-		{"nonzero page index one", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 1, CodePageOutOfRange, "pageIndex"},
-		{"nonzero page index two", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 2, CodePageOutOfRange, "pageIndex"},
-		{"large nonzero page index", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 42, CodePageOutOfRange, "pageIndex"},
 	}
 	for _, tc := range preLoad {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -208,30 +210,69 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 	postLoad := []struct {
 		name      string
 		input     SubstituteInput
+		pageIndex int32
 		wantCode  Code
 		wantField string
 	}{
-		{"absent positive Food Object ID", SubstituteInput{FoodObjectID: 999999, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, CodeFoodObjectNotFound, "foodObjectId"},
-		{"absent positive Food Object ID with Serving", SubstituteInput{FoodObjectID: 999999, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, CodeFoodObjectNotFound, "foodObjectId"},
-		{"solid with millilitre unit mismatch", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitMillilitre}}, CodeQuantityUnitMismatch, "quantity.unit"},
-		{"liquid with gram unit mismatch", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, CodeQuantityUnitMismatch, "quantity.unit"},
-		{"missing Serving on solid", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, CodeServingUnavailable, "quantity.unit"},
-		{"missing Serving on liquid", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, CodeServingUnavailable, "quantity.unit"},
-		{"direct grams over limit", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100001, Unit: UnitGram}}, CodeQuantityOutOfRange, "quantity.value"},
-		{"direct millilitres over limit", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100001, Unit: UnitMillilitre}}, CodeQuantityOutOfRange, "quantity.value"},
-		{"Serving converted over limit", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 286, Unit: UnitServing}}, CodeQuantityOutOfRange, "quantity.value"},
-		{"dot-decimal Serving converted over limit", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 285.72, Unit: UnitServing}}, CodeQuantityOutOfRange, "quantity.value"},
-		{"Serving converted over limit on liquid", SubstituteInput{FoodObjectID: 17, Quantity: FoodQuantity{Value: 334, Unit: UnitServing}}, CodeQuantityOutOfRange, "quantity.value"},
+		{"absent positive Food Object ID", SubstituteInput{FoodObjectID: 999999, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 0, CodeFoodObjectNotFound, "foodObjectId"},
+		{"absent positive Food Object ID with Serving", SubstituteInput{FoodObjectID: 999999, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 0, CodeFoodObjectNotFound, "foodObjectId"},
+		{"solid with millilitre unit mismatch", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitMillilitre}}, 0, CodeQuantityUnitMismatch, "quantity.unit"},
+		{"liquid with gram unit mismatch", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 0, CodeQuantityUnitMismatch, "quantity.unit"},
+		{"missing Serving on solid", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 0, CodeServingUnavailable, "quantity.unit"},
+		{"missing Serving on liquid", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 0, CodeServingUnavailable, "quantity.unit"},
+		{"direct grams over limit", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100001, Unit: UnitGram}}, 0, CodeQuantityOutOfRange, "quantity.value"},
+		{"direct millilitres over limit", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100001, Unit: UnitMillilitre}}, 0, CodeQuantityOutOfRange, "quantity.value"},
+		{"Serving converted over limit", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 286, Unit: UnitServing}}, 0, CodeQuantityOutOfRange, "quantity.value"},
+		{"dot-decimal Serving converted over limit", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 285.72, Unit: UnitServing}}, 0, CodeQuantityOutOfRange, "quantity.value"},
+		{"Serving converted over limit on liquid", SubstituteInput{FoodObjectID: 17, Quantity: FoodQuantity{Value: 334, Unit: UnitServing}}, 0, CodeQuantityOutOfRange, "quantity.value"},
+		{"first page after last page for Pizza Margherita (36 candidates)", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 12, CodePageOutOfRange, "pageIndex"},
+		{"math.MaxInt32 page for Pizza Margherita", SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, math.MaxInt32, CodePageOutOfRange, "pageIndex"},
+		{"first page after last page for Chicken breast (37 candidates)", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 13, CodePageOutOfRange, "pageIndex"},
+		{"math.MaxInt32 page for Chicken breast", SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, math.MaxInt32, CodePageOutOfRange, "pageIndex"},
+		{"first page after last page for Milk (37 candidates)", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100, Unit: UnitMillilitre}}, 13, CodePageOutOfRange, "pageIndex"},
+		{"math.MaxInt32 page for Milk", SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100, Unit: UnitMillilitre}}, math.MaxInt32, CodePageOutOfRange, "pageIndex"},
 	}
 	for _, tc := range postLoad {
 		t.Run("reject "+tc.name, func(t *testing.T) {
 			tracer.reset()
-			page, err := module.Run(ctx, tc.input, 0)
+			page, err := module.Run(ctx, tc.input, tc.pageIndex)
 			if page != nil {
-				t.Fatalf("Run(%+v) returned a page, want the stable failure %s with field %q", tc.input, tc.wantCode, tc.wantField)
+				t.Fatalf("Run(%+v, page %d) returned a page, want the stable failure %s with field %q", tc.input, tc.pageIndex, tc.wantCode, tc.wantField)
 			}
 			assertStableFailure(t, err, tc.wantCode, tc.wantField)
 			tracer.assertSingleSelect(t, wantSQL)
 		})
 	}
+
+	// Zero-result contract: page 0 remains valid when zero eligible Substitutes
+	// exist, while nonzero pages return PAGE_OUT_OF_RANGE with pageIndex.
+	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id) VALUES (99)"); err != nil {
+		t.Fatalf("owner insert food_families 99: %v", err)
+	}
+	if _, err := owner.Exec(ctx, "UPDATE food_objects SET food_family_id = 99"); err != nil {
+		t.Fatalf("owner update food_objects to food_family_id 99: %v", err)
+	}
+	if _, err := owner.Exec(ctx,
+		`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, 'solid', $3, $4, $5, 99)`,
+		95, `{"en": "Zero input", "pl": "Wprowadzenie zero"}`, 10.0, 20.0, 5.0,
+	); err != nil {
+		t.Fatalf("insert zero input: %v", err)
+	}
+	tracer.reset()
+	zeroPage, err := module.Run(ctx, SubstituteInput{FoodObjectID: 95, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 0)
+	if err != nil {
+		t.Fatalf("Run(zero input, page 0) failed: %v", err)
+	}
+	if zeroPage.PageIndex != 0 || zeroPage.TotalEligibleCount != 0 || zeroPage.HasMore || len(zeroPage.Items) != 0 {
+		t.Fatalf("zeroPage %+v, want PageIndex: 0, TotalEligibleCount: 0, HasMore: false, Items: empty", zeroPage)
+	}
+	tracer.assertSingleSelect(t, wantSQL)
+
+	tracer.reset()
+	zeroPage1, err := module.Run(ctx, SubstituteInput{FoodObjectID: 95, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 1)
+	if zeroPage1 != nil {
+		t.Fatalf("Run(zero input, page 1) returned page %+v, want CodePageOutOfRange", zeroPage1)
+	}
+	assertStableFailure(t, err, CodePageOutOfRange, "pageIndex")
+	tracer.assertSingleSelect(t, wantSQL)
 }
