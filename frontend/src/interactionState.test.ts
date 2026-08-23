@@ -496,12 +496,23 @@ describe("the intermediate MORE! result-paging transitions", () => {
     expect("data" in state).toBe(false);
   });
 
-  test("a fresh selection after paging resets pageIndex to 0 and transitions to loadingNew", () => {
+  test("a fresh selection from page 2 resets pageIndex to 0 and transitions to loadingNew", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
+    // Advance to page 1
     store.loadNextPage();
     store.applySearchResult(true);
+    // Advance to page 2
+    store.loadNextPage();
+    store.applySearchResult(true);
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("results");
+    expect(state.pageIndex).toBe(2);
 
     const nextSelected: SelectedFoodObject = {
       foodObjectId: 10,
@@ -512,7 +523,6 @@ describe("the intermediate MORE! result-paging transitions", () => {
     };
     store.selectSuggestion(nextSelected);
 
-    let state: Record<string, unknown> = {};
     store.subscribe((next) => {
       state = { ...next };
     });
@@ -522,10 +532,14 @@ describe("the intermediate MORE! result-paging transitions", () => {
     expect(state.query).toBe("Milk");
   });
 
-  test("quantity commit on later page preserves current pageIndex", () => {
+  test("quantity commit on page 2 preserves current pageIndex", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
+    // Advance to page 1
+    store.loadNextPage();
+    store.applySearchResult(true);
+    // Advance to page 2
     store.loadNextPage();
     store.applySearchResult(true);
 
@@ -536,7 +550,7 @@ describe("the intermediate MORE! result-paging transitions", () => {
     store.subscribe((next) => {
       state = { ...next };
     });
-    expect(state.pageIndex).toBe(1);
+    expect(state.pageIndex).toBe(2);
     expect(state.committedValue).toBe(200);
   });
 });
