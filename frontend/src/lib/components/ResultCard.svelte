@@ -85,6 +85,7 @@
 
 <article
   data-result-card
+  data-food-object-id={item.foodObjectId}
   class="overflow-hidden rounded-2xl border border-solid border-dark-secondary bg-dark-surface"
 >
   <img

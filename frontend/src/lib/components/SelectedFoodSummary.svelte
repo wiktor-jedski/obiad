@@ -9,12 +9,12 @@
   import { interfaceLanguage } from "../interfaceLanguage";
   import {
     interactionState,
+    type LoadingMoreInteractionState,
     type LoadingNewInteractionState,
     type QuantityUnit,
     type ResultsInteractionState,
     type ZeroResultsInteractionState,
   } from "../interactionState";
-
   /**
    * ISSUE-010 editable selected-food summary (task 34; ARCH-001, ARCH-002,
    * ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022,
@@ -67,9 +67,9 @@
     /** The current non-empty interaction state (ARCH-002). */
     interaction:
       | LoadingNewInteractionState
+      | LoadingMoreInteractionState
       | ResultsInteractionState
       | ZeroResultsInteractionState;
-    /** The current Substitution Search response, or undefined while none exists. */
     data: SubstituteSearchResponse | undefined;
     /** Whether a valid quantity recalculation is pending (ISSUE-010). */
     recalculating: boolean;
