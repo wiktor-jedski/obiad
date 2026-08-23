@@ -229,6 +229,17 @@
   }
 
   /**
+   * Selects the current Search Query after a pointer click so a visitor can
+   * replace an existing query with one keystroke, like a browser address bar.
+   */
+  function onClick(event: MouseEvent): void {
+    const field = event.currentTarget as HTMLInputElement;
+    if (field.value !== "") {
+      field.select();
+    }
+  }
+
+  /**
    * Keyboard operation of the open suggestion list (task 31, REQ-019,
    * ARCH-010, ARCH-020). The Search input owns the key handling through
    * the active-descendant pattern; option DOM focus stays on Search.
@@ -351,6 +362,7 @@
     aria-autocomplete="list"
     aria-activedescendant={activeOptionId}
     oninput={onInput}
+    onclick={onClick}
     onfocus={onFocus}
     onblur={() => interactionState.setFocused(false)}
     onkeydown={onKeydown}

@@ -291,4 +291,23 @@ test.describe("empty shell", () => {
       await assertEmptyShell(page, testInfo, vp);
     });
   }
+
+  test("clicking Search selects its existing text", async ({ page }) => {
+    await page.goto("/");
+    const search = page.getByRole("combobox", { name: "Search" });
+    await search.fill("chicken breast");
+    await search.click();
+
+    await expect
+      .poll(() =>
+        search.evaluate((field) => {
+          const input = field as HTMLInputElement;
+          return {
+            start: input.selectionStart,
+            end: input.selectionEnd,
+          };
+        }),
+      )
+      .toEqual({ start: 0, end: "chicken breast".length });
+  });
 });
