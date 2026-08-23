@@ -33,7 +33,7 @@ import {
   resolveCommittedValue,
   unitSelectionValue,
 } from "./quantity";
-
+import { isSubstitutionSearchLocked } from "./substitutionSearch";
 /**
  * The closed set of Food Quantity units the read-only Substitution Input
  * and the Substitution Search request carry: one Serving, direct grams, or
@@ -313,8 +313,11 @@ export function createInteractionState(): InteractionStateStore {
       update((state) => ({ ...state, focused }));
     },
     selectSuggestion(selected) {
+      if (isSubstitutionSearchLocked()) {
+        return;
+      }
       update((state) => {
-        if (state.name === "loadingNew") {
+        if (state.name === "loadingNew" || state.name === "loadingMore") {
           return state;
         }
         return {
@@ -343,6 +346,9 @@ export function createInteractionState(): InteractionStateStore {
       });
     },
     loadNextPage() {
+      if (isSubstitutionSearchLocked()) {
+        return;
+      }
       update((state) => {
         if (state.name !== "results") {
           return state;
@@ -355,8 +361,15 @@ export function createInteractionState(): InteractionStateStore {
       });
     },
     setQuantityText(text) {
+      if (isSubstitutionSearchLocked()) {
+        return;
+      }
       update((state) => {
-        if (state.name === "empty") {
+        if (
+          state.name === "empty" ||
+          state.name === "loadingNew" ||
+          state.name === "loadingMore"
+        ) {
           return state;
         }
         return {
@@ -367,8 +380,15 @@ export function createInteractionState(): InteractionStateStore {
       });
     },
     selectUnit(unit) {
+      if (isSubstitutionSearchLocked()) {
+        return;
+      }
       update((state) => {
-        if (state.name === "empty") {
+        if (
+          state.name === "empty" ||
+          state.name === "loadingNew" ||
+          state.name === "loadingMore"
+        ) {
           return state;
         }
         return withCommittedQuantity(
@@ -379,8 +399,15 @@ export function createInteractionState(): InteractionStateStore {
       });
     },
     commitQuantity() {
+      if (isSubstitutionSearchLocked()) {
+        return;
+      }
       update((state) => {
-        if (state.name === "empty") {
+        if (
+          state.name === "empty" ||
+          state.name === "loadingNew" ||
+          state.name === "loadingMore"
+        ) {
           return state;
         }
         if (!isValidQuantitySyntax(state.quantityText, state.draftUnit)) {

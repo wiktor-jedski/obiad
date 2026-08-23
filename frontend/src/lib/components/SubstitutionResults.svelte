@@ -5,8 +5,10 @@
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
-  import { createSubstitutionSearchQuery } from "../substitutionSearch";
-
+  import {
+    createSubstitutionSearchQuery,
+    substitutionSearchLock,
+  } from "../substitutionSearch";
   /**
    * Result-state composition (task 30, task 37, task 38; ARCH-001, ARCH-002,
    * ARCH-003, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022, REQ-003,
@@ -87,13 +89,20 @@
    * never re-subscribes the query observer and never starts a second
    * request (ARCH-019, REQ-022).
    */
-  const searchState = $derived(
-    interaction.name === "empty" ? undefined : interaction,
+  const committedFoodObjectId = $derived(
+    interaction.name === "empty"
+      ? undefined
+      : interaction.selected.foodObjectId,
   );
-  const committedFoodObjectId = $derived(searchState?.selected.foodObjectId);
-  const committedQuantityValue = $derived(searchState?.committedValue);
-  const committedQuantityUnit = $derived(searchState?.committedUnit);
-  const committedPageIndex = $derived(searchState?.pageIndex);
+  const committedQuantityValue = $derived(
+    interaction.name === "empty" ? undefined : interaction.committedValue,
+  );
+  const committedQuantityUnit = $derived(
+    interaction.name === "empty" ? undefined : interaction.committedUnit,
+  );
+  const committedPageIndex = $derived(
+    interaction.name === "empty" ? undefined : interaction.pageIndex,
+  );
   /**
    * The committed Substitution Search input (task 34, ISSUE-010): the
    * selected Food Object ID, the committed transport Food Quantity, and
@@ -128,9 +137,8 @@
    */
   const substitutionSearch = createSubstitutionSearchQuery({
     committed: () => committed,
-    minimumCardLoadingDurationEnabled: () => interaction.name !== "loadingMore",
+    minimumCardLoadingDurationEnabled: () => committed?.pageIndex === 0,
   });
-
   /**
    * Whether a valid quantity recalculation is pending (task 34,
    * ISSUE-010): a completed result transition is visible while TanStack
@@ -141,10 +149,13 @@
   const recalculating = $derived(
     interaction.name === "results" && substitutionSearch.isPlaceholderData,
   );
+  /** Whether the global substitution request lock is active (ARCH-011, ARCH-019, REQ-048). */
+  const locked = $derived(
+    $substitutionSearchLock || interaction.name === "loadingMore",
+  );
 
   /**
    * Result transition (task 28, task 37, task 38; ARCH-002): the first
-   * page-0 response data arriving while the state is `loadingNew` transitions
    * the union to `results` when the page contains items and to `zeroResults`
    * when it is empty. A subsequent page response arriving while the state
    * is `loadingMore` transitions the union back to `results` (REQ-041).
@@ -176,6 +187,9 @@
    * completed result state, committing `pageIndex + 1`.
    */
   function onMoreClick(): void {
+    if (locked) {
+      return;
+    }
     if (interaction.name === "results") {
       interactionState.loadNextPage();
     }
@@ -243,10 +257,9 @@
           type="button"
           data-more-button
           aria-label={dictionary.moreButtonLabel()}
-          aria-disabled={interaction.name === "loadingMore"}
+          aria-disabled={locked}
           onclick={onMoreClick}
-          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded px-6 py-2.5 font-ui text-sm font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary {interaction.name ===
-          'loadingMore'
+          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded px-6 py-2.5 font-ui text-sm font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary {locked
             ? 'cursor-not-allowed bg-gray-600 text-gray-300'
             : 'bg-dark-primary text-dark-text-on-bright hover:bg-dark-secondary'}"
         >

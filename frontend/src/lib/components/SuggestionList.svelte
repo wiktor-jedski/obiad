@@ -51,12 +51,13 @@
     items: FoodSuggestion[];
     /** The zero-based index of the keyboard-active option (task 31, REQ-019). */
     activeIndex: number;
+    /** Whether the substitution request lock is active (ARCH-011, ARCH-019, REQ-048). */
+    locked?: boolean;
     /** Pointer activation of one option (task 28, REQ-020). */
     onselect: (item: FoodSuggestion) => void;
   }
 
-  let { items, activeIndex, onselect }: Props = $props();
-
+  let { items, activeIndex, locked = false, onselect }: Props = $props();
   /** The active Interface Language for the localized option names. */
   const language = $derived($interfaceLanguage);
   /** The active dictionary for the panel's accessible name. */
@@ -76,10 +77,16 @@
       id={suggestionOptionId(item.foodObjectId)}
       role="option"
       aria-selected={index === activeIndex}
+      aria-disabled={locked ? "true" : undefined}
       onmousedown={(event) => event.preventDefault()}
-      onclick={() => onselect(item)}
-      class="flex h-12 items-center pl-[calc(1.75rem+0.5em)] pr-4 text-base {index ===
-      activeIndex
+      onclick={() => {
+        if (!locked) {
+          onselect(item);
+        }
+      }}
+      class="flex h-12 items-center pl-[calc(1.75rem+0.5em)] pr-4 text-base {locked
+        ? 'cursor-not-allowed opacity-60'
+        : ''} {index === activeIndex
         ? 'bg-dark-primary text-dark-text-on-bright'
         : 'text-dark-text-primary'}"
     >
