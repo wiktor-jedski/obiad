@@ -14,7 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
  * Search geometry, selects the seeded Pizza Margherita suggestion with a
  * pointer, and observes the root application's result-state composition —
  * one primary content column containing distinct Search, selected-input,
- * and result regions in that order; the Search field's top edge `96px`
+ * and result regions in that order; the Search field's top edge `64px`
  * from the viewport top; the approved vertical gaps (the new-search
  * spinner `12px` below Search while pending, then the selected-input and
  * result regions at `24px` intervals); the three result cards in three
@@ -27,7 +27,7 @@ const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
 /** ISSUE-008: the Search field's top edge from the viewport top. */
-const SEARCH_TOP_PX = 96;
+const SEARCH_TOP_PX = 64;
 /** ISSUE-008: the new-search spinner's gap below the Search field. */
 const SPINNER_OFFSET_PX = 12;
 /** ISSUE-008: the interval between the selected-input and result regions. */
@@ -108,7 +108,7 @@ async function expectEmptyStateGeometry(page: Page): Promise<void> {
 /**
  * Asserts the desktop result-state region composition and geometry: one
  * primary column with the distinct Search, selected-input, and result
- * regions in that order; the Search field's top edge `96px` from the
+ * regions in that order; the Search field's top edge `64px` from the
  * viewport top; the `24px` vertical gaps between the regions; exactly
  * three cards in three equal columns; and Search geometrically above every
  * card (REQ-003, REQ-061, REQ-062, ISSUE-008).
@@ -138,7 +138,7 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     "Pizza Margherita · 1 serving",
   );
 
-  // The Search field's top edge sits 96px from the viewport top (ISSUE-008).
+  // The Search field's top edge sits 64px from the viewport top (ISSUE-008).
   const search = page.getByRole("combobox", { name: COPY.search });
   const searchBox = (await search.boundingBox()) as {
     y: number;
@@ -146,7 +146,7 @@ async function expectResultStateComposition(page: Page): Promise<void> {
   };
   expect(
     Math.abs(searchBox.y - SEARCH_TOP_PX),
-    "the Search field's top edge is 96px from the viewport top",
+    "the Search field's top edge is 64px from the viewport top",
   ).toBeLessThanOrEqual(1);
 
   // The approved vertical gaps: the selected-input region starts 24px below

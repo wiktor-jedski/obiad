@@ -29,8 +29,9 @@
   regions (ARCH-011, ARCH-019). The empty state retains the ISSUE-006
   Search geometry — the field's vertical center at `45%` of `100dvh` via
   the column padding. From `loadingNew` onward the column padding moves
-  the Search field's top edge to `96px` from the viewport top, and the
-  regions follow at `24px` intervals (ISSUE-008). A successful page-0
+  the Search field's top edge to `64px` from the viewport top, and the
+  regions follow at `24px` intervals (ISSUE-008). This reduced top offset
+  keeps the paging control visible in a desktop viewport. A successful page-0
   response renders its zero-to-three display-ready Substitutes as one card
   per item, using one column below `1024px` and three equal columns from
   `1024px` (REQ-062); a successful empty page renders no cards and exactly
@@ -43,8 +44,9 @@
 
   The Interface Language control (task 26) is the only additional surface:
   a borderless native dropdown absolutely positioned in the primary
-  column's top-right corner, inset by the existing responsive gutter.
-  Because it is absolutely positioned, it never moves the Search field.
+  column's top-right corner, `16px` from the viewport top and inset from the
+  right by the responsive gutter. Because it is absolutely positioned, it
+  never moves the Search field.
 
   The `data-placeholder-url` attribute (task 23, ARCH-015, ISSUE-006)
   exposes the resolved bundled placeholder URL to the real-stack
@@ -61,7 +63,7 @@
     class="relative mx-auto min-h-dvh w-full max-w-[1280px] px-4 sm:px-6 lg:px-8 {$interactionState.name ===
     'empty'
       ? 'pt-[calc(45dvh_-_28px)]'
-      : 'pt-24'}"
+      : 'pt-16'}"
   >
     <Search />
     <SubstitutionResults />

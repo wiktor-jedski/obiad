@@ -27,7 +27,7 @@
    * panel, and the new-search spinner. The read-only Substitution Input,
    * the result-card region, and the zero-result message live in the root
    * application (App.svelte), which owns the result-state geometry: the
-   * Search field's `96px` top edge and the `24px` region intervals.
+   * Search field's `64px` top edge and the `24px` region intervals.
    *
    * The control renders an `<input type="search">` with a visually hidden
    * label, the placeholder from the active Interface Language dictionary,
