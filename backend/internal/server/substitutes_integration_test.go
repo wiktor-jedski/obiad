@@ -73,11 +73,12 @@ func postSubstitutes(t *testing.T, baseURL string, contentType string, body stri
 // assertSubstituteSuccessEnvelope asserts the exact ISSUE-005 success shape
 // of a substitute search response: status 200, application/json, and a body
 // with no unknown fields at any nesting level — exactly the pageIndex,
-// totalEligibleCount, hasMore, and items envelope, every item with exactly
-// foodObjectId, names, matchedQuantity, macronutrients, and
-// similarityPercent plus the optional imageKey exactly when present, names
-// with exactly en and pl, matchedQuantity with exactly value and unit, and
-// macronutrients with exactly protein, carbohydrate, and fat
+// totalEligibleCount, hasMore, inputMacronutrients, and items envelope,
+// inputMacronutrients with exactly protein, carbohydrate, and fat, every
+// item with exactly foodObjectId, names, matchedQuantity, macronutrients,
+// and similarityPercent plus the optional imageKey exactly when present,
+// names with exactly en and pl, matchedQuantity with exactly value and
+// unit, and macronutrients with exactly protein, carbohydrate, and fat
 // (additionalProperties: false). It returns the decoded generated envelope.
 func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, contentType string) transport.SubstituteSearchResponse {
 	t.Helper()
@@ -91,7 +92,12 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
 		t.Fatalf("body %q is not valid JSON: %v", body, err)
 	}
-	assertExactFieldSet(t, envelope, "response envelope", "pageIndex", "totalEligibleCount", "hasMore", "items")
+	assertExactFieldSet(t, envelope, "response envelope", "pageIndex", "totalEligibleCount", "hasMore", "inputMacronutrients", "inputCalories", "items")
+	var inputMacros map[string]json.RawMessage
+	if err := json.Unmarshal(envelope["inputMacronutrients"], &inputMacros); err != nil {
+		t.Fatalf("inputMacronutrients %q is not a JSON object: %v", envelope["inputMacronutrients"], err)
+	}
+	assertExactFieldSet(t, inputMacros, "inputMacronutrients", "protein", "carbohydrate", "fat")
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(envelope["items"], &items); err != nil {
 		t.Fatalf("items %q is not a JSON array: %v", envelope["items"], err)
@@ -100,7 +106,7 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 		// imageKey is optional: present exactly when the Food Object has an
 		// image and never null (ISSUE-005). The per-item value assertions
 		// below also pin the present key to the seeded opaque key.
-		wantFields := []string{"foodObjectId", "names", "matchedQuantity", "macronutrients", "similarityPercent"}
+		wantFields := []string{"foodObjectId", "names", "matchedQuantity", "macronutrients", "calories", "similarityPercent"}
 		if _, ok := item["imageKey"]; ok {
 			wantFields = append(wantFields, "imageKey")
 		}
@@ -128,6 +134,29 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	return response
 }
 
+// assertInputMacronutrients checks the exact ISSUE-010 input macronutrients
+// of a decoded substitute response: the protein, carbohydrate, and fat of
+// the Substitution Input at the committed quantity, rounded to 0.1 g by the
+// same backend half-up display projection as the result cards.
+func assertInputMacronutrients(t *testing.T, response transport.SubstituteSearchResponse, protein, carbohydrate, fat float64) {
+	t.Helper()
+	got := response.InputMacronutrients
+	if got.Protein != protein || got.Carbohydrate != carbohydrate || got.Fat != fat {
+		t.Fatalf("inputMacronutrients (%v, %v, %v), want (%v, %v, %v)", got.Protein, got.Carbohydrate, got.Fat, protein, carbohydrate, fat)
+	}
+}
+
+// assertInputCalories checks the exact REQ-078 input calories of a decoded
+// substitute response: the whole display calories of the Substitution Input at
+// the committed quantity, derived from full-precision macronutrients and
+// rounded to a whole kcal by the backend display projection.
+func assertInputCalories(t *testing.T, response transport.SubstituteSearchResponse, calories int64) {
+	t.Helper()
+	if response.InputCalories != calories {
+		t.Fatalf("inputCalories %d, want %d", response.InputCalories, calories)
+	}
+}
+
 // wantSubstituteItem is one exact ISSUE-005 page-0 success expectation: the
 // stable Food Object ID, both localized names, the optional image key (nil
 // when omitted), the whole Matched Quantity value and unit, the three
@@ -142,6 +171,7 @@ type wantSubstituteItem struct {
 	protein           float64
 	carbohydrate      float64
 	fat               float64
+	calories          int64
 	similarityPercent int32
 }
 
@@ -167,6 +197,9 @@ func assertSubstituteItem(t *testing.T, item transport.SubstituteItem, want want
 	}
 	if item.Macronutrients.Protein != want.protein || item.Macronutrients.Carbohydrate != want.carbohydrate || item.Macronutrients.Fat != want.fat {
 		t.Fatalf("item %d macronutrients (%v, %v, %v), want (%v, %v, %v)", item.FoodObjectId, item.Macronutrients.Protein, item.Macronutrients.Carbohydrate, item.Macronutrients.Fat, want.protein, want.carbohydrate, want.fat)
+	}
+	if item.Calories != want.calories {
+		t.Fatalf("item %d calories %d, want %d", item.FoodObjectId, item.Calories, want.calories)
 	}
 	if item.SimilarityPercent != want.similarityPercent {
 		t.Fatalf("item %d similarityPercent %d, want %d", item.FoodObjectId, item.SimilarityPercent, want.similarityPercent)
@@ -254,39 +287,70 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	// 26], three unique items, both localized names, the present gyoza
 	// image key on ID 13 and omitted image keys on IDs 29 and 26, and whole
 	// solid-gram Matched Quantities with the exact scaled macronutrients
-	// and whole similarity percentages.
+	// and whole similarity percentages. The ISSUE-010 inputMacronutrients
+	// are the input macros scaled to the committed 350 g and projected to
+	// 0.1 g: protein 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and
+	// fat 10 × 3.5 = 35.0.
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
 	pizza := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, pizza, 35.0, 105.0, 35.0)
+	assertInputCalories(t, pizza, 875)
 	assertSubstitutePage(t, pizza, 36, true,
-		wantSubstituteItem{id: 13, en: "Gyoza", pl: "Pierożki gyoza", imageKey: strPtr("gyoza"), matchedValue: 438, matchedUnit: transport.MatchedQuantityUnitG, protein: 35, carbohydrate: 105, fat: 35, similarityPercent: 100},
-		wantSubstituteItem{id: 29, en: "Paella", pl: "Paella", matchedValue: 557, matchedUnit: transport.MatchedQuantityUnitG, protein: 44.6, carbohydrate: 111.5, fat: 27.9, similarityPercent: 100},
-		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", matchedValue: 440, matchedUnit: transport.MatchedQuantityUnitG, protein: 26.4, carbohydrate: 123.1, fat: 30.8, similarityPercent: 99},
+		wantSubstituteItem{id: 13, en: "Gyoza", pl: "Pierożki gyoza", imageKey: strPtr("gyoza"), matchedValue: 438, matchedUnit: transport.MatchedQuantityUnitG, protein: 35, carbohydrate: 105, fat: 35, calories: 875, similarityPercent: 100},
+		wantSubstituteItem{id: 29, en: "Paella", pl: "Paella", matchedValue: 557, matchedUnit: transport.MatchedQuantityUnitG, protein: 44.6, carbohydrate: 111.5, fat: 27.9, calories: 875, similarityPercent: 100},
+		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", matchedValue: 440, matchedUnit: transport.MatchedQuantityUnitG, protein: 26.4, carbohydrate: 123.1, fat: 30.8, calories: 875, similarityPercent: 99},
 	)
+
+	// A changed accepted quantity of the same input: Pizza Margherita at
+	// 100 g commits protein 10 × 1 = 10.0, carbohydrate 30 × 1 = 30.0, and
+	// fat 10 × 1 = 10.0. The ranked result IDs and order do not change
+	// (REQ-028, ISSUE-010).
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
+		`{"foodObjectId":1,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
+	pizzaAt100g := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, pizzaAt100g, 10.0, 30.0, 10.0)
+	assertInputCalories(t, pizzaAt100g, 250)
+	if len(pizzaAt100g.Items) != len(pizza.Items) {
+		t.Fatalf("Pizza at 100 g returned %d items, want the same %d as one Serving", len(pizzaAt100g.Items), len(pizza.Items))
+	}
+	for i := range pizza.Items {
+		if pizzaAt100g.Items[i].FoodObjectId != pizza.Items[i].FoodObjectId {
+			t.Fatalf("Pizza at 100 g item %d has ID %d, want the unchanged ID %d of one Serving", i, pizzaAt100g.Items[i].FoodObjectId, pizza.Items[i].FoodObjectId)
+		}
+	}
 
 	// P04-G4: Chicken breast at 100 g — the designated eligible count 37,
 	// hasMore true, page-0 IDs [23, 11, 6], and every image key omitted
-	// (none of the three candidates has a seeded image).
+	// (none of the three candidates has a seeded image). The input
+	// macronutrients at the committed 100 g are the seeded per-100 g
+	// values: 31.0, 0.0, and 3.6.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
 	chicken := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, chicken, 31.0, 0.0, 3.6)
+	assertInputCalories(t, chicken, 156)
 	assertSubstitutePage(t, chicken, 37, true,
-		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 117, matchedUnit: transport.MatchedQuantityUnitG, protein: 33.8, carbohydrate: 0, fat: 2.3, similarityPercent: 100},
-		wantSubstituteItem{id: 11, en: "Skyr yogurt", pl: "Jogurt skyr", matchedValue: 253, matchedUnit: transport.MatchedQuantityUnitG, protein: 27.8, carbohydrate: 10.1, fat: 0.5, similarityPercent: 94},
-		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", matchedValue: 67, matchedUnit: transport.MatchedQuantityUnitG, protein: 18, carbohydrate: 0, fat: 9.4, similarityPercent: 93},
+		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 117, matchedUnit: transport.MatchedQuantityUnitG, protein: 33.8, carbohydrate: 0, fat: 2.3, calories: 156, similarityPercent: 100},
+		wantSubstituteItem{id: 11, en: "Skyr yogurt", pl: "Jogurt skyr", matchedValue: 253, matchedUnit: transport.MatchedQuantityUnitG, protein: 27.8, carbohydrate: 10.1, fat: 0.5, calories: 156, similarityPercent: 94},
+		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", matchedValue: 67, matchedUnit: transport.MatchedQuantityUnitG, protein: 18, carbohydrate: 0, fat: 9.4, calories: 156, similarityPercent: 93},
 	)
 
 	// P04-G4: Milk at 100 ml — the designated eligible count 37, hasMore
 	// true, page-0 IDs [33, 3, 21], and whole Matched Quantity outputs in
 	// both candidate base units: millilitres for the liquid Mondongo and
-	// grams for the solid Lasagna and Beef cheeseburger (ARCH-013).
+	// grams for the solid Lasagna and Beef cheeseburger (ARCH-013). The
+	// input macronutrients at the committed 100 ml are the seeded per-
+	// 100 ml values: 3.4, 4.8, and 2.0.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":0}`)
 	milk := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, milk, 3.4, 4.8, 2.0)
+	assertInputCalories(t, milk, 51)
 	assertSubstitutePage(t, milk, 37, true,
-		wantSubstituteItem{id: 33, en: "Mondongo", pl: "Zupa mondongo", matchedValue: 53, matchedUnit: transport.MatchedQuantityUnitMl, protein: 3.7, carbohydrate: 4.2, fat: 2.1, similarityPercent: 99},
-		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 28, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 5.1, fat: 2.3, similarityPercent: 99},
-		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", matchedValue: 19, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 4.6, fat: 2.5, similarityPercent: 99},
+		wantSubstituteItem{id: 33, en: "Mondongo", pl: "Zupa mondongo", matchedValue: 53, matchedUnit: transport.MatchedQuantityUnitMl, protein: 3.7, carbohydrate: 4.2, fat: 2.1, calories: 51, similarityPercent: 99},
+		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 28, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 5.1, fat: 2.3, calories: 51, similarityPercent: 99},
+		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", matchedValue: 19, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 4.6, fat: 2.5, calories: 51, similarityPercent: 99},
 	)
 }
 
@@ -305,30 +369,29 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	const jsonType = "application/json"
 
-	// The canonical closed request the strict decoder accepts.
+	// The canonical closed request the strict decoder accepts. The success
+	// envelope also proves the ISSUE-010 inputMacronutrients field set and
+	// the exact value for Pizza Margherita at one Serving (350 g): protein
+	// 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and fat 10 × 3.5 =
+	// 35.0, projected to 0.1 g.
 	valid := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
-	status, body, _ := postSubstitutes(t, baseURL, jsonType, valid)
-	if status != http.StatusOK {
-		t.Fatalf("canonical request status %d, want 200 (body %s)", status, body)
-	}
+	status, body, contentType := postSubstitutes(t, baseURL, jsonType, valid)
+	canonical := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, canonical, 35.0, 105.0, 35.0)
+	assertInputCalories(t, canonical, 875)
 	// application/json with a parameter is still application/json; a
 	// trailing newline after the object is whitespace, not trailing JSON.
-	status, _, _ = postSubstitutes(t, baseURL, jsonType+"; charset=utf-8", valid)
-	if status != http.StatusOK {
-		t.Fatalf("application/json; charset=utf-8 request status %d, want 200", status)
-	}
-	status, _, _ = postSubstitutes(t, baseURL, jsonType, valid+"\n")
-	if status != http.StatusOK {
-		t.Fatalf("request with trailing whitespace status %d, want 200", status)
-	}
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType+"; charset=utf-8", valid)
+	assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType, valid+"\n")
+	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	// JSON object member order is insignificant: a reordered, spaced
 	// request with the nested unit before the value is the same closed
-	// object and must be accepted.
+	// object and must be accepted with the same inputMacronutrients.
 	reordered := "{\n  \"pageIndex\": 0,\n  \"quantity\": { \"unit\": \"serving\", \"value\": 1 },\n  \"foodObjectId\": 1\n}"
-	status, body, _ = postSubstitutes(t, baseURL, jsonType, reordered)
-	if status != http.StatusOK {
-		t.Fatalf("reordered spaced request status %d, want 200 (body %s)", status, body)
-	}
+	status, body, contentType = postSubstitutes(t, baseURL, jsonType, reordered)
+	reorderedEnvelope := assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	assertInputMacronutrients(t, reorderedEnvelope, 35.0, 105.0, 35.0)
 
 	// Content-Type: only application/json. A missing Content-Type and any
 	// other media type return 400 INVALID_REQUEST without a field

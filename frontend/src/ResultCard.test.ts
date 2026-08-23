@@ -10,8 +10,9 @@
  * proves the full card contract:
  *
  *   - the approved card field order — image, localized name, whole Matched
- *     Quantity, protein, carbohydrate, fat, similarity — with the exact
- *     English and Polish labels and copy (ISSUE-008);
+ *     Quantity, centered calorie value, protein, carbohydrate, fat, and
+ *     similarity — with the exact English and Polish labels and copy
+ *     (ISSUE-008);
  *   - Matched Quantity stays whole with only `g` or `ml` and no Serving
  *     equivalent (REQ-038), similarity stays a whole percentage, and every
  *     macronutrient shows exactly one active-locale decimal place followed
@@ -52,6 +53,7 @@ const ITEM: SubstituteItem = {
   names: { en: "Gyoza", pl: "Pierożki gyoza" },
   matchedQuantity: { value: 234, unit: "g" },
   macronutrients: { protein: 18.7, carbohydrate: 56.2, fat: 18.7 },
+  calories: 456,
   similarityPercent: 85,
 };
 
@@ -61,21 +63,22 @@ const LABELS = {
     protein: "Protein",
     carbohydrates: "Carbohydrates",
     fat: "Fat",
-    similarity: "Similarity",
+    calories: "Calories",
+    similarityLabel: "Similarity",
   },
   pl: {
     protein: "Białko",
     carbohydrates: "Węglowodany",
     fat: "Tłuszcz",
-    similarity: "Podobieństwo",
+    calories: "Kalorie",
+    similarityLabel: "Podobieństwo",
   },
 } as const;
 
 /**
- * Asserts the full card body for one rendered card: the localized name
- * heading, the whole Matched Quantity, the four labeled rows in the
- * approved order with the exact localized copy, and the API-provided values
- * formatted for display only (REQ-037, REQ-038, REQ-039, REQ-040).
+ * heading, whole Matched Quantity, centered calorie value, three labeled
+ * macronutrient rows, and similarity, with API-provided values formatted for
+ * display only (REQ-037, REQ-038, REQ-039, REQ-040).
  */
 function expectCardBody(
   container: HTMLElement,
@@ -87,16 +90,17 @@ function expectCardBody(
   const cardElement = card as HTMLElement;
 
   // Approved field order: image, localized name, whole Matched Quantity,
-  // protein, carbohydrate, fat, similarity (ISSUE-008).
+  // centered calorie value, protein, carbohydrate, fat, similarity (ISSUE-008).
   const sequence = Array.from(
     cardElement.querySelectorAll(
-      "img, h3, [data-result-card-matched-quantity], dt",
+      "img, h3, [data-result-card-matched-quantity], [data-result-card-calories], dt",
     ),
   ).map((node) => `${node.tagName}:${node.textContent ?? ""}`);
   expect(sequence).toEqual([
     "IMG:",
     `H3:${item.names[language]}`,
     `P:${item.matchedQuantity.value} ${item.matchedQuantity.unit}`,
+    `P:${item.calories} kcal`,
     `DT:${getDictionary(language).proteinLabel()}`,
     `DT:${getDictionary(language).carbohydratesLabel()}`,
     `DT:${getDictionary(language).fatLabel()}`,
@@ -110,8 +114,10 @@ function expectCardBody(
     labels.carbohydrates,
   );
   expect(getDictionary(language).fatLabel()).toBe(labels.fat);
-  expect(getDictionary(language).similarityLabel()).toBe(labels.similarity);
-
+  expect(getDictionary(language).caloriesLabel()).toBe(labels.calories);
+  expect(getDictionary(language).similarityLabel()).toBe(
+    labels.similarityLabel,
+  );
   // Matched Quantity stays whole with only `g` or `ml` (REQ-038).
   const matchedQuantity = cardElement.querySelector(
     "[data-result-card-matched-quantity]",
@@ -122,7 +128,8 @@ function expectCardBody(
   expect(cardElement.textContent ?? "").not.toMatch(/\bserving\b|\bporcja\b/i);
 
   // Every macronutrient shows exactly one localized decimal place and `g`;
-  // similarity stays a whole percentage (REQ-039, ISSUE-008).
+  // calories shows whole kcal and similarity stays a whole percentage (REQ-039,
+  // REQ-078, ISSUE-008).
   const ddValues = Array.from(cardElement.querySelectorAll("dd")).map(
     (node) => node.textContent ?? "",
   );
@@ -137,12 +144,16 @@ function expectCardBody(
   );
   expect(ddValues[3]).toBe(`${item.similarityPercent}%`);
 
+  const calories = cardElement.querySelector("[data-result-card-calories]");
+  expect(calories?.textContent).toBe(`${item.calories} kcal`);
+
   // English keeps a dot, Polish a comma, always with exactly one decimal
   // place (REQ-039, ISSUE-008).
   const decimal = language === "en" ? "." : ",";
   for (const dd of ddValues.slice(0, 3)) {
     expect(dd).toMatch(new RegExp(`^[0-9]+\\${decimal}[0-9] g$`));
   }
+  expect(calories?.textContent).toMatch(/^[0-9]+ kcal$/);
   expect(ddValues[3]).toMatch(/^[0-9]+%$/);
 }
 
@@ -236,6 +247,7 @@ describe("the result-card component", () => {
       names: { en: "Beef cheeseburger", pl: "Cheeseburger wołowy" },
       matchedQuantity: { value: 300, unit: "g" },
       macronutrients: { protein: 35.7, carbohydrate: 65.9, fat: 35.7 },
+      calories: 728,
       similarityPercent: 100,
     };
     const container = renderCard(oddItem, "en");
@@ -255,6 +267,9 @@ describe("the result-card component", () => {
       formatMacronutrientValue(oddItem.macronutrients.fat, "en"),
       "100%",
     ]);
+    expect(
+      container.querySelector("[data-result-card-calories]")?.textContent,
+    ).toBe("728 kcal");
     // The exact values survive: 35.7 formats to one decimal place, not a
     // computed or rerounded number.
     expect(ddValues[0]).toBe("35.7 g");

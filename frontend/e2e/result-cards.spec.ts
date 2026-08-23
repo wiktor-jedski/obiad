@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * Real-stack result-card scenario (task 29; ARCH-001, ARCH-003, ARCH-015,
@@ -46,7 +46,9 @@ const COPY = {
     protein: "Protein",
     carbohydrates: "Carbohydrates",
     fat: "Fat",
+    calories: "Calories",
     similarity: "Similarity",
+    foundSubstitutions: "Found substitutions",
   },
   pl: {
     search: "Szukaj",
@@ -55,7 +57,9 @@ const COPY = {
     protein: "Białko",
     carbohydrates: "Węglowodany",
     fat: "Tłuszcz",
+    calories: "Kalorie",
     similarity: "Podobieństwo",
+    foundSubstitutions: "Znalezione zamienniki",
   },
 } as const;
 
@@ -69,6 +73,7 @@ interface SubstituteItem {
   imageKey?: string;
   matchedQuantity: { value: number; unit: "g" | "ml" };
   macronutrients: { protein: number; carbohydrate: number; fat: number };
+  calories: number;
   similarityPercent: number;
 }
 
@@ -139,14 +144,13 @@ function formatMacronutrient(value: number, locale: "en" | "pl"): string {
 }
 
 /**
- * Asserts one full result card against the API-provided item: the exact
- * localized name heading, whole Matched Quantity in `g` or `ml`, the four
- * labeled rows in the approved order with the exact localized copy and
- * one-decimal display values, the whole similarity percentage, and the
- * identical bundled placeholder image with empty alternative text.
+ * localized name heading, whole Matched Quantity in `g` or `ml`, centered
+ * calorie value, the three labeled macronutrient rows, the whole similarity
+ * percentage, and the identical bundled placeholder image with empty
+ * alternative text.
  */
 async function expectCard(
-  card: import("@playwright/test").Locator,
+  card: Locator,
   item: SubstituteItem,
   copy: (typeof COPY)[keyof typeof COPY],
   locale: "en" | "pl",
@@ -165,9 +169,9 @@ async function expectCard(
   );
   await expect(card).not.toContainText(/serving|porcja/i);
 
-  // The four labeled rows with the exact localized copy (REQ-037,
-  // ISSUE-008) and the API-provided values formatted for display only
-  // (REQ-039, REQ-040).
+  // The three labeled macronutrient rows with the exact localized copy
+  // (REQ-037, ISSUE-008) and the API-provided values formatted for display
+  // only (REQ-039, REQ-040).
   await expect(card).toContainText(copy.protein);
   await expect(card).toContainText(
     formatMacronutrient(item.macronutrients.protein, locale),
@@ -180,9 +184,11 @@ async function expectCard(
   await expect(card).toContainText(
     formatMacronutrient(item.macronutrients.fat, locale),
   );
+  await expect(card.locator("[data-result-card-calories]")).toHaveText(
+    `${item.calories} kcal`,
+  );
   await expect(card).toContainText(copy.similarity);
   await expect(card).toContainText(`${item.similarityPercent}%`);
-
   // The identical bundled placeholder image with empty alternative text
   // (REQ-011, ARCH-015, ISSUE-008): the empty supported image-key map
   // resolves every absent, seeded, or unmapped key to the placeholder.
@@ -195,18 +201,18 @@ async function expectCard(
 
 /**
  * Asserts the approved in-card field order — image, localized name,
- * Matched Quantity, protein, carbohydrate, fat, similarity — by DOM
- * sequence (ISSUE-008, REQ-037).
+ * Matched Quantity, centered calories, protein, carbohydrate, fat, and
+ * similarity — by DOM sequence (ISSUE-008, REQ-037).
  */
 async function expectCardFieldOrder(
-  card: import("@playwright/test").Locator,
+  card: Locator,
   item: SubstituteItem,
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
   const sequence = await card.evaluate((element) =>
     Array.from(
       element.querySelectorAll(
-        "img, h3, [data-result-card-matched-quantity], dt",
+        "img, h3, [data-result-card-matched-quantity], [data-result-card-calories], dt",
       ),
     ).map((node) => `${node.tagName}|${node.textContent ?? ""}`),
   );
@@ -214,6 +220,7 @@ async function expectCardFieldOrder(
     "IMG|",
     `H3|${item.names[copy === COPY.en ? "en" : "pl"]}`,
     `P|${item.matchedQuantity.value} ${item.matchedQuantity.unit}`,
+    `P|${item.calories} kcal`,
     `DT|${copy.protein}`,
     `DT|${copy.carbohydrates}`,
     `DT|${copy.fat}`,
@@ -312,20 +319,21 @@ test.describe("result cards", () => {
       `${paella.matchedQuantity.value} g`,
     );
 
-    // No current-result language-change transition (ISSUE-008): switching
-    // the Interface Language after the results arrive leaves the cards
-    // exactly as captured by the search.
+    // REQ-058: current cards keep their IDs and order, then update every
+    // visible name, macronutrient label, and localized value in place.
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
-    await expect(page.locator("[data-result-card]").first()).toContainText(
-      "Gyoza",
+    await expect(page.locator("[data-substitutions-heading]")).toHaveText(
+      COPY.pl.foundSubstitutions,
     );
-    await expect(page.locator("[data-result-card]").first()).toContainText(
-      "Protein",
-    );
-    await expect(page.locator("[data-result-card]").first()).not.toContainText(
-      "Białko",
+    await expectRankedCards(
+      page,
+      [13, 29, 26],
+      items,
+      COPY.pl,
+      "pl",
+      placeholderUrl,
     );
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",

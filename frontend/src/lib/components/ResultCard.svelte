@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { SubstituteItem } from "../../client/types.gen";
   import { foodPlaceholderUrl, resolveFoodImage } from "../assets";
-  import { formatMacronutrientValue, getDictionary } from "../i18n";
+  import {
+    formatCaloriesValue,
+    formatMacronutrientValue,
+    getDictionary,
+  } from "../i18n";
   import type { InterfaceLanguage } from "../i18n";
 
   /**
@@ -10,23 +14,19 @@
    * REQ-040, ISSUE-008).
    *
    * The component consumes one generated display-ready `SubstituteItem`
-   * plus the Interface Language captured by the search (task 28,
-   * ISSUE-008) and renders the approved card field order — image,
-   * localized name, whole Matched Quantity, protein, carbohydrate, fat,
-   * and similarity — with no browser-side nutrition calculation or
-   * rerounding: every displayed number is the backend-rounded value
-   * formatted for display only (ARCH-001, REQ-040).
+   * and the active Interface Language. It renders the approved card field
+   * order — image, localized name, whole Matched Quantity, centered
+   * calories, protein, carbohydrate, fat, and similarity — with no
+   * browser-side nutrition calculation or rerounding: every displayed number
+   * is backend-rounded and formatted only for display (ARCH-001, REQ-040).
    *
-   * The whole card is frozen to the captured Interface Language: the Food
-   * Object name, the visible `Protein`, `Carbohydrates`, `Fat`, and
-   * `Similarity` labels (`Białko`, `Węglowodany`, `Tłuszcz`,
-   * `Podobieństwo` in Polish), and the one active-locale decimal place
-   * (`35.0 g` in English, `35,0 g` in Polish) never re-translate with the
-   * current Interface Language — there is no current-result language-change
-   * transition (ISSUE-008). Matched Quantity stays whole with only `g` or
-   * `ml` (REQ-038) and similarity stays a whole percentage. There is no
-   * Serving equivalent, card action, paging control, animation, or
-   * persisted display value.
+   * The card updates its Food Object name, visible `Protein`,
+   * `Carbohydrates`, `Fat`, and `Similarity` labels (`Białko`,
+   * `Węglowodany`, `Tłuszcz`, `Podobieństwo` in Polish), and one localized
+   * decimal place when the Interface Language changes (REQ-058). Matched
+   * Quantity stays whole with only `g` or `ml` (REQ-038) and similarity stays
+   * a whole percentage. There is no Serving equivalent, card action, paging
+   * control, animation, or persisted display value.
    *
    * The supported image-key map is empty (ISSUE-008): an absent key, one
    * of the four seeded opaque keys, and every other unmapped key resolve to
@@ -34,18 +34,33 @@
    * (ARCH-015, REQ-011). The card image carries empty alternative text
    * because the adjacent card heading names the same Food Object, and a
    * failed image source resets to the same bundled placeholder.
+   *
+   * While a valid quantity recalculation is pending (task 34, ISSUE-010)
+   * the `pending` prop replaces every quantity-dependent value — Matched
+   * Quantity, protein, carbohydrate, and fat — with one aria-hidden `16px`
+   * spinner, while the name, image, labels, and quantity-independent
+   * similarity stay visible. The card never calculates or rerounds a
+   * nutrition value in either state (REQ-040).
    */
 
   interface Props {
     /** One display-ready generated Substitute (ARCH-005, ARCH-008). */
     item: SubstituteItem;
-    /** The Interface Language captured by the search (ISSUE-008). */
+    /** The active Interface Language used for the card's visible text. */
     language: InterfaceLanguage;
+    /**
+     * Whether a valid quantity recalculation is pending (task 34,
+     * ISSUE-010): while set, every quantity-dependent card value —
+     * Matched Quantity, protein, carbohydrate, and fat — is replaced by an
+     * aria-hidden `16px` spinner, while the name, image, labels, and
+     * quantity-independent similarity stay visible.
+     */
+    pending?: boolean;
   }
 
-  let { item, language }: Props = $props();
+  let { item, language, pending = false }: Props = $props();
 
-  /** The dictionary of the captured language for the card's visible labels. */
+  /** The active-language dictionary for the card's visible labels. */
   const dictionary = $derived(getDictionary(language));
   /**
    * The resolved card image. The supported image-key map is empty, so an
@@ -80,14 +95,37 @@
     class="h-44 w-full object-cover"
   />
   <div class="flex flex-col gap-2 p-4">
-    <h3 class="text-base font-medium text-dark-text-primary">
+    <h3 class="text-center text-base font-medium text-dark-text-primary">
       {item.names[language]}
     </h3>
     <p
       data-result-card-matched-quantity
-      class="font-data text-sm text-dark-text-primary"
+      class="text-center font-data text-sm text-dark-text-primary"
     >
-      {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
+      {#if pending}
+        <span
+          data-value-spinner
+          aria-hidden="true"
+          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+        ></span>
+      {:else}
+        {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
+      {/if}
+    </p>
+    <p
+      data-result-card-calories
+      aria-label={dictionary.caloriesLabel()}
+      class="text-center font-data text-sm text-dark-text-primary"
+    >
+      {#if pending}
+        <span
+          data-value-spinner
+          aria-hidden="true"
+          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+        ></span>
+      {:else}
+        {formatCaloriesValue(item.calories)}
+      {/if}
     </p>
     <dl class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
@@ -95,7 +133,15 @@
           {dictionary.proteinLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.protein, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(item.macronutrients.protein, language)}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">
@@ -103,7 +149,18 @@
           {dictionary.carbohydratesLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.carbohydrate, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(
+              item.macronutrients.carbohydrate,
+              language,
+            )}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">
@@ -111,7 +168,15 @@
           {dictionary.fatLabel()}
         </dt>
         <dd class="text-right text-dark-text-primary">
-          {formatMacronutrientValue(item.macronutrients.fat, language)}
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatMacronutrientValue(item.macronutrients.fat, language)}
+          {/if}
         </dd>
       </div>
       <div class="flex items-baseline justify-between gap-4">

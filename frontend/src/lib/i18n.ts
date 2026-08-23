@@ -38,14 +38,30 @@ export interface Messages {
   selectedFoodLabel: () => string;
   /** Localized unit label of one Serving in the read-only Substitution Input (task 28, ISSUE-008). */
   servingUnit: () => string;
+  /** Visually hidden accessible name of the quantity number field (task 34, ISSUE-010). */
+  quantityLabel: () => string;
+  /** Visually hidden accessible name of the quantity unit selector (task 34, ISSUE-010). */
+  unitLabel: () => string;
+  /** Plural selector option label of the Serving unit (task 34, ISSUE-010). */
+  servingsLabel: () => string;
+  /** Localized field message of an invalid committed quantity (task 34, REQ-026, ISSUE-010). */
+  invalidQuantityMessage: () => string;
+  /** Polite busy announcement of the initial new Search summary (task 34, ISSUE-010). */
+  loadingNutritionValues: () => string;
+  /** Polite busy announcement of a pending quantity recalculation (task 34, ISSUE-010). */
+  updatingQuantities: () => string;
   /** Visible label of the protein macronutrient row on a result card (task 29, ISSUE-008). */
   proteinLabel: () => string;
   /** Visible label of the carbohydrate macronutrient row on a result card (task 29, ISSUE-008). */
   carbohydratesLabel: () => string;
   /** Visible label of the fat macronutrient row on a result card (task 29, ISSUE-008). */
   fatLabel: () => string;
+  /** Visible label of the calories row (task 35, REQ-078). */
+  caloriesLabel: () => string;
   /** Visible label of the Macro similarity row on a result card (task 29, ISSUE-008). */
   similarityLabel: () => string;
+  /** Centered heading above the result grid (task 35, REQ-079). */
+  foundSubstitutionsHeading: () => string;
   /** Localized result-area message for a successful empty page (task 30, REQ-044, ISSUE-008). */
   zeroResultsMessage: () => string;
 }
@@ -58,10 +74,18 @@ const en = {
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
+  quantityLabel: () => "Quantity",
+  unitLabel: () => "Unit",
+  servingsLabel: () => "servings",
+  invalidQuantityMessage: () => "Enter a valid quantity.",
+  loadingNutritionValues: () => "Loading nutrition values",
+  updatingQuantities: () => "Updating quantities",
   proteinLabel: () => "Protein",
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
+  caloriesLabel: () => "Calories",
   similarityLabel: () => "Similarity",
+  foundSubstitutionsHeading: () => "Found substitutions",
   zeroResultsMessage: () => "No substitutes found",
 } satisfies Messages;
 
@@ -73,10 +97,18 @@ const pl = {
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",
+  quantityLabel: () => "Ilość",
+  unitLabel: () => "Jednostka",
+  servingsLabel: () => "porcje",
+  invalidQuantityMessage: () => "Wpisz prawidłową ilość.",
+  loadingNutritionValues: () => "Ładowanie wartości odżywczych",
+  updatingQuantities: () => "Aktualizowanie ilości",
   proteinLabel: () => "Białko",
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
+  caloriesLabel: () => "Kalorie",
   similarityLabel: () => "Podobieństwo",
+  foundSubstitutionsHeading: () => "Znalezione zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
 } satisfies Messages;
 
@@ -110,14 +142,13 @@ export function getDictionary(language: InterfaceLanguage): Messages {
 }
 
 /**
- * Formats one captured Food Quantity as the read-only Substitution Input
- * value (task 28, ISSUE-008). Serving renders with the localized unit of
- * the given language (`1 serving` or `1 porcja`); `g` and `ml` stay
- * invariant. The caller passes the Interface Language captured at selection
- * so the value never re-translates with the active Interface Language.
+ * Formats one Food Quantity as the selected-food summary value. Serving
+ * renders with the localized unit of the given language (`1 serving` or
+ * `1 porcja`); `g` and `ml` stay invariant. The caller supplies the active
+ * Interface Language so the summary updates without a new search (REQ-058).
  *
- * @param quantity - the captured default Food Quantity
- * @param language - the Interface Language captured at selection
+ * @param quantity - the current Food Quantity
+ * @param language - the active Interface Language
  * @returns the formatted `value unit` string
  */
 export function formatFoodQuantityValue(
@@ -133,15 +164,14 @@ export function formatFoodQuantityValue(
 
 /**
  * Formats one display-ready macronutrient value for a result card (task 29;
- * REQ-037, REQ-039, REQ-040, ISSUE-008): exactly one active-locale decimal
- * place followed by the invariant `g` unit, for example `35.0 g` in English
- * and `35,0 g` in Polish. The value arrives already rounded to `0.1 g` by
- * the backend (ARCH-001, ARCH-005); the browser never recalculates or
- * rerounds nutrition (REQ-040), it only applies the localized display
- * formatting.
+ * REQ-037, REQ-039, REQ-040): exactly one active-locale decimal place
+ * followed by the invariant `g` unit, for example `35.0 g` in English and
+ * `35,0 g` in Polish. The value arrives already rounded to `0.1 g` by the
+ * backend (ARCH-001, ARCH-005); the browser never recalculates or rerounds
+ * nutrition, it only applies the localized display formatting.
  *
  * @param value - the backend-rounded macronutrient value in grams
- * @param language - the Interface Language captured by the search (ISSUE-008)
+ * @param language - the active Interface Language
  * @returns the formatted `value g` string with one localized decimal place
  */
 export function formatMacronutrientValue(
@@ -153,4 +183,18 @@ export function formatMacronutrientValue(
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} g`;
+}
+
+/**
+ * Formats one display-ready calorie value for the input card or a result card
+ * (task 35, REQ-078): whole integer followed by the invariant `kcal` unit, for
+ * example `875 kcal`. The value arrives already rounded by the backend (ARCH-001,
+ * ARCH-005); the browser never calculates or rerounds calories (REQ-078), it
+ * only formats the string for display.
+ *
+ * @param value - the backend-projected whole calorie value
+ * @returns the formatted `value kcal` string
+ */
+export function formatCaloriesValue(value: number): string {
+  return `${value} kcal`;
 }

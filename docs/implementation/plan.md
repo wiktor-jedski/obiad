@@ -708,4 +708,36 @@ Run `bun run test:performance` from `frontend/`. Require 20 consecutive Search s
 
 **Review stop**
 
-Read the Phase 18 diff. Record REQ-074 and REQ-075 as verified. The implementation plan is complete.
+Read the Phase 18 diff. Record REQ-074 and REQ-075 as verified before Phase 19 tasks are generated.
+
+## Phase 19 — Compact calorie result presentation
+
+**Goal**
+
+Show calories and a compact, centered selected-food card with substitutions visible without desktop scrolling.
+
+**Depends on**
+
+Phases 10 and 17.
+
+**Implement**
+
+- Extend the OpenAPI Substitute response with backend-derived whole display calories for the input and each Substitute.
+- Keep the calorie calculation in Go from full-precision Macro Profiles; do not calculate or round calories in the browser.
+- Render a centered, compact selected-food card with the existing quantity editor and a calories row.
+- Render a localized calories row on every result card.
+- Render the centered localized `Found substitutions` or `Znalezione zamienniki` heading above result cards.
+- Keep the 1920 × 1080 first-result view free from vertical scroll.
+
+**Requirements that become testable**
+
+- [REQ-078](../requirements/requirements.md#req-078--displayed-calories)
+- [REQ-079](../requirements/requirements.md#req-079--compact-result-presentation)
+
+**Phase gate**
+
+Run `go test ./...` from `backend/`. Regenerate and compile both API clients. Run `bun run typecheck`, `bun run format:check`, and `bun run test:e2e` from `frontend/`. At 1920 × 1080, execute a three-card result search and verify the input card, centered heading, and all cards are visible without vertical scroll. Verify the input and every card show the API calorie values with `Calories` or `Kalorie` and `kcal`.
+
+**Review stop**
+
+Read the Phase 19 diff. Record REQ-078 and REQ-079 as verified. The implementation plan is complete.

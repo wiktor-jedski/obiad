@@ -40,6 +40,7 @@ const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
   names: { en: "Butter", pl: "Masło" },
   quantity: { value: 100, unit: "g" },
+  allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
   capturedLanguage: "en",
 } as const;
 
@@ -48,6 +49,8 @@ const EMPTY_RESPONSE_BODY = JSON.stringify({
   pageIndex: 0,
   totalEligibleCount: 0,
   hasMore: false,
+  inputMacronutrients: { protein: 35, carbohydrate: 105, fat: 35 },
+  inputCalories: 875,
   items: [],
 });
 

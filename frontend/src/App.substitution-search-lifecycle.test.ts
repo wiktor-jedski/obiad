@@ -44,6 +44,7 @@ const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
   names: { en: "Butter", pl: "Masło" },
   quantity: { value: 100, unit: "g" },
+  allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
   capturedLanguage: "en",
 } as const;
 
@@ -52,6 +53,7 @@ const RESPONSE_BODY = JSON.stringify({
   pageIndex: 0,
   totalEligibleCount: 1,
   hasMore: false,
+  inputMacronutrients: { protein: 31, carbohydrate: 0, fat: 3.6 },
   items: [
     {
       foodObjectId: 20,
@@ -200,6 +202,7 @@ describe("the Substitution Search lifecycle", () => {
                 pl: `Potrawa ${firstFoodObjectId + index}`,
               },
               defaultQuantity: { value: 100, unit: "g" },
+              allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
             })),
           }),
           {

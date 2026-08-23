@@ -99,8 +99,10 @@ const (
 	// ARCH-013 catalog invariants: a nonpositive ID, missing or empty
 	// localized names, an unknown Physical State, a nonfinite or negative
 	// Macro Profile value, an all-zero Macro Profile, a nonpositive or
-	// nonfinite Serving, a nonpositive Food Family reference, or an empty
-	// image key.
+	// nonfinite Serving, a Serving whose whole-number allowed maximum (the
+	// floor of 100000 divided by the stored Serving base quantity,
+	// ISSUE-010) is zero or outside the generated int32 display range, a
+	// nonpositive Food Family reference, or an empty image key.
 	kindInvariant kind = "invariant"
 )
 
@@ -215,6 +217,16 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	}
 	if serving != nil && !isPositiveFinite(*serving) {
 		return foodObject{}, fmt.Errorf("food object %d: Serving must be a positive finite number when present", id)
+	}
+	// ARCH-013, ISSUE-010: a stored Serving must also make the whole-number
+	// floor of 100000 divided by it a positive value that fits the generated
+	// int32 display range. The DB constraint accepts any positive finite
+	// Serving, so a Serving above 100000 (whose exact floor is zero) or one
+	// so small that the floor exceeds MaxInt32 is a catalog-invariant
+	// failure: it could never produce a valid allowed quantity, and the
+	// HTTP Adapter's int32 mapping must never wrap (task-33 repair).
+	if serving != nil && !servingMaximumIsRepresentable(*serving) {
+		return foodObject{}, fmt.Errorf("food object %d: Serving %v must make the whole-number maximum of 100000 divided by it a positive value no larger than the int32 display range", id, *serving)
 	}
 	if family != nil && *family <= 0 {
 		return foodObject{}, fmt.Errorf("food object %d: Food Family ID must be positive when present", id)

@@ -264,9 +264,38 @@ func assertProjectedItem(t *testing.T, item SubstituteItem, want wantCandidate) 
 	assertMacro("protein", item.Protein, want.protein)
 	assertMacro("carbohydrate", item.Carbohydrate, want.carbohydrate)
 	assertMacro("fat", item.Fat, want.fat)
+	wantCal := int64(math.Round(4*want.protein + 4*want.carbohydrate + 9*want.fat))
+	if item.Calories != wantCal {
+		t.Fatalf("item %d: calories is %d, want the projected %d of the full-precision macronutrients",
+			item.FoodObjectID, item.Calories, wantCal)
+	}
 	if wantPercent := projectSimilarityPercent(want.cosine); item.SimilarityPercent != wantPercent {
 		t.Fatalf("item %d: similarity percent is %d, want the projected %d of the full-precision %.17g",
 			item.FoodObjectID, item.SimilarityPercent, wantPercent, want.cosine)
+	}
+}
+
+// assertInputMacronutrients checks the ISSUE-010 input macronutrients of one
+// page: the protein, carbohydrate, and fat of the Substitution Input scaled
+// to its committed base quantity (per-Nutrition-Basis values times
+// baseQuantity / 100) and projected to 0.1 g by the same half-up display
+// rule as the result cards.
+func assertInputMacronutrients(t *testing.T, page *Page, protein, carbohydrate, fat float64) {
+	t.Helper()
+	got := page.InputMacronutrients
+	if got.Protein != protein || got.Carbohydrate != carbohydrate || got.Fat != fat {
+		t.Fatalf("input macronutrients (%v, %v, %v), want (%v, %v, %v)", got.Protein, got.Carbohydrate, got.Fat, protein, carbohydrate, fat)
+	}
+}
+
+// assertInputCalories checks the REQ-078 input calories of one page: the
+// whole display calories of the Substitution Input at the committed quantity,
+// derived from full-precision macronutrients (4p + 4c + 9f) and rounded to a
+// whole kcal.
+func assertInputCalories(t *testing.T, page *Page, calories int64) {
+	t.Helper()
+	if page.InputCalories != calories {
+		t.Fatalf("input calories %v, want %v", page.InputCalories, calories)
 	}
 }
 
@@ -319,6 +348,11 @@ func loadProfiles(t *testing.T, module *FindSubstitutePage, ctx context.Context)
 // Catalog Loader are passed directly to the private production calorie,
 // cosine, and Matched Quantity helpers and compared with independently
 // recorded full-precision expectations within the absolute 1e-12 tolerance.
+// The ISSUE-010 input macronutrients of the committed Substitution Input
+// quantity are asserted for 1 serving, 100 g, 100 ml, and changed accepted
+// quantities — including an exact-half 0.75 g case that projects half-up to
+// 0.8 g — with the ranked result IDs and order unchanged (task 33,
+// REQ-028).
 func TestFindSubstitutePageIntegration(t *testing.T) {
 	_, module, tracer, wantSQL, owner := setupSubstituteFixture(t)
 	ctx := context.Background()
@@ -431,6 +465,79 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			}
 		}
 	}
+
+	// ISSUE-010 input macronutrients (task 33): every successful page
+	// carries the Substitution Input macronutrients scaled to the committed
+	// base quantity — per-Nutrition-Basis protein, carbohydrate, and fat
+	// times baseQuantity / 100 — and projected to 0.1 g by the same half-up
+	// display rule as the result cards (REQ-039). The three designated
+	// quantities and changed accepted quantities of the same inputs produce
+	// the expected projected values without changing the ranked result IDs
+	for _, want := range wantSubstitutePages {
+		page := run(SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity})
+		profile := profiles[want.inputID]
+		wantInput := Macronutrients{
+			Protein:      projectMacronutrient(profile.protein * want.baseQuantity / 100),
+			Carbohydrate: projectMacronutrient(profile.carbohydrate * want.baseQuantity / 100),
+			Fat:          projectMacronutrient(profile.fat * want.baseQuantity / 100),
+		}
+		if page.InputMacronutrients != wantInput {
+			t.Fatalf("input %d at %v: input macronutrients %+v, want the projected %+v of the committed base quantity %v",
+				want.inputID, want.quantity, page.InputMacronutrients, wantInput, want.baseQuantity)
+		}
+		wantInputCal := int64(math.Round(calories(profile) * want.baseQuantity / 100))
+		if page.InputCalories != wantInputCal {
+			t.Fatalf("input %d at %v: input calories %v, want the projected %v",
+				want.inputID, want.quantity, page.InputCalories, wantInputCal)
+		}
+	}
+
+	// Designated quantities, exact projected values: Pizza Margherita at
+	// 1 serving (350 g) = 35.0 / 105.0 / 35.0, Chicken breast at 100 g =
+	// 31.0 / 0.0 / 3.6, and Milk at 100 ml = 3.4 / 4.8 / 2.0.
+	oneServing := run(SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}})
+	assertInputMacronutrients(t, oneServing, 35.0, 105.0, 35.0)
+	assertInputCalories(t, oneServing, 875)
+	hundredGrams := run(SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
+	assertInputMacronutrients(t, hundredGrams, 31.0, 0.0, 3.6)
+	assertInputCalories(t, hundredGrams, 156)
+	hundredMillilitres := run(SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 100, Unit: UnitMillilitre}})
+	assertInputMacronutrients(t, hundredMillilitres, 3.4, 4.8, 2.0)
+	assertInputCalories(t, hundredMillilitres, 51)
+
+	// Changed accepted quantities of the same inputs: Pizza Margherita at
+	// 100 g = 10.0 / 30.0 / 10.0 and at 2 servings (700 g) = 70.0 / 210.0 /
+	// 70.0, Chicken breast at 200 g = 62.0 / 0.0 / 7.2, and Milk at 250 ml
+	// = 8.5 / 12.0 / 5.0. The ranked result IDs and order stay exactly the
+	// designated ones (REQ-028).
+	changed := []struct {
+		input    SubstituteInput
+		protein  float64
+		carb     float64
+		fat      float64
+		calories int64
+		wantIDs  []int32
+	}{
+		{SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 10.0, 30.0, 10.0, 250, []int32{13, 29, 26}},
+		{SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 2, Unit: UnitServing}}, 70.0, 210.0, 70.0, 1750, []int32{13, 29, 26}},
+		{SubstituteInput{FoodObjectID: 5, Quantity: FoodQuantity{Value: 200, Unit: UnitGram}}, 62.0, 0.0, 7.2, 313, []int32{23, 11, 6}},
+		{SubstituteInput{FoodObjectID: 10, Quantity: FoodQuantity{Value: 250, Unit: UnitMillilitre}}, 8.5, 12.0, 5.0, 127, []int32{33, 3, 21}},
+	}
+	for _, tc := range changed {
+		page := run(tc.input)
+		assertInputMacronutrients(t, page, tc.protein, tc.carb, tc.fat)
+		assertInputCalories(t, page, tc.calories)
+		assertPageIDs(t, page, tc.wantIDs...)
+	}
+
+	// Exact-half projection evidence: Butter (ID 18) at 150 g scales protein
+	// 0.5 × 1.5 = 0.75 and carbohydrate 0.5 × 1.5 = 0.75, whose 0.05 digit
+	// is an exact half that rounds up to 0.8 by the half-up display rule,
+	// and fat 82 × 1.5 = 123.0. The changed quantity leaves the ranked IDs
+	// and order unchanged.
+	butter := run(SubstituteInput{FoodObjectID: 18, Quantity: FoodQuantity{Value: 150, Unit: UnitGram}})
+	assertInputMacronutrients(t, butter, 0.8, 0.8, 123.0)
+	assertInputCalories(t, butter, 1113)
 
 	// No mutation or derived-value persistence: the fresh Loader reads the
 	// unchanged seeded catalog (exactly 38 Food Objects), and the production

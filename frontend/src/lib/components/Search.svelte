@@ -229,6 +229,17 @@
   }
 
   /**
+   * Selects the current Search Query after a pointer click so a visitor can
+   * replace an existing query with one keystroke, like a browser address bar.
+   */
+  function onClick(event: MouseEvent): void {
+    const field = event.currentTarget as HTMLInputElement;
+    if (field.value !== "") {
+      field.select();
+    }
+  }
+
+  /**
    * Keyboard operation of the open suggestion list (task 31, REQ-019,
    * ARCH-010, ARCH-020). The Search input owns the key handling through
    * the active-descendant pattern; option DOM focus stays on Search.
@@ -315,13 +326,14 @@
   /**
    * Pointer activation of one suggestion (task 28, REQ-020, REQ-077):
    * captures the exact returned Food Object — stable ID, both localized
-   * names, returned default Food Quantity, and active Interface Language —
-   * replaces the Search Query with the returned active-language name, and
+   * names, returned default Food Quantity, returned allowed quantity-editor
+   * units (task 34, ISSUE-010), and active Interface Language — replaces
+   * the Search Query with the returned active-language name, and
    * transitions to `loadingNew`. The transition closes suggestions while
    * Search keeps focus and starts exactly one page-0 Substitution Search
-   * with the unchanged default quantity. Task 31's Enter key selects through
-   * this same transition, so keyboard and pointer activation are identical
-   * (REQ-019, REQ-020).
+   * with the unchanged default quantity. Task 31's Enter key selects
+   * through this same transition, so keyboard and pointer activation are
+   * identical (REQ-019, REQ-020).
    */
   function selectSuggestion(item: FoodSuggestion): void {
     suggestionIntent = false;
@@ -329,6 +341,7 @@
       foodObjectId: item.foodObjectId,
       names: item.names,
       quantity: item.defaultQuantity,
+      allowedQuantities: item.allowedQuantities,
       capturedLanguage: language,
     });
   }
@@ -349,6 +362,7 @@
     aria-autocomplete="list"
     aria-activedescendant={activeOptionId}
     oninput={onInput}
+    onclick={onClick}
     onfocus={onFocus}
     onblur={() => interactionState.setFocused(false)}
     onkeydown={onKeydown}

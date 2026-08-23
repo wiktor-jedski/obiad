@@ -19,15 +19,16 @@ import { expect, test, type Page } from "@playwright/test";
  * selected-input region identify the same Food Object with no second submit
  * action. Separate seeded Pizza Margherita, Chicken breast, and Milk flows
  * show the exact localized label and value, send `1 serving`, `100 g`, and
- * `100 ml`, and retain the captured result language. One controlled
- * response fetched from real Fiber and PostgreSQL stays pending at the
- * browser boundary while the new-search spinner remains `12px` below the
- * Search field; fulfillment removes the spinner and leaves the Search field
- * as `document.activeElement` (REQ-046, REQ-064). One adversarial network
- * reconnect while results are visible proves the disabled TanStack
- * `refetchOnReconnect` path: exactly one Substitution Search POST remains
- * per selection (ARCH-019, REQ-022, task 28 repair; the remount half of
- * the lifecycle coverage lives in the component-integration suite).
+ * `100 ml`, and update the visible selected Food Object value when the
+ * Interface Language changes. One controlled response fetched from real Fiber
+ * and PostgreSQL stays pending at the browser boundary while the new-search
+ * spinner remains `12px` below the Search field; fulfillment removes the
+ * spinner and leaves the Search field as `document.activeElement` (REQ-046,
+ * REQ-064). One adversarial network reconnect while results are visible proves
+ * the disabled TanStack Query's `refetchOnReconnect` path: exactly one
+ * Substitution Search POST remains per selection (ARCH-019, REQ-022, task 28
+ * repair; the remount half of the lifecycle coverage lives in the
+ * component-integration suite).
  */
 
 const SPINNER_OFFSET_PX = 12;
@@ -235,7 +236,7 @@ function selectedInput(page: Page) {
 
 /**
  * Asserts the read-only Substitution Input region shows the exact localized
- * label and the captured `localized name · quantity unit` value (ISSUE-008).
+ * label and active `localized name · quantity unit` value (REQ-058).
  */
 async function expectSelectedInput(
   page: Page,
@@ -470,7 +471,7 @@ test.describe("pointer substitution search", () => {
     await expect(search).toBeFocused();
   });
 
-  test("the Pizza Margherita flow sends 1 serving, shows the exact localized selected label and value, and retains the captured result language", async ({
+  test("the Pizza Margherita flow sends 1 serving and updates its visible selected value when the language changes", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -491,15 +492,14 @@ test.describe("pointer substitution search", () => {
     await expectSubstitutePost(posts, 1, SEEDED_DEFAULTS[1], observedDefaults);
     await expectSelectedInput(page, COPY.en, "Pizza Margherita · 1 serving");
 
-    // The captured active-content value never re-translates with the active
-    // Interface Language; only the label follows the dictionary (ISSUE-008,
-    // REQ-023).
+    // REQ-058: a local language change updates the selected Food Object
+    // value and does not start another Substitution Search.
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
-    await expectSelectedInput(page, COPY.pl, "Pizza Margherita · 1 serving");
+    await expectSelectedInput(page, COPY.pl, "Pizza margherita · 1 porcja");
     await expect(selectedInput(page)).not.toContainText(
-      "Pizza margherita · 1 porcja",
+      "Pizza Margherita · 1 serving",
     );
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
@@ -535,7 +535,7 @@ test.describe("pointer substitution search", () => {
     expect(posts).toHaveLength(1);
   });
 
-  test("the Milk flow sends 100 ml in Polish and retains the captured result language", async ({
+  test("the Milk flow sends 100 ml in Polish and updates its visible selected value in English", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -563,13 +563,12 @@ test.describe("pointer substitution search", () => {
     await expectSelectedInput(page, COPY.pl, "Mleko · 100 ml");
     await expect(search).toHaveValue("Mleko");
 
-    // The captured Polish value survives an Interface Language switch back
-    // to English; only the label follows the dictionary (ISSUE-008).
+    // REQ-058: change the summary value locally, with no new search request.
     await page
       .getByRole("combobox", { name: COPY.pl.languageControl })
       .selectOption("en");
-    await expectSelectedInput(page, COPY.en, "Mleko · 100 ml");
-    await expect(selectedInput(page)).not.toContainText("Milk · 100 ml");
+    await expectSelectedInput(page, COPY.en, "Milk · 100 ml");
+    await expect(selectedInput(page)).not.toContainText("Mleko · 100 ml");
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",

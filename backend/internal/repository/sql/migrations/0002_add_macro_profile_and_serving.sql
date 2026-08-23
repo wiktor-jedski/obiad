@@ -14,6 +14,12 @@
 --         and finite. NULL is the "no Serving" state, so a Food Object row
 --         represents zero or one Serving directly and a second Serving is not
 --         representable (the one-optional-Serving rule).
+--
+-- Application-side invariant (ARCH-013, ISSUE-010): the Catalog Loader
+-- additionally rejects a stored Serving whose whole-number allowed maximum
+-- (the floor of 100000 divided by the stored Serving base quantity) is zero
+-- or outside the generated int32 display range, so every validated row can
+-- expose a positive int32-representable allowed quantity maximum.
 
 ALTER TABLE food_objects
     ADD COLUMN protein DOUBLE PRECISION NOT NULL
