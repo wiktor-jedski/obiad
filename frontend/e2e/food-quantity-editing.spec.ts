@@ -734,7 +734,7 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(postsAfterSelection + 5);
   });
 
-  test("a delayed valid recalculation leaves the controls enabled, exposes one localized busy status, and puts aria-hidden 16px spinners in every quantity-dependent selected-food and card value while names, images, labels, and similarity stay visible", async ({
+  test("a delayed valid recalculation keeps settled card sizes, leaves the controls enabled, exposes one localized busy status, and puts aria-hidden 16px spinners in every quantity-dependent selected-food and card value while names, images, labels, and similarity stay visible", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -766,6 +766,18 @@ test.describe("food quantity editing", () => {
       }>;
     };
     const firstSimilarities = first.items.map((item) => item.similarityPercent);
+    const cards = page.locator("[data-result-card]");
+    const selectedCard = summary(page);
+    const settledSelectedCardSize = await selectedCard.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+    }));
+    const settledCardSizes = await cards.evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: (element as HTMLElement).offsetWidth,
+        height: (element as HTMLElement).offsetHeight,
+      })),
+    );
 
     // Commit a changed quantity; the recalculation is held at the browser
     // boundary. During the pending interval the controls stay enabled, the
@@ -795,6 +807,24 @@ test.describe("food quantity editing", () => {
       ariaHidden: element.getAttribute("aria-hidden"),
     }));
     expect(spinnerSize).toEqual({ width: 16, height: 16, ariaHidden: "true" });
+    const pendingCardSizes = await cards.evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: (element as HTMLElement).offsetWidth,
+        height: (element as HTMLElement).offsetHeight,
+      })),
+    );
+    const pendingSelectedCardSize = await selectedCard.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+    }));
+    expect(
+      pendingSelectedCardSize,
+      "value spinners do not resize the settled selected-food card",
+    ).toEqual(settledSelectedCardSize);
+    expect(
+      pendingCardSizes,
+      "value spinners do not resize settled result cards",
+    ).toEqual(settledCardSizes);
     await expect(page.locator("[data-selected-input-region]")).toHaveAttribute(
       "aria-busy",
       "true",
@@ -807,7 +837,6 @@ test.describe("food quantity editing", () => {
 
     // Names, images, labels, and similarity stay visible during the
     // recalculation (P10-G7).
-    const cards = page.locator("[data-result-card]");
     await expect(cards).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) {
       await expect(cards.nth(index).getByRole("heading")).toHaveText(

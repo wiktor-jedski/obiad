@@ -19,10 +19,9 @@
    * rendered inside the root's QueryClientProvider — owns the Substitution
    * Search query and renders the selected-input, result-card, and
    * zero-result regions after the Search region. It stays mounted from
-   * selection onward: from `loadingNew` the initial summary is already
-   * visible with disabled controls, the new-search spinner lives in the
-   * Search region `12px` below the field (REQ-046), and each region here
-   * follows at `24px` intervals (ISSUE-008).
+   * selection onward: from `loadingNew`, the initial summary is visible with
+   * disabled controls. Each region follows the Search field at `24px`
+   * intervals without a separate spinner below Search (REQ-080, ISSUE-008).
    *
    * TanStack Query owns the HTTP response data and pending state; the
    * interaction state receives only the success outcome through

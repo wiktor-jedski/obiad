@@ -461,8 +461,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | Browser check: The spinner stays below the search control until the request ends. |
+| Status | Deprecated |
+| Verification | Superseded by REQ-080. |
+
+**Notes:** Deprecated by the project owner on 2026-08-23 because the pending new-search state shall not show a spinner below Search. REQ-080 replaces this requirement.
 
 ## REQ-047 — MORE! spinner
 
@@ -793,3 +795,13 @@ This document is the source of truth for the active product requirements of the 
 | Type | Quality (Usability) |
 | Status | Active |
 | Verification | Playwright: At 1920 × 1080, after a three-card result search, `scrollHeight` is not more than `clientHeight`; the selected-food card and substitutions heading are centered. |
+
+## REQ-080 — No Search loading spinner
+
+**Statement:** WHILE a new search request is pending, the system shall not show a spinner below the Search control.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: During a controlled pending new-search request, no spinner is present below Search. |

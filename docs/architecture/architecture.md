@@ -340,7 +340,7 @@ Count all eligible Substitutes, then slice pages of three. A page contains uniqu
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-046–REQ-051, REQ-074–REQ-075 |
+| Requirements | REQ-047–REQ-051, REQ-074–REQ-075, REQ-080 |
 | Dependencies | ARCH-002, ARCH-008, ARCH-010–ARCH-011, ARCH-016 |
 
 **Responsibility:** Bound request concurrency, duration, retry behavior, and visible failure transitions.
@@ -455,7 +455,7 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-043 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
 | REQ-044 | ARCH-002, ARCH-003, ARCH-005, ARCH-011, ARCH-020 |
 | REQ-045 | ARCH-002, ARCH-005, ARCH-011 |
-| REQ-046 | ARCH-002, ARCH-011, ARCH-019 |
+| REQ-046 (Deprecated) | Superseded by REQ-080 |
 | REQ-047 | ARCH-002, ARCH-011, ARCH-019 |
 | REQ-048 | ARCH-002, ARCH-011, ARCH-019 |
 | REQ-049 | ARCH-002, ARCH-019 |
@@ -487,3 +487,4 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
+| REQ-080 | ARCH-002, ARCH-011, ARCH-019 |

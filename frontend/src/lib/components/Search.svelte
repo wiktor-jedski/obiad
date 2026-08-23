@@ -20,14 +20,13 @@
    * task 28, task 31, task 32; ARCH-001, ARCH-002, ARCH-003, ARCH-008,
    * ARCH-010, ARCH-011, ARCH-012, ARCH-017, ARCH-019, ARCH-020, REQ-012,
    * REQ-013, REQ-018, REQ-019, REQ-020, REQ-021, REQ-022, REQ-023,
-   * REQ-024, REQ-046, REQ-060, REQ-064, ISSUE-006, ISSUE-007, ISSUE-008,
-   * ISSUE-009). Task 30 keeps this
-   * component as the
-   * stable Search region of the root composition: the input, the suggestion
-   * panel, and the new-search spinner. The read-only Substitution Input,
-   * the result-card region, and the zero-result message live in the root
-   * application (App.svelte), which owns the result-state geometry: the
-   * Search field's `64px` top edge and the `24px` region intervals.
+   * REQ-024, REQ-060, REQ-064, REQ-080, ISSUE-006, ISSUE-007, ISSUE-008,
+   * ISSUE-009). Task 30 keeps this component as the stable Search region of
+   * the root composition: the input and suggestion panel. The read-only
+   * Substitution Input, the result-card region, and the zero-result message
+   * live in the root application (App.svelte), which owns the result-state
+   * geometry: the Search field's `64px` top edge and the `24px` region
+   * intervals.
    *
    * The control renders an `<input type="search">` with a visually hidden
    * label, the placeholder from the active Interface Language dictionary,
@@ -61,10 +60,10 @@
    * suggestions; selecting one suggestion is the commit boundary that
    * replaces the prior result. The interaction-state union gains only the
    * required `loadingNew`, `results`, and `zeroResults` transitions;
-   * TanStack Query continues to own response data and pending state, and
-   * the new-search spinner shows `12px` below the Search field for the
-   * complete pending interval (REQ-046), after which Search keeps focus
-   * (REQ-064). The page-0 query itself and the `loadingNew` →
+   * TanStack Query continues to own response data and pending state. The
+   * Search region renders no new-search spinner during the pending interval
+   * (REQ-080), and Search keeps focus after completion (REQ-064). The page-0
+   * query itself and the `loadingNew` →
    * `results`/`zeroResults` transition effect moved to the root composition
    * with task 30, which also renders the selected-input, result-card, and
    * zero-result regions. No Food Quantity edit, MORE!, failure state,
@@ -376,12 +375,5 @@
       {activeIndex}
       onselect={selectSuggestion}
     />
-  {/if}
-  {#if interaction.name === "loadingNew"}
-    <div
-      data-new-search-spinner
-      aria-hidden="true"
-      class="mx-auto mt-3 h-6 w-6 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-    ></div>
   {/if}
 </div>

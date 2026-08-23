@@ -24,6 +24,10 @@
  * and the interaction state receives only the success outcome, never the
  * response data (ARCH-002).
  *
+ * For visual review before the final animation phase, each successful
+ * request keeps its loading state visible for at least `1000ms`. This makes
+ * spinner-driven layout changes observable with a fast local response.
+ *
  * While a recalculation is in flight, `placeholderData: keepPreviousData`
  * keeps the previous page visible so the summary and cards can retain
  * names, images, labels, and quantity-independent similarity with the
@@ -42,6 +46,9 @@ import type {
   SubstituteSearchResponse,
 } from "../client/types.gen";
 import type { CommittedSubstitutionInput } from "./interactionState";
+
+/** Temporary minimum successful-search loading duration for visual review. */
+const MINIMUM_SEARCH_LOADING_DURATION_MS = 1_000;
 
 /**
  * The query-key prefix of every Substitution Search query. The full key
@@ -102,7 +109,7 @@ export function createSubstitutionSearchQuery(
           ] as const);
     return {
       queryKey,
-      queryFn: ({ signal }) => {
+      queryFn: async ({ signal }) => {
         // The query function runs only while the query is enabled, which
         // requires a committed input (ARCH-011); the guard keeps the
         // request body well-formed even if the option evaluation raced the
@@ -111,12 +118,26 @@ export function createSubstitutionSearchQuery(
         if (active === undefined) {
           throw new Error("substitution search started without a selection");
         }
-        return searchSubstitutes({
-          foodObjectId: active.foodObjectId,
-          quantity: active.quantity,
-          pageIndex: active.pageIndex,
-          signal,
-        });
+        const { promise: minimumDuration, resolve } =
+          Promise.withResolvers<void>();
+        const minimumDurationTimer = setTimeout(
+          resolve,
+          MINIMUM_SEARCH_LOADING_DURATION_MS,
+        );
+        try {
+          const [response] = await Promise.all([
+            searchSubstitutes({
+              foodObjectId: active.foodObjectId,
+              quantity: active.quantity,
+              pageIndex: active.pageIndex,
+              signal,
+            }),
+            minimumDuration,
+          ]);
+          return response;
+        } finally {
+          clearTimeout(minimumDurationTimer);
+        }
       },
       enabled: committed !== undefined,
       placeholderData: keepPreviousData,

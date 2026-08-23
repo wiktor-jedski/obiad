@@ -11,7 +11,7 @@
 <!--
   Root application (task 21, ARCH-001; task 24, REQ-060, ISSUE-006;
   task 26, REQ-057, ISSUE-007; task 28, REQ-020, REQ-022; task 30,
-  REQ-003, REQ-044, REQ-061, REQ-062, ISSUE-008).
+  REQ-003, REQ-044, REQ-061, REQ-062, REQ-080, ISSUE-008).
 
   The TanStack Query client is available to the whole tree through the
   provider, but no query runs at startup: the suggestion query needs a
@@ -23,9 +23,9 @@
   (the `<main>` element) capped at `1280px` with the ISSUE-006 responsive
   horizontal page gutters and the stable Search, selected-input, and
   result regions in that order. The Search control keeps its suggestion
-  panel and the new-search spinner `12px` below the field (REQ-046);
-  `SubstitutionResults` owns the page-0 Substitution Search query under
-  the provider and renders the selected-input, result-card, and zero-result
+  panel and renders no pending-search spinner (REQ-080);
+  `SubstitutionResults` owns the page-0 Substitution Search query under the
+  provider and renders the selected-input, result-card, and zero-result
   regions (ARCH-011, ARCH-019). The empty state retains the ISSUE-006
   Search geometry — the field's vertical center at `45%` of `100dvh` via
   the column padding. From `loadingNew` onward the column padding moves

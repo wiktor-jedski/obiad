@@ -107,7 +107,7 @@
         <span
           data-value-spinner
           aria-hidden="true"
-          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+          class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
         ></span>
       {:else}
         {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
@@ -122,7 +122,7 @@
         <span
           data-value-spinner
           aria-hidden="true"
-          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+          class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
         ></span>
       {:else}
         {formatCaloriesValue(item.calories)}
@@ -138,7 +138,7 @@
             <span
               data-value-spinner
               aria-hidden="true"
-              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+              class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
             ></span>
           {:else}
             {formatMacronutrientValue(item.macronutrients.protein, language)}
@@ -154,7 +154,7 @@
             <span
               data-value-spinner
               aria-hidden="true"
-              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+              class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
             ></span>
           {:else}
             {formatMacronutrientValue(
@@ -173,7 +173,7 @@
             <span
               data-value-spinner
               aria-hidden="true"
-              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+              class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
             ></span>
           {:else}
             {formatMacronutrientValue(item.macronutrients.fat, language)}

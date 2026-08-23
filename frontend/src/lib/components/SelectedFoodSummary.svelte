@@ -306,7 +306,7 @@
       <span
         data-value-spinner
         aria-hidden="true"
-        class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+        class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
       ></span>
     {:else}
       {formatCaloriesValue(inputCalories)}
@@ -347,7 +347,7 @@
           <span
             data-value-spinner
             aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
           ></span>
         {:else}
           {formatMacronutrientValue(inputMacros.protein, $interfaceLanguage)}
@@ -366,7 +366,7 @@
           <span
             data-value-spinner
             aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
           ></span>
         {:else}
           {formatMacronutrientValue(
@@ -385,7 +385,7 @@
           <span
             data-value-spinner
             aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            class="inline-block h-4 w-4 align-middle animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
           ></span>
         {:else}
           {formatMacronutrientValue(inputMacros.fat, $interfaceLanguage)}

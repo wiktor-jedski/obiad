@@ -28,14 +28,18 @@ const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
 /** ISSUE-008: the Search field's top edge from the viewport top. */
 const SEARCH_TOP_PX = 64;
-/** ISSUE-008: the new-search spinner's gap below the Search field. */
-const SPINNER_OFFSET_PX = 12;
 /** ISSUE-008: the interval between the selected-input and result regions. */
 const REGION_GAP_PX = 24;
 /** ISSUE-006: the Search field vertical-center line, as a share of 100dvh. */
 const VERTICAL_CENTER_DVH = 0.45;
 /** REQ-036: a successful page-0 response renders exactly three cards. */
 const CARD_COUNT = 3;
+/** Temporary minimum duration used to expose the in-card spinner layout. */
+const MINIMUM_SEARCH_SPINNER_DURATION_MS = 1_000;
+/** Point near the end of the minimum duration where spinners must remain. */
+const SPINNER_DURATION_PROBE_MS = 900;
+/** Deterministic fast response delay for the minimum-duration scenario. */
+const FAST_SEARCH_RESPONSE_DELAY_MS = 25;
 
 const COPY = {
   search: "Search",
@@ -245,19 +249,17 @@ test.describe("result state", () => {
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
 
-  test("while the new search is pending, the spinner stays 12px below Search and the selected-input region follows 24px below it; fulfillment completes the results composition", async ({
+  test("while a new search is pending, no spinner appears below Search and the selected-input region starts 24px below it; fulfillment completes the results composition", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
 
     // Hold the first Substitution Search POST at the browser boundary so
     // the real Fiber and PostgreSQL response stays pending while the
-    // pending-state gaps are measured (REQ-046, ISSUE-008).
+    // spinner-free Search geometry is measured (REQ-080, ISSUE-008).
     let postCount = 0;
-    let releaseFirst: () => void = () => {};
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const { promise: firstGate, resolve: releaseFirst } =
+      Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
       postCount += 1;
       if (postCount === 1) {
@@ -277,51 +279,91 @@ test.describe("result state", () => {
       "data-interaction-state",
       "loadingNew",
     );
-    const spinner = page.locator("[data-new-search-spinner]");
-    await expect(spinner).toBeVisible();
+    await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-selected-input-region]")).toBeVisible();
 
-    // The spinner uses offsets within the positioned Search region so its
-    // animation transform cannot affect the measurement. The selected-input
-    // region uses `main` as its offset parent, so translate the spinner's
-    // Search-local bottom edge into the same coordinate system.
-    const layout = await page.evaluate(() => {
+    const selectedGap = await page.evaluate(() => {
       const input = document.getElementById("food-search") as HTMLElement;
-      const searchRegion = document.querySelector(
-        "[data-search-region]",
-      ) as HTMLElement;
-      const spin = document.querySelector(
-        "[data-new-search-spinner]",
-      ) as HTMLElement;
       const selected = document.querySelector(
         "[data-selected-input-region]",
       ) as HTMLElement;
-      return {
-        spinnerOffset: spin.offsetTop - (input.offsetTop + input.offsetHeight),
-        selectedGap:
-          selected.offsetTop -
-          (searchRegion.offsetTop + spin.offsetTop + spin.offsetHeight),
-      };
+      return (
+        selected.getBoundingClientRect().top -
+        input.getBoundingClientRect().bottom
+      );
     });
     expect(
-      layout.spinnerOffset,
-      "the spinner layout box starts 12px below the Search field",
-    ).toBe(SPINNER_OFFSET_PX);
-    expect(
-      layout.selectedGap,
-      "the selected-input region starts 24px below the spinner",
+      selectedGap,
+      "the selected-input region starts 24px below Search",
     ).toBe(REGION_GAP_PX);
 
-    // Fulfillment completes the transition: the spinner disappears, the
-    // Search field keeps focus (REQ-064), and the result region renders.
+    // Fulfillment completes the transition: Search keeps focus (REQ-064),
+    // and the result region renders.
     releaseFirst();
-    await expect(spinner).toHaveCount(0);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
     );
     await expect(search).toBeFocused();
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
+  });
+
+  test("a subsequent fast search keeps its loading state and in-card spinners visible for at least 1000ms without showing a spinner below Search", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    let firstSearchBody: unknown;
+    page.on("response", async (response) => {
+      if (
+        response.request().method() === "POST" &&
+        response.url().includes("/api/v1/substitutes/search")
+      ) {
+        firstSearchBody = await response.json();
+      }
+    });
+
+    await page.goto("/");
+    await selectPizzaMargherita(page);
+    await expect.poll(() => firstSearchBody).not.toBeUndefined();
+
+    const fastResponseBody = JSON.stringify(firstSearchBody);
+    await page.route("**/api/v1/substitutes/search", async (route) => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, FAST_SEARCH_RESPONSE_DELAY_MS);
+      await promise;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: fastResponseBody,
+      });
+    });
+
+    const search = page.getByRole("combobox", { name: COPY.search });
+    await search.fill("chicken");
+    const panel = page.getByRole("listbox", { name: COPY.listbox });
+    await expect(panel).toBeVisible();
+    const startedAt = performance.now();
+    await page.locator("#food-suggestion-option-5").click();
+
+    await page.waitForTimeout(SPINNER_DURATION_PROBE_MS);
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "loadingNew",
+      { timeout: 100 },
+    );
+    await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
+    await expect(
+      page.locator("[data-selected-food-summary] [data-value-spinner]"),
+    ).toHaveCount(4);
+
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    expect(
+      performance.now() - startedAt,
+      "the fast response does not end the in-card spinners before 1000ms",
+    ).toBeGreaterThanOrEqual(MINIMUM_SEARCH_SPINNER_DURATION_MS);
   });
 
   test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and active-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({

@@ -286,7 +286,7 @@ Phases 4 and 6.
 - Select a suggestion with a pointer.
 - Replace the Search Query text with the selected suggestion's active-language name before starting the search.
 - Send page 0 with the returned default Food Quantity.
-- Show the new-search spinner below the Search control.
+- Do not show a spinner below the Search control while a new search is pending.
 - Show the selected Substitution Input.
 - Show zero or three result cards.
 - Use the result-state layout.
@@ -312,7 +312,7 @@ Phases 4 and 6.
 - [REQ-037](../requirements/requirements.md#req-037--card-data)
 - [REQ-038](../requirements/requirements.md#req-038--base-unit-matched-quantity)
 - [REQ-044](../requirements/requirements.md#req-044--zero-result-state)
-- [REQ-046](../requirements/requirements.md#req-046--search-spinner)
+- [REQ-080](../requirements/requirements.md#req-080--no-search-loading-spinner)
 - [REQ-061](../requirements/requirements.md#req-061--result-state-layout)
 - [REQ-064](../requirements/requirements.md#req-064--search-focus)
 - [REQ-077](../requirements/requirements.md#req-077--selected-suggestion-in-search)

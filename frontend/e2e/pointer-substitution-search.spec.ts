@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * Real-stack pointer-selection and new-search transition scenario
  * (task 28; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010, ARCH-011,
  * ARCH-019, ARCH-020, ARCH-022, REQ-020, REQ-022, REQ-023, REQ-024,
- * REQ-046, REQ-064, ISSUE-005, ISSUE-008; P07-G8, P07-G9, P07-G10,
+ * REQ-064, REQ-080, ISSUE-005, ISSUE-008; P07-G8, P07-G9, P07-G10,
  * P07-G11, P07-G17, P07-G18, P07-G19).
  *
  * `bun run test:e2e` runs these tests against the complete disposable stack
@@ -20,18 +20,17 @@ import { expect, test, type Page } from "@playwright/test";
  * action. Separate seeded Pizza Margherita, Chicken breast, and Milk flows
  * show the exact localized label and value, send `1 serving`, `100 g`, and
  * `100 ml`, and update the visible selected Food Object value when the
- * Interface Language changes. One controlled response fetched from real Fiber
- * and PostgreSQL stays pending at the browser boundary while the new-search
- * spinner remains `12px` below the Search field; fulfillment removes the
- * spinner and leaves the Search field as `document.activeElement` (REQ-046,
- * REQ-064). One adversarial network reconnect while results are visible proves
+ * Interface Language changes. One controlled response fetched from real
+ * Fiber and PostgreSQL stays pending at the browser boundary while no
+ * spinner is rendered below Search; fulfillment leaves the Search field as
+ * `document.activeElement` (REQ-064, REQ-080). One adversarial network
+ * reconnect while results are visible proves
  * the disabled TanStack Query's `refetchOnReconnect` path: exactly one
  * Substitution Search POST remains per selection (ARCH-019, REQ-022, task 28
  * repair; the remount half of the lifecycle coverage lives in the
  * component-integration suite).
  */
 
-const SPINNER_OFFSET_PX = 12;
 const OPTION_COUNT = 5;
 
 const COPY = {
@@ -341,20 +340,18 @@ test.describe("pointer substitution search", () => {
     ).toBe(1);
   });
 
-  test("a controlled response fetched from real Fiber and PostgreSQL stays pending while the new-search spinner remains 12px below Search; fulfillment removes the spinner and leaves Search focused", async ({
+  test("a controlled response fetched from real Fiber and PostgreSQL stays pending without a spinner below Search; fulfillment leaves Search focused", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     const posts = trackSubstitutePosts(page);
 
     // Hold the first Substitution Search POST at the browser boundary so the
-    // real Fiber and PostgreSQL response stays pending until the scenario
-    // releases it (REQ-046, P07-G17).
+    // pending Search surface can be observed before the scenario releases
+    // the real Fiber and PostgreSQL response (REQ-080, P07-G17).
     let postCount = 0;
-    let releaseFirst: () => void = () => {};
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const { promise: firstGate, resolve: releaseFirst } =
+      Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
       postCount += 1;
       if (postCount === 1) {
@@ -382,40 +379,17 @@ test.describe("pointer substitution search", () => {
     );
     expect(posts).toHaveLength(1);
 
-    // The new-search spinner stays 12px below the Search field for the
-    // complete pending interval (REQ-046, P07-G17). The layout distance is
-    // measured with offsetTop/offsetHeight: the spinner's CSS rotation
-    // animation makes `boundingBox()` report the transformed axis-aligned
-    // box, which moves with the rotation phase, while the layout box — the
-    // space the spinner occupies — stays exactly 12px below the field.
-    const spinner = page.locator("[data-new-search-spinner]");
-    await expect(spinner).toBeVisible();
-    const spinnerLayout = await page.evaluate(() => {
-      const input = document.getElementById("food-search") as HTMLElement;
-      const spin = document.querySelector(
-        "[data-new-search-spinner]",
-      ) as HTMLElement;
-      return {
-        offset: spin.offsetTop - (input.offsetTop + input.offsetHeight),
-        parentIsSearchRegion:
-          spin.offsetParent?.hasAttribute("data-search-region") ?? false,
-      };
-    });
-    expect(spinnerLayout.parentIsSearchRegion).toBe(true);
-    expect(
-      spinnerLayout.offset,
-      "the spinner layout box starts 12px below the Search field",
-    ).toBe(SPINNER_OFFSET_PX);
+    // The pending Search region contains no separate loading spinner
+    // (REQ-080, P07-G17).
+    await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
 
     // The read-only Substitution Input is already visible during the pending
     // interval (task 28).
     await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
-    // Fulfillment removes the spinner, completes the transition to results,
-    // and leaves the Search field as the active element (REQ-046, REQ-064,
-    // P07-G18, P07-G19).
+    // Fulfillment completes the transition to results and leaves the Search
+    // field as the active element (REQ-064, P07-G18, P07-G19).
     releaseFirst();
-    await expect(spinner).toHaveCount(0);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",

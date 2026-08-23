@@ -52,7 +52,7 @@ const COPY = {
   },
   pl: {
     searchPlaceholder: "Szukaj potraw",
-    moreButton: "MORE!",
+    moreButton: "WIĘCEJ!",
     foundSubstitutions: "Znalezione zamienniki",
   },
 } as const;

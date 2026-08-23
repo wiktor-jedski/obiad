@@ -113,7 +113,7 @@ const pl = {
   similarityLabel: () => "Podobieństwo",
   foundSubstitutionsHeading: () => "Znalezione zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
-  moreButtonLabel: () => "MORE!",
+  moreButtonLabel: () => "WIĘCEJ!",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */
