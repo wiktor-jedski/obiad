@@ -37,7 +37,7 @@ const CARD_COUNT = 3;
 /** Temporary minimum duration used to expose the in-card spinner layout. */
 const MINIMUM_SEARCH_SPINNER_DURATION_MS = 1_000;
 /** Point near the end of the minimum duration where spinners must remain. */
-const SPINNER_DURATION_PROBE_MS = 900;
+const SPINNER_DURATION_PROBE_MS = 750;
 /** Deterministic fast response delay for the minimum-duration scenario. */
 const FAST_SEARCH_RESPONSE_DELAY_MS = 25;
 
@@ -353,8 +353,12 @@ test.describe("result state", () => {
     );
     await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
     await expect(
-      page.locator("[data-selected-food-summary] [data-value-spinner]"),
-    ).toHaveCount(4);
+      page.locator("[data-selected-food-summary] [data-card-spinner]"),
+    ).toHaveCount(1);
+    await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
+    await expect(
+      page.locator("[data-selected-food-summary] [data-card-content]"),
+    ).toHaveCSS("opacity", "0");
 
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",

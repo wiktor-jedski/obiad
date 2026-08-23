@@ -31,11 +31,11 @@
    * valid commit replaces the committed quantity and starts one fresh
    * generated-client request with the same Food Object ID and current page
    * (REQ-027, REQ-028). While that recalculation is pending,
-   * `placeholderData: keepPreviousData` retains the previous page so the
-   * summary and cards keep names, images, labels, and quantity-independent
-   * similarity visible while every quantity-dependent value shows an
-   * aria-hidden `16px` spinner and the combined region stays busy with one
-   * polite `Updating quantities` announcement (ISSUE-010). The transition
+   * `placeholderData: keepPreviousData` retains the previous page. Each
+   * selected-food and result card keeps its layout and result image, hides
+   * its non-image content, and shows one centered, aria-hidden `16px`
+   * spinner while the combined region stays busy with one polite `Updating
+   * quantities` announcement (REQ-081, ISSUE-010). The transition
    * effect fires only for the current response — never for retained
    * placeholder data — so the union reaches `results`/`zeroResults` exactly
    * once per new selection.
@@ -50,14 +50,15 @@
    * REQ-058).
    *
    * Task 37 and Task 38 complete MORE! result paging (REQ-041, REQ-043,
-   * REQ-045, REQ-047, REQ-065, REQ-066). Whenever a later page exists
+   * REQ-045, REQ-065, REQ-066, REQ-082). Whenever a later page exists
    * (`hasMore: true`), one visible and accessibly named `MORE!` button is
    * rendered after the result grid. While a next-page request is pending
-   * (`loadingMore`), the current cards remain visible and an aria-hidden
-   * spinner replaces the visible button label inside the control (REQ-047).
-   * On intermediate success (`hasMore: true`), the requested page's cards
-   * replace the previous cards and focus stays on the MORE! button
-   * (REQ-041, REQ-065). On final-page success (`hasMore: false`), the
+   * (`loadingMore`), the focused control keeps its localized label, becomes
+   * gray and `aria-disabled`, and its guarded handler accepts no additional
+   * activation (REQ-082). On intermediate success (`hasMore: true`), the
+   * requested page's cards replace the previous cards and focus stays on
+   * the MORE! button (REQ-041, REQ-065). On final-page success
+   * (`hasMore: false`), the
    * remaining one to three cards are rendered, MORE! is omitted, and
    * programmatic focus moves to the stable results heading (REQ-043,
    * REQ-066). When the user selects a new Food Object from any page, the
@@ -127,14 +128,15 @@
    */
   const substitutionSearch = createSubstitutionSearchQuery({
     committed: () => committed,
+    minimumCardLoadingDurationEnabled: () => interaction.name !== "loadingMore",
   });
 
   /**
    * Whether a valid quantity recalculation is pending (task 34,
    * ISSUE-010): a completed result transition is visible while TanStack
    * Query holds the retained previous page as placeholder data for the
-   * fresh committed-quantity key. Controls stay enabled, the combined
-   * region stays busy, and quantity-dependent values show spinners.
+   * fresh committed-quantity key. The combined region stays busy while each
+   * card hides its non-image content behind one centered spinner (REQ-081).
    */
   const recalculating = $derived(
     interaction.name === "results" && substitutionSearch.isPlaceholderData,
@@ -197,25 +199,25 @@
   <!--
     Result-card region (task 30, task 37; ARCH-001, ARCH-002, ARCH-003,
     ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037, REQ-041,
-    REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-065, ISSUE-008,
-    ISSUE-011): the successful page response renders exactly its
+    REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-065, REQ-081,
+    ISSUE-008, ISSUE-011): the successful page response renders exactly its
     zero-to-three display-ready Substitutes in ranked order at `24px` below
     the selected-input region. The layout has one card column below 1024px
     and three equal columns from 1024px. Each card uses the active
     Interface Language, so current names, labels, and localized numeric
     values update locally without another request. While a valid quantity
-    recalculation is pending (task 34), the retained previous page stays
-    rendered with every quantity-dependent card value replaced by an
-    aria-hidden `16px` spinner (`pending`), while names, images, labels, and
-    quantity-independent similarity stay visible (ISSUE-010).
+    recalculation is pending (task 34), the retained previous page keeps
+    each result image visible, hides each card's non-image content without
+    changing layout, and shows one centered, aria-hidden `16px` spinner in
+    that content area (REQ-081, ISSUE-010).
 
     Task 37 renders one visible and accessibly named `MORE!` button after
     the result grid whenever a later page exists (`hasMore: true`). While a
     next-page request is pending (`loadingMore`), the current cards remain
-    visible and an aria-hidden spinner replaces the visible button label
-    inside the control (REQ-047). On intermediate success, the requested
-    page's cards replace the previous cards and focus stays on the MORE!
-    button (REQ-041, REQ-065).
+    visible and the focused control keeps its localized label with a gray,
+    `aria-disabled` non-operable presentation (REQ-082). On intermediate
+    success, the requested page's cards replace the previous cards and
+    focus stays on the MORE! button (REQ-041, REQ-065).
   -->
   <div data-result-region aria-busy={recalculating} class="mt-6">
     <h2
@@ -241,18 +243,14 @@
           type="button"
           data-more-button
           aria-label={dictionary.moreButtonLabel()}
+          aria-disabled={interaction.name === "loadingMore"}
           onclick={onMoreClick}
-          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded bg-dark-primary px-6 py-2.5 font-ui text-sm font-semibold text-dark-text-on-bright transition-colors duration-200 hover:bg-dark-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary"
+          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded px-6 py-2.5 font-ui text-sm font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary {interaction.name ===
+          'loadingMore'
+            ? 'cursor-not-allowed bg-gray-600 text-gray-300'
+            : 'bg-dark-primary text-dark-text-on-bright hover:bg-dark-secondary'}"
         >
-          {#if interaction.name === "loadingMore"}
-            <span
-              data-more-spinner
-              aria-hidden="true"
-              class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-solid border-dark-text-on-bright/30 border-t-dark-text-on-bright"
-            ></span>
-          {:else}
-            {dictionary.moreButtonLabel()}
-          {/if}
+          {dictionary.moreButtonLabel()}
         </button>
       </div>
     {/if}

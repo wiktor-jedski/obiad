@@ -68,7 +68,7 @@ The page uses one centered primary content column with a maximum width of `1280p
 - **Buttons:** Use a 4px border radius and property-specific `200ms` transitions. Reduced-motion mode uses immediate state changes.
 - **Pill controls:** Fully rounded controls are accepted for chip-like filters, badges, segmented choices, compact icon actions, and selected-state tokens where the pill shape communicates grouping or status. Pill controls must still use visible focus states, accessible names, and stable hit targets.
 - **Inputs:** Use the Surface background, a 1px Secondary border, and Text-Primary text. Focus uses a Primary border without an outer highlight.
-- **Loading States:** Do not show a spinner below Search. Show the **MORE!** spinner inside its control.
+- **Loading States:** Do not show a spinner below Search. While card values are pending, hide each card's non-image content without changing its size and show one centered spinner in that content area; keep result images visible. While a MORE! request is pending, keep its localized label and show the focused non-operable control with a gray background and gray text.
 
 #### 6. Compliance & Accessibility
 

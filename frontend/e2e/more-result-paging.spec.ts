@@ -3,8 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Real-stack MORE! result-paging scenario (task 37, task 38; ARCH-001,
  * ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020,
- * ARCH-022, REQ-041, REQ-042, REQ-043, REQ-045, REQ-047, REQ-064,
- * REQ-065, REQ-066, ISSUE-011).
+ * ARCH-022, REQ-041, REQ-042, REQ-043, REQ-045, REQ-064, REQ-065,
+ * REQ-066, REQ-082, ISSUE-011).
  *
  * This scenario runs against the self-cleaning real stack behind `bun run
  * test:e2e`: disposable loopback PostgreSQL 17, fixed Fiber at
@@ -16,12 +16,13 @@ import { expect, test, type Page } from "@playwright/test";
  *   Object and committed Food Quantity and starts one generated-client
  *   `POST /api/v1/substitutes/search` request with `pageIndex: 1` (REQ-041).
  * - While the real request is held at the browser boundary, the current
- *   page-0 cards remain visible and the spinner inside the focused MORE!
- *   control replaces its visible label (REQ-047, P11-G5).
- * - Fulfillment removes the spinner; the three page-1 cards replace all
- *   three page-0 cards (ranks 4 through 6) instead of appending, match
- *   the backend ranking, remain unique across observed pages, and show no
- *   card transition or animation (REQ-041, REQ-042, P11-G7).
+ *   page-0 cards remain visible and the focused MORE! control keeps its
+ *   localized label, becomes gray and `aria-disabled`, and accepts no
+ *   additional activation (REQ-082, P11-G5).
+ * - Fulfillment restores the active control colors; the three page-1 cards
+ *   replace all three page-0 cards (ranks 4 through 6) instead of appending,
+ *   match the backend ranking, remain unique across observed pages, and show
+ *   no card transition or animation (REQ-041, REQ-042, P11-G7).
  * - Intermediate activations leave MORE! as `document.activeElement`
  *   (REQ-065).
  * - Selecting a new Food Object from page 2 resets `pageIndex` to 0, sends
@@ -56,6 +57,11 @@ const COPY = {
     foundSubstitutions: "Znalezione zamienniki",
   },
 } as const;
+
+/** Gray background of a pending non-operable MORE! control (REQ-082). */
+const DISABLED_MORE_BACKGROUND_COLOR = "oklch(0.446 0.03 256.802)";
+/** Gray text of a pending non-operable MORE! control (REQ-082). */
+const DISABLED_MORE_TEXT_COLOR = "oklch(0.872 0.01 258.338)";
 
 /**
  * Complete seeded designated acceptance ranking fixtures (ISSUE-002, REQ-072).
@@ -181,7 +187,7 @@ async function renderedCardIDs(page: Page): Promise<number[]> {
 }
 
 test.describe("MORE! result paging", () => {
-  test("traversing all 12 pages of Pizza Margherita (full three-card last page) proves pending spinner, replacement without animation, MORE! focus on intermediate pages, results heading focus on the last page with MORE! omitted, unique IDs across all pages, new-search reset from page 2, and valid quantity edit on the last page", async ({
+  test("traversing all 12 pages of Pizza Margherita (full three-card last page) proves the pending gray non-operable MORE! state, replacement without animation, MORE! focus on intermediate pages, results heading focus on the last page with MORE! omitted, unique IDs across all pages, new-search reset from page 2, and valid quantity edit on the last page", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -222,6 +228,7 @@ test.describe("MORE! result paging", () => {
     await expect(moreButton).toHaveText(COPY.en.moreButton);
     await expect(moreButton).toHaveAttribute("aria-label", COPY.en.moreButton);
     await expect(page.locator("[data-more-spinner]")).toHaveCount(0);
+    await expect(moreButton).toHaveAttribute("aria-disabled", "false");
 
     // Click MORE! once
     await moreButton.click();
@@ -234,8 +241,9 @@ test.describe("MORE! result paging", () => {
       pageIndex: 1,
     });
 
-    // P11-G5 / REQ-047: For the complete pending interval, the current cards
-    // remain visible and the spinner inside the focused control replaces its visible label.
+    // P11-G5 / REQ-082: For the complete pending interval, the current cards
+    // remain visible while the focused MORE! control keeps its label and
+    // uses the gray non-operable presentation.
     await expect(page.locator("[data-interaction-state]")).toHaveAttribute(
       "data-interaction-state",
       "loadingMore",
@@ -248,20 +256,23 @@ test.describe("MORE! result paging", () => {
     // Focus is on MORE!
     await expect(moreButton).toBeFocused();
 
-    // The spinner inside the MORE! control is visible and aria-hidden
-    const spinner = page.locator("[data-more-button] [data-more-spinner]");
-    await expect(spinner).toBeVisible();
-    await expect(spinner).toHaveAttribute("aria-hidden", "true");
-
-    // The visible label "MORE!" is replaced by the spinner
-    await expect(moreButton).not.toHaveText(COPY.en.moreButton);
+    await expect(page.locator("[data-more-spinner]")).toHaveCount(0);
+    await expect(moreButton).toHaveText(COPY.en.moreButton);
+    await expect(moreButton).toHaveAttribute("aria-disabled", "true");
+    await expect(moreButton).toHaveCSS(
+      "background-color",
+      DISABLED_MORE_BACKGROUND_COLOR,
+    );
+    await expect(moreButton).toHaveCSS("color", DISABLED_MORE_TEXT_COLOR);
+    await moreButton.dispatchEvent("click");
+    expect(posts).toHaveLength(2);
 
     // Fulfill the request: release the gate
     releaseMoreGate();
 
-    // Fulfillment removes the spinner and restores the visible label
-    await expect(page.locator("[data-more-spinner]")).toHaveCount(0);
+    // Fulfillment restores the active control while retaining its label.
     await expect(moreButton).toHaveText(COPY.en.moreButton);
+    await expect(moreButton).toHaveAttribute("aria-disabled", "false");
     await expect(page.locator("[data-interaction-state]")).toHaveAttribute(
       "data-interaction-state",
       "results",

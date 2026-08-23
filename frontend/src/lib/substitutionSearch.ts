@@ -24,14 +24,14 @@
  * and the interaction state receives only the success outcome, never the
  * response data (ARCH-002).
  *
- * For visual review before the final animation phase, each successful
- * request keeps its loading state visible for at least `1000ms`. This makes
- * spinner-driven layout changes observable with a fast local response.
+ * For visual review before the final animation phase, each request that
+ * presents card-level loading keeps that state visible for at least
+ * `1000ms`. This makes spinner-driven layout changes observable.
  *
  * While a recalculation is in flight, `placeholderData: keepPreviousData`
- * keeps the previous page visible so the summary and cards can retain
- * names, images, labels, and quantity-independent similarity with the
- * quantity-dependent values replaced by spinners (ISSUE-010). The fresh
+ * keeps the previous page mounted so each card preserves its layout and
+ * result image while its non-image content is hidden behind one centered
+ * spinner (REQ-081, ISSUE-010). The fresh
  * request still runs; the placeholder rows are replaced by the current
  * response when it arrives, and `isPlaceholderData` distinguishes the
  * retained previous page from the current response so the `loadingNew`
@@ -69,6 +69,12 @@ export interface SubstitutionSearchQueryInput {
    * the current page index, or undefined before any selection.
    */
   committed: () => CommittedSubstitutionInput | undefined;
+  /**
+   * Whether this request presents card-level loading that needs the
+   * temporary minimum review duration. MORE! paging has its own control
+   * spinner and returns false.
+   */
+  minimumCardLoadingDurationEnabled: () => boolean;
 }
 
 /**
@@ -86,8 +92,8 @@ export interface SubstitutionSearchQueryInput {
  * Substitution Search POST and neither a network reconnect nor a
  * component remount submits a second request (REQ-022, ARCH-019). While a
  * recalculation is pending, `placeholderData: keepPreviousData` retains
- * the previous page so quantity-independent content stays visible and the
- * quantity-dependent values can show spinners (task 34, ISSUE-010).
+ * the previous page so each card can preserve its layout and result image
+ * behind one centered loading spinner (task 34, REQ-081, ISSUE-010).
  *
  * @param input - the committed Substitution Search input accessor
  * @returns the TanStack Query result owning the HTTP data and pending state
@@ -118,6 +124,15 @@ export function createSubstitutionSearchQuery(
         if (active === undefined) {
           throw new Error("substitution search started without a selection");
         }
+        const request = searchSubstitutes({
+          foodObjectId: active.foodObjectId,
+          quantity: active.quantity,
+          pageIndex: active.pageIndex,
+          signal,
+        });
+        if (!input.minimumCardLoadingDurationEnabled()) {
+          return request;
+        }
         const { promise: minimumDuration, resolve } =
           Promise.withResolvers<void>();
         const minimumDurationTimer = setTimeout(
@@ -125,15 +140,7 @@ export function createSubstitutionSearchQuery(
           MINIMUM_SEARCH_LOADING_DURATION_MS,
         );
         try {
-          const [response] = await Promise.all([
-            searchSubstitutes({
-              foodObjectId: active.foodObjectId,
-              quantity: active.quantity,
-              pageIndex: active.pageIndex,
-              signal,
-            }),
-            minimumDuration,
-          ]);
+          const [response] = await Promise.all([request, minimumDuration]);
           return response;
         } finally {
           clearTimeout(minimumDurationTimer);

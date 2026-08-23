@@ -181,7 +181,7 @@ export interface ZeroResultsInteractionState extends SubstitutionSearchInteracti
 /**
  * The discriminated browser-interaction state union (ARCH-002). Task 27
  * reached only `empty`; task 28 adds `loadingNew`, `results`, and
- * `zeroResults`; task 37 adds `loadingMore` (REQ-041, REQ-047).
+ * `zeroResults`; task 37 adds `loadingMore` (REQ-041).
  * Transitions, not independent booleans, determine the visible controls.
  */
 export type InteractionState =
