@@ -234,7 +234,10 @@
   <span class="sr-only">{dictionary.selectedFoodLabel()}: {capturedValue}</span>
 
   <!-- Row 1: the captured localized food name (ISSUE-010). -->
-  <div data-selected-name class="text-base font-medium text-dark-text-primary">
+  <div
+    data-selected-name
+    class="text-center text-base font-medium text-dark-text-primary"
+  >
     {capturedName}
   </div>
 
@@ -248,7 +251,7 @@
   <div
     data-quantity-editor
     onfocusout={onEditorFocusOut}
-    class="flex flex-wrap items-center gap-2"
+    class="flex flex-wrap items-center justify-center gap-2"
   >
     <label for="quantity-number" class="sr-only"
       >{dictionary.quantityLabel()}</label
@@ -310,6 +313,21 @@
       </span>
     {/if}
   </div>
+  <p
+    data-input-calories
+    aria-label={capturedDictionary.caloriesLabel()}
+    class="text-center font-data text-sm text-dark-text-primary"
+  >
+    {#if busy || inputCalories === undefined}
+      <span
+        data-value-spinner
+        aria-hidden="true"
+        class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+      ></span>
+    {:else}
+      {formatCaloriesValue(inputCalories)}
+    {/if}
+  </p>
 
   {#if interaction.quantityInvalid}
     <!--
@@ -329,12 +347,11 @@
   {/if}
 
   <!--
-    Rows 3-5: the backend-provided input macronutrients at the committed
-    quantity (task 33, ISSUE-010), using the captured-language labels and
-    one-decimal formatting. While a value is pending — the initial new
-    Search or a recalculation — each value position shows one aria-hidden
-    `16px` spinner instead; the browser never calculates or rerounds
-    nutrition (REQ-040).
+    The backend-provided input macronutrients at the committed quantity
+    (task 33, ISSUE-010) use captured-language labels and one-decimal
+    formatting. While a value is pending — the initial new Search or a
+    recalculation — each value position shows one aria-hidden `16px` spinner
+    instead; the browser never calculates or rerounds nutrition (REQ-040).
   -->
   <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
     <div class="flex items-baseline justify-between gap-4">
@@ -394,22 +411,6 @@
             inputMacros.fat,
             interaction.selected.capturedLanguage,
           )}
-        {/if}
-      </dd>
-    </div>
-    <div class="flex items-baseline justify-between gap-4">
-      <dt class="font-medium text-dark-text-muted">
-        {capturedDictionary.caloriesLabel()}
-      </dt>
-      <dd data-input-calories class="text-right text-dark-text-primary">
-        {#if busy || inputCalories === undefined}
-          <span
-            data-value-spinner
-            aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-          ></span>
-        {:else}
-          {formatCaloriesValue(inputCalories)}
         {/if}
       </dd>
     </div>

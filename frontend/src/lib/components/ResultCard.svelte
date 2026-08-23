@@ -16,10 +16,10 @@
    * The component consumes one generated display-ready `SubstituteItem`
    * plus the Interface Language captured by the search (task 28,
    * ISSUE-008) and renders the approved card field order — image,
-   * localized name, whole Matched Quantity, protein, carbohydrate, fat,
-   * and similarity — with no browser-side nutrition calculation or
-   * rerounding: every displayed number is the backend-rounded value
-   * formatted for display only (ARCH-001, REQ-040).
+   * localized name, whole Matched Quantity, centered calories, protein,
+   * carbohydrate, fat, and similarity — with no browser-side nutrition
+   * calculation or rerounding: every displayed number is the
+   * backend-rounded value formatted for display only (ARCH-001, REQ-040).
    *
    * The whole card is frozen to the captured Interface Language: the Food
    * Object name, the visible `Protein`, `Carbohydrates`, `Fat`, and
@@ -99,12 +99,12 @@
     class="h-44 w-full object-cover"
   />
   <div class="flex flex-col gap-2 p-4">
-    <h3 class="text-base font-medium text-dark-text-primary">
+    <h3 class="text-center text-base font-medium text-dark-text-primary">
       {item.names[language]}
     </h3>
     <p
       data-result-card-matched-quantity
-      class="font-data text-sm text-dark-text-primary"
+      class="text-center font-data text-sm text-dark-text-primary"
     >
       {#if pending}
         <span
@@ -114,6 +114,21 @@
         ></span>
       {:else}
         {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
+      {/if}
+    </p>
+    <p
+      data-result-card-calories
+      aria-label={dictionary.caloriesLabel()}
+      class="text-center font-data text-sm text-dark-text-primary"
+    >
+      {#if pending}
+        <span
+          data-value-spinner
+          aria-hidden="true"
+          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+        ></span>
+      {:else}
+        {formatCaloriesValue(item.calories)}
       {/if}
     </p>
     <dl class="flex flex-col gap-1 font-data text-sm">
@@ -165,22 +180,6 @@
             ></span>
           {:else}
             {formatMacronutrientValue(item.macronutrients.fat, language)}
-          {/if}
-        </dd>
-      </div>
-      <div class="flex items-baseline justify-between gap-4">
-        <dt class="font-medium text-dark-text-muted">
-          {dictionary.caloriesLabel()}
-        </dt>
-        <dd data-result-card-calories class="text-right text-dark-text-primary">
-          {#if pending}
-            <span
-              data-value-spinner
-              aria-hidden="true"
-              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-            ></span>
-          {:else}
-            {formatCaloriesValue(item.calories)}
           {/if}
         </dd>
       </div>

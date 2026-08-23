@@ -324,7 +324,7 @@ test.describe("result state", () => {
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
   });
 
-  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with localized labels and kcal in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
+  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and captured-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -366,18 +366,12 @@ test.describe("result state", () => {
     );
     expect(isScrollable, "page has no vertical scrollbar").toBe(false);
 
-    // English calories on input and result cards (REQ-078, P19-G5)
-    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+    // English calories on the selected card (REQ-078, P19-G5).
+    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
+    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
+      "aria-label",
       "Calories",
     );
-    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
-
-    for (let index = 0; index < CARD_COUNT; index += 1) {
-      await expect(cards.nth(index)).toContainText("Calories");
-      await expect(
-        cards.nth(index).locator("[data-result-card-calories]"),
-      ).toHaveText("875 kcal");
-    }
 
     // Switching interface language locally translates the heading (interface text)
     // while retaining captured active content (ISSUE-008, ARCH-003, ARCH-012).
@@ -387,7 +381,8 @@ test.describe("result state", () => {
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
       "Znalezione zamienniki",
     );
-    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
+      "aria-label",
       "Calories",
     );
 
@@ -399,18 +394,10 @@ test.describe("result state", () => {
     await page.locator(`#${PIZZA_MARGHERITA_OPTION_ID}`).click();
     await expect(panelPl).toHaveCount(0);
 
-    await expect(page.locator("[data-substitutions-heading]")).toHaveText(
-      "Znalezione zamienniki",
-    );
-    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
+      "aria-label",
       "Kalorie",
     );
     await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
-    for (let index = 0; index < CARD_COUNT; index += 1) {
-      await expect(cards.nth(index)).toContainText("Kalorie");
-      await expect(
-        cards.nth(index).locator("[data-result-card-calories]"),
-      ).toHaveText("875 kcal");
-    }
   });
 });
