@@ -109,6 +109,7 @@ type SubstituteItem struct {
 	Protein           float64
 	Carbohydrate      float64
 	Fat               float64
+	Calories          int64
 	SimilarityPercent int32
 }
 
@@ -122,6 +123,7 @@ type Page struct {
 	TotalEligibleCount  int
 	HasMore             bool
 	InputMacronutrients Macronutrients
+	InputCalories       int64
 	Items               []SubstituteItem
 }
 
@@ -194,6 +196,19 @@ func projectMatchedQuantity(mq float64, state physicalState) (MatchedQuantity, e
 		unit = UnitMillilitre
 	}
 	return MatchedQuantity{Value: int64(whole), Unit: unit}, nil
+}
+
+// projectCalories rounds the full-precision derived calories (4p + 4c + 9f) to
+// a whole integer (REQ-078, ARCH-005, ARCH-018): 46.9 becomes 47. A positive
+// value can display as zero. The whole value must fit the int64 display range;
+// a schema-valid extreme input whose calories exceed it is a Module failure,
+// never a wrapped or overflowed display value.
+func projectCalories(cal float64) (int64, error) {
+	whole := math.Round(cal)
+	if whole >= float64(math.MaxInt64) {
+		return 0, fmt.Errorf("whole calories %v exceeds the int64 display range", cal)
+	}
+	return int64(whole), nil
 }
 
 // projectMacronutrient rounds one macronutrient amount, already scaled to
@@ -535,6 +550,13 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 			cause: fmt.Errorf("input calories %v are not finite for the seeded Macro Profile", inputCalories),
 		}
 	}
+	inputProjectedCalories, err := projectCalories(inputCalories)
+	if err != nil {
+		return nil, &Error{
+			Code:  CodeInternalError,
+			cause: fmt.Errorf("input: %w", err),
+		}
+	}
 	// ISSUE-010: the response carries the Substitution Input macronutrients
 	// scaled to the committed base quantity (protein, carbohydrate, and fat
 	// per Nutrition Basis times baseQty / 100), projected by the same 0.1 g
@@ -565,21 +587,30 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 			Carbohydrate: projectMacronutrient(inputCarbohydrate),
 			Fat:          projectMacronutrient(inputFat),
 		},
-		Items: make([]SubstituteItem, 0, pageSize),
+		InputCalories: inputProjectedCalories,
+		Items:         make([]SubstituteItem, 0, pageSize),
 	}
 	for _, r := range ranked[:min(pageSize, total)] {
 		mq := matchedQuantity(inputCalories, calories(r.profile))
 		protein := r.profile.protein * mq / 100
 		carbohydrate := r.profile.carbohydrate * mq / 100
 		fat := r.profile.fat * mq / 100
-		if !isFiniteDerived(mq) || !isFiniteDerived(protein) || !isFiniteDerived(carbohydrate) || !isFiniteDerived(fat) {
+		itemCalories := calories(r.profile) * mq / 100
+		if !isFiniteDerived(mq) || !isFiniteDerived(protein) || !isFiniteDerived(carbohydrate) || !isFiniteDerived(fat) || !isFiniteDerived(itemCalories) {
 			return nil, &Error{
 				Code: CodeInternalError,
-				cause: fmt.Errorf("food object %d: Matched Quantity %v or scaled macronutrients (%v, %v, %v) are not finite for the seeded Macro Profile",
-					r.object.id, mq, protein, carbohydrate, fat),
+				cause: fmt.Errorf("food object %d: Matched Quantity %v, scaled macronutrients (%v, %v, %v), or scaled calories %v are not finite for the seeded Macro Profile",
+					r.object.id, mq, protein, carbohydrate, fat, itemCalories),
 			}
 		}
 		matched, err := projectMatchedQuantity(mq, r.object.physicalState)
+		if err != nil {
+			return nil, &Error{
+				Code:  CodeInternalError,
+				cause: fmt.Errorf("food object %d: %w", r.object.id, err),
+			}
+		}
+		itemProjectedCalories, err := projectCalories(itemCalories)
 		if err != nil {
 			return nil, &Error{
 				Code:  CodeInternalError,
@@ -594,6 +625,7 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 			Protein:           projectMacronutrient(protein),
 			Carbohydrate:      projectMacronutrient(carbohydrate),
 			Fat:               projectMacronutrient(fat),
+			Calories:          itemProjectedCalories,
 			SimilarityPercent: projectSimilarityPercent(r.similarity),
 		})
 	}

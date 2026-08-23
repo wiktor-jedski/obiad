@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-003, REQ-060–REQ-061, REQ-073, REQ-075 |
+| Requirements | REQ-003, REQ-060–REQ-061, REQ-073, REQ-075, REQ-078–REQ-079 |
 | Dependencies | ARCH-002, ARCH-003, ARCH-008, ARCH-014–ARCH-016, ARCH-019–ARCH-021 |
 
 **Responsibility:** Render the single-page substitution interface.
@@ -82,14 +82,14 @@ The default is `1 serving` when the Food Object has a Serving. Otherwise, it is 
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-045, REQ-072 |
+| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-045, REQ-072, REQ-078 |
 | Dependencies | ARCH-006, ARCH-013, ARCH-018 |
 
 **Responsibility:** Return one deterministic page of display-ready Substitutes.
 
-**Contract:** One concrete `Run` interface accepts a Substitution Input and a zero-based page index. It returns the requested page index, total eligible count, `hasMore`, and at most three Substitute items.
+**Contract:** One concrete `Run` interface accepts a Substitution Input and a zero-based page index. It returns the requested page index, total eligible count, `hasMore`, the input macronutrients and whole display calories, and at most three Substitute items.
 
-Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, scaled protein, carbohydrate, and fat amounts to 0.1 g, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
+Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, scaled protein, carbohydrate, and fat amounts to 0.1 g, whole display calories, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
 
 ## ARCH-006 — PostgreSQL Catalog Loader
 
@@ -125,7 +125,7 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 | --- | --- |
 | Type | Interface |
 | Status | Active |
-| Requirements | REQ-001, REQ-012, REQ-025, REQ-036–REQ-037, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074 |
+| Requirements | REQ-001, REQ-012, REQ-025, REQ-036–REQ-037, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074, REQ-078 |
 | Dependencies | ARCH-004, ARCH-005, ARCH-019 |
 
 **Responsibility:** Define the browser-to-backend protocol.
@@ -141,7 +141,7 @@ The POST body contains `foodObjectId`, `quantity.value`, `quantity.unit`, and `p
 
 A successful suggestion response contains exactly five items. Each item contains `foodObjectId`, `names.en`, `names.pl`, and `defaultQuantity`.
 
-A successful Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, and zero to three items. Each item contains `foodObjectId`, both names, optional `imageKey`, `matchedQuantity`, `macronutrients`, and `similarityPercent`.
+A successful Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, `inputMacronutrients`, `inputCalories`, and zero to three items. Each item contains `foodObjectId`, both names, optional `imageKey`, `matchedQuantity`, `macronutrients`, `calories`, and `similarityPercent`.
 
 An error response contains a stable `code` and an optional `field`. It never contains localized prose, SQL text, a stack trace, or an internal cause.
 

@@ -46,6 +46,7 @@ const COPY = {
     protein: "Protein",
     carbohydrates: "Carbohydrates",
     fat: "Fat",
+    calories: "Calories",
     similarity: "Similarity",
   },
   pl: {
@@ -55,6 +56,7 @@ const COPY = {
     protein: "Białko",
     carbohydrates: "Węglowodany",
     fat: "Tłuszcz",
+    calories: "Kalorie",
     similarity: "Podobieństwo",
   },
 } as const;
@@ -69,6 +71,7 @@ interface SubstituteItem {
   imageKey?: string;
   matchedQuantity: { value: number; unit: "g" | "ml" };
   macronutrients: { protein: number; carbohydrate: number; fat: number };
+  calories: number;
   similarityPercent: number;
 }
 
@@ -180,9 +183,10 @@ async function expectCard(
   await expect(card).toContainText(
     formatMacronutrient(item.macronutrients.fat, locale),
   );
+  await expect(card).toContainText(copy.calories);
+  await expect(card).toContainText(`${item.calories} kcal`);
   await expect(card).toContainText(copy.similarity);
   await expect(card).toContainText(`${item.similarityPercent}%`);
-
   // The identical bundled placeholder image with empty alternative text
   // (REQ-011, ARCH-015, ISSUE-008): the empty supported image-key map
   // resolves every absent, seeded, or unmapped key to the placeholder.
@@ -217,6 +221,7 @@ async function expectCardFieldOrder(
     `DT|${copy.protein}`,
     `DT|${copy.carbohydrates}`,
     `DT|${copy.fat}`,
+    `DT|${copy.calories}`,
     `DT|${copy.similarity}`,
   ]);
 }

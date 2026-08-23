@@ -142,7 +142,11 @@
 </script>
 
 {#if state.name !== "empty"}
-  <div data-selected-input-region aria-busy={recalculating} class="mt-6">
+  <div
+    data-selected-input-region
+    aria-busy={recalculating}
+    class="mt-6 flex justify-center"
+  >
     <SelectedFoodSummary
       interaction={state}
       data={substitutionSearch.data}
@@ -165,18 +169,22 @@
     aria-hidden `16px` spinner (`pending`), while names, images, labels,
     and quantity-independent similarity stay visible (ISSUE-010).
   -->
-  <div
-    data-result-region
-    aria-busy={recalculating}
-    class="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3"
-  >
-    {#each substitutionSearch.data.items as item (item.foodObjectId)}
-      <ResultCard
-        {item}
-        language={state.selected.capturedLanguage}
-        pending={recalculating}
-      />
-    {/each}
+  <div data-result-region aria-busy={recalculating} class="mt-6">
+    <h2
+      data-substitutions-heading
+      class="text-center text-lg font-bold text-dark-text-primary"
+    >
+      {dictionary.foundSubstitutionsHeading()}
+    </h2>
+    <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      {#each substitutionSearch.data.items as item (item.foodObjectId)}
+        <ResultCard
+          {item}
+          language={state.selected.capturedLanguage}
+          pending={recalculating}
+        />
+      {/each}
+    </div>
   </div>
 {/if}
 {#if state.name === "zeroResults"}

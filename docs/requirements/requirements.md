@@ -773,3 +773,23 @@ This document is the source of truth for the active product requirements of the 
 | Type | Behavior |
 | Status | Active |
 | Verification | Playwright: Keyboard and pointer selection replace unfinished Search Query text with the exact returned English or Polish selected name before one Substitution Search starts. |
+
+## REQ-078 — Displayed calories
+
+**Statement:** The system shall show backend-derived whole calories in kcal for the Substitution Input and every result card.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | API and Playwright: The input and each card show the response calories with the localized `Calories` or `Kalorie` label and `kcal`; the browser does not calculate or round them. |
+
+## REQ-079 — Compact result presentation
+
+**Statement:** WHILE results are visible at a 1920 × 1080 desktop viewport, the system shall show the centered selected-food card, a centered `Found substitutions` or `Znalezione zamienniki` heading, and all first-page cards without vertical scrolling.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Quality (Usability) |
+| Status | Active |
+| Verification | Playwright: At 1920 × 1080, after a three-card result search, `scrollHeight` is not more than `clientHeight`; the selected-food card and substitutions heading are centered. |

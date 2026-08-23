@@ -62,6 +62,7 @@ type wantProjectionItem struct {
 	displayProtein      float64
 	displayCarbohydrate float64
 	displayFat          float64
+	displayCalories     int64
 	similarityPercent   int32
 }
 
@@ -77,19 +78,19 @@ var scenarioAProjections = []wantProjectionItem{
 	{
 		id: 101, cosine: 1.0, mq: 437.5, protein: 0.35, carbohydrate: 3.5, fat: 3.5,
 		matchedQuantity: 438, unit: UnitGram,
-		displayProtein: 0.4, displayCarbohydrate: 3.5, displayFat: 3.5, similarityPercent: 100,
+		displayProtein: 0.4, displayCarbohydrate: 3.5, displayFat: 3.5, displayCalories: 47, similarityPercent: 100,
 	},
 	{
 		id: 102, cosine: 0.9999999980471663, mq: 437.4632726730032,
 		protein: 0.3499706181384025, carbohydrate: 3.499706181384026, fat: 3.5001436446566987,
 		matchedQuantity: 437, unit: UnitGram,
-		displayProtein: 0.3, displayCarbohydrate: 3.5, displayFat: 3.5, similarityPercent: 100,
+		displayProtein: 0.3, displayCarbohydrate: 3.5, displayFat: 3.5, displayCalories: 47, similarityPercent: 100,
 	},
 	{
 		id: 104, cosine: 0.9977048471634474, mq: 180.16287645974185,
 		protein: 0.014413030116779349, carbohydrate: 3.603257529194837, fat: 3.603257529194837,
 		matchedQuantity: 180, unit: UnitGram,
-		displayProtein: 0.0, displayCarbohydrate: 3.6, displayFat: 3.6, similarityPercent: 100,
+		displayProtein: 0.0, displayCarbohydrate: 3.6, displayFat: 3.6, displayCalories: 47, similarityPercent: 100,
 	},
 }
 
@@ -109,19 +110,19 @@ var scenarioBProjections = []wantProjectionItem{
 		id: 103, cosine: 0.9856504098890393, mq: 437.50000000000006,
 		protein: 8.750000000000002, carbohydrate: 19.687500000000004, fat: 29.750000000000004,
 		matchedQuantity: 438, unit: UnitMillilitre,
-		displayProtein: 8.8, displayCarbohydrate: 19.7, displayFat: 29.8, similarityPercent: 99,
+		displayProtein: 8.8, displayCarbohydrate: 19.7, displayFat: 29.8, displayCalories: 382, similarityPercent: 99,
 	},
 	{
 		id: 107, cosine: 0.9637854731818697, mq: 465.2439024390244,
 		protein: 9.304878048780488, carbohydrate: 23.26219512195122, fat: 27.914634146341463,
 		matchedQuantity: 465, unit: UnitMillilitre,
-		displayProtein: 9.3, displayCarbohydrate: 23.3, displayFat: 27.9, similarityPercent: 96,
+		displayProtein: 9.3, displayCarbohydrate: 23.3, displayFat: 27.9, displayCalories: 382, similarityPercent: 96,
 	},
 	{
 		id: 108, cosine: 0.94500000000000006, mq: 341.07965651199112,
 		protein: 19.955564097289411, carbohydrate: 6.3508054590323875, fat: 30.697169086079203,
 		matchedQuantity: 341, unit: UnitMillilitre,
-		displayProtein: 20.0, displayCarbohydrate: 6.4, displayFat: 30.7, similarityPercent: 95,
+		displayProtein: 20.0, displayCarbohydrate: 6.4, displayFat: 30.7, displayCalories: 382, similarityPercent: 95,
 	},
 }
 
@@ -290,6 +291,9 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 				t.Fatalf("item %d: macronutrients are (%v, %v, %v), want (%v, %v, %v)",
 					want.id, item.Protein, item.Carbohydrate, item.Fat, want.displayProtein, want.displayCarbohydrate, want.displayFat)
 			}
+			if item.Calories != want.displayCalories {
+				t.Fatalf("item %d: calories is %d, want %d", want.id, item.Calories, want.displayCalories)
+			}
 			if item.SimilarityPercent != want.similarityPercent {
 				t.Fatalf("item %d: similarity percent is %d, want %d", want.id, item.SimilarityPercent, want.similarityPercent)
 			}
@@ -315,6 +319,18 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	// exact-half-up projection, and ordinary whole-unit, one-decimal, and
 	// whole-percentage projection, all through the concrete Run operation.
 	assertScenario(110, scenarioBProjections)
+
+	// Exact whole-calorie half: projectCalories(46.5) rounds up to 47 and
+	// projectCalories(46.49999999999999) rounds to 46 (REQ-078).
+	if cal, err := projectCalories(46.5); err != nil || cal != 47 {
+		t.Fatalf("projectCalories(46.5) = %d, %v, want 47, nil", cal, err)
+	}
+	if cal, err := projectCalories(46.49999999999999); err != nil || cal != 46 {
+		t.Fatalf("projectCalories(46.49999999999999) = %d, %v, want 46, nil", cal, err)
+	}
+	if cal, err := projectCalories(0.04); err != nil || cal != 0 {
+		t.Fatalf("projectCalories(0.04) = %d, %v, want 0, nil", cal, err)
+	}
 
 	// Exact whole-percentage half through Run (P04-G4, REQ-039): fixture
 	// 108's loaded full-precision cosine satisfies 100 × similarity == 94.5
