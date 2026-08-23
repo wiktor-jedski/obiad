@@ -23,11 +23,10 @@
  * while a committed input exists, one key change starts one fresh request,
  * and the interaction state receives only the success outcome, never the
  * response data (ARCH-002).
- *
- * For visual review before the final animation phase, each request that
- * presents card-level loading keeps that state visible for at least
- * `1000ms`. This makes spinner-driven layout changes observable.
- *
+ * Every selected-food and result-card spinner is bound directly to the real
+ * Substitution Search pending interval (task 40, ARCH-019, REQ-049). No
+ * artificial loading floor, trailing timer, or minimum duration delays the
+ * request or extends spinner presentation.
  * While a recalculation is in flight, `placeholderData: keepPreviousData`
  * keeps the previous page mounted so each card preserves its layout and
  * result image while its non-image content is hidden behind one centered
@@ -48,9 +47,6 @@ import type {
 } from "../client/types.gen";
 import type { CommittedSubstitutionInput } from "./interactionState";
 import { queryClient } from "./queryClient";
-
-/** Temporary minimum successful-search loading duration for visual review. */
-const MINIMUM_SEARCH_LOADING_DURATION_MS = 1_000;
 
 /**
  * The query-key prefix of every Substitution Search query. The full key
@@ -106,12 +102,6 @@ export interface SubstitutionSearchQueryInput {
    * the current page index, or undefined before any selection.
    */
   committed: () => CommittedSubstitutionInput | undefined;
-  /**
-   * Whether this request presents card-level loading that needs the
-   * temporary minimum review duration. MORE! paging has its own control
-   * spinner and returns false.
-   */
-  minimumCardLoadingDurationEnabled: () => boolean;
 }
 
 /**
@@ -162,30 +152,12 @@ export function createSubstitutionSearchQuery(
           if (active === undefined) {
             throw new Error("substitution search started without a selection");
           }
-          const request = searchSubstitutes({
+          return searchSubstitutes({
             foodObjectId: active.foodObjectId,
             quantity: active.quantity,
             pageIndex: active.pageIndex,
             signal,
           });
-          if (
-            !input.minimumCardLoadingDurationEnabled() ||
-            process.env.NODE_ENV === "test"
-          ) {
-            return request;
-          }
-          const { promise: minimumDuration, resolve } =
-            Promise.withResolvers<void>();
-          const minimumDurationTimer = setTimeout(
-            resolve,
-            MINIMUM_SEARCH_LOADING_DURATION_MS,
-          );
-          try {
-            const [response] = await Promise.all([request, minimumDuration]);
-            return response;
-          } finally {
-            clearTimeout(minimumDurationTimer);
-          }
         },
         enabled: committed !== undefined,
         placeholderData: keepPreviousData,

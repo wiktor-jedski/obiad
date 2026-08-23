@@ -137,7 +137,6 @@
    */
   const substitutionSearch = createSubstitutionSearchQuery({
     committed: () => committed,
-    minimumCardLoadingDurationEnabled: () => committed?.pageIndex === 0,
   });
   /**
    * Whether a valid quantity recalculation is pending (task 34,
