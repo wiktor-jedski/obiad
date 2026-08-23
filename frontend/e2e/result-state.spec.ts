@@ -323,4 +323,94 @@ test.describe("result state", () => {
     await expect(search).toBeFocused();
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
   });
+
+  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with localized labels and kcal in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+
+    await page.goto("/");
+    await selectPizzaMargherita(page);
+
+    // Centered selected-food card and centered substitutions heading (REQ-079)
+    const selectedCard = page.locator("[data-selected-food-summary]");
+    const selectedBox = (await selectedCard.boundingBox())!;
+    const cardCenter = selectedBox.x + selectedBox.width / 2;
+    expect(
+      Math.abs(cardCenter - 1920 / 2),
+      "the selected-food card is horizontally centered",
+    ).toBeLessThanOrEqual(1);
+
+    const heading = page.locator("[data-substitutions-heading]");
+    await expect(heading).toHaveText("Found substitutions");
+    const headingBox = (await heading.boundingBox())!;
+    const headingCenter = headingBox.x + headingBox.width / 2;
+    expect(
+      Math.abs(headingCenter - 1920 / 2),
+      "the substitutions heading is horizontally centered",
+    ).toBeLessThanOrEqual(1);
+
+    // All three cards are visible
+    const cards = page.locator("[data-result-card]");
+    await expect(cards).toHaveCount(CARD_COUNT);
+    for (let index = 0; index < CARD_COUNT; index += 1) {
+      await expect(cards.nth(index)).toBeVisible();
+    }
+
+    // No vertical scroll at 1920 x 1080 (REQ-079)
+    const isScrollable = await page.evaluate(
+      () =>
+        document.documentElement.scrollHeight >
+        document.documentElement.clientHeight,
+    );
+    expect(isScrollable, "page has no vertical scrollbar").toBe(false);
+
+    // English calories on input and result cards (REQ-078, P19-G5)
+    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+      "Calories",
+    );
+    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
+
+    for (let index = 0; index < CARD_COUNT; index += 1) {
+      await expect(cards.nth(index)).toContainText("Calories");
+      await expect(
+        cards.nth(index).locator("[data-result-card-calories]"),
+      ).toHaveText("875 kcal");
+    }
+
+    // Switching interface language locally translates the heading (interface text)
+    // while retaining captured active content (ISSUE-008, ARCH-003, ARCH-012).
+    await page
+      .getByRole("combobox", { name: "Interface language" })
+      .selectOption("pl");
+    await expect(page.locator("[data-substitutions-heading]")).toHaveText(
+      "Znalezione zamienniki",
+    );
+    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+      "Calories",
+    );
+
+    // A fresh search in Polish captures Polish as the active content language (P19-G3, P19-G5).
+    const searchPl = page.getByRole("combobox", { name: "Szukaj" });
+    await searchPl.fill("margherita");
+    const panelPl = page.getByRole("listbox", { name: "Podpowiedzi" });
+    await expect(panelPl).toBeVisible();
+    await page.locator(`#${PIZZA_MARGHERITA_OPTION_ID}`).click();
+    await expect(panelPl).toHaveCount(0);
+
+    await expect(page.locator("[data-substitutions-heading]")).toHaveText(
+      "Znalezione zamienniki",
+    );
+    await expect(page.locator("[data-selected-food-summary]")).toContainText(
+      "Kalorie",
+    );
+    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
+    for (let index = 0; index < CARD_COUNT; index += 1) {
+      await expect(cards.nth(index)).toContainText("Kalorie");
+      await expect(
+        cards.nth(index).locator("[data-result-card-calories]"),
+      ).toHaveText("875 kcal");
+    }
+  });
 });

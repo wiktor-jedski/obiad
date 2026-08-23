@@ -50,6 +50,7 @@ const EMPTY_RESPONSE_BODY = JSON.stringify({
   totalEligibleCount: 0,
   hasMore: false,
   inputMacronutrients: { protein: 35, carbohydrate: 105, fat: 35 },
+  inputCalories: 875,
   items: [],
 });
 

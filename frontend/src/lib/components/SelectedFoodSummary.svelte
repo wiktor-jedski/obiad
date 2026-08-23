@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SubstituteSearchResponse } from "../../client/types.gen";
   import {
+    formatCaloriesValue,
     formatFoodQuantityValue,
     formatMacronutrientValue,
     getDictionary,
@@ -130,8 +131,8 @@
   const busy = $derived(initial || recalculating);
   /** The response's input macronutrients at the committed quantity, when present. */
   const inputMacros = $derived(data?.inputMacronutrients);
-
-  /** The stable id of the associated quantity error message (ISSUE-010). */
+  /** The response's input calories at the committed quantity, when present. */
+  const inputCalories = $derived(data?.inputCalories);
   const QUANTITY_ERROR_ID = "quantity-error";
   /** The stable id of the polite editor status live region (ISSUE-010). */
   const EDITOR_STATUS_ID = "quantity-editor-status";
@@ -221,7 +222,7 @@
   data-selected-input
   data-selected-food-summary
   aria-busy={busy}
-  class="flex flex-col gap-3"
+  class="flex w-full max-w-md flex-col gap-3 rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
 >
   <!--
     Visually hidden region label and captured selection summary (ISSUE-008,
@@ -393,6 +394,22 @@
             inputMacros.fat,
             interaction.selected.capturedLanguage,
           )}
+        {/if}
+      </dd>
+    </div>
+    <div class="flex items-baseline justify-between gap-4">
+      <dt class="font-medium text-dark-text-muted">
+        {capturedDictionary.caloriesLabel()}
+      </dt>
+      <dd data-input-calories class="text-right text-dark-text-primary">
+        {#if busy || inputCalories === undefined}
+          <span
+            data-value-spinner
+            aria-hidden="true"
+            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+          ></span>
+        {:else}
+          {formatCaloriesValue(inputCalories)}
         {/if}
       </dd>
     </div>

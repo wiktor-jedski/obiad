@@ -56,8 +56,12 @@ export interface Messages {
   carbohydratesLabel: () => string;
   /** Visible label of the fat macronutrient row on a result card (task 29, ISSUE-008). */
   fatLabel: () => string;
+  /** Visible label of the calories row (task 35, REQ-078). */
+  caloriesLabel: () => string;
   /** Visible label of the Macro similarity row on a result card (task 29, ISSUE-008). */
   similarityLabel: () => string;
+  /** Centered heading above the result grid (task 35, REQ-079). */
+  foundSubstitutionsHeading: () => string;
   /** Localized result-area message for a successful empty page (task 30, REQ-044, ISSUE-008). */
   zeroResultsMessage: () => string;
 }
@@ -79,7 +83,9 @@ const en = {
   proteinLabel: () => "Protein",
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
+  caloriesLabel: () => "Calories",
   similarityLabel: () => "Similarity",
+  foundSubstitutionsHeading: () => "Found substitutions",
   zeroResultsMessage: () => "No substitutes found",
 } satisfies Messages;
 
@@ -100,7 +106,9 @@ const pl = {
   proteinLabel: () => "Białko",
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
+  caloriesLabel: () => "Kalorie",
   similarityLabel: () => "Podobieństwo",
+  foundSubstitutionsHeading: () => "Znalezione zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
 } satisfies Messages;
 
@@ -177,4 +185,18 @@ export function formatMacronutrientValue(
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} g`;
+}
+
+/**
+ * Formats one display-ready calorie value for the input card or a result card
+ * (task 35, REQ-078): whole integer followed by the invariant `kcal` unit, for
+ * example `875 kcal`. The value arrives already rounded by the backend (ARCH-001,
+ * ARCH-005); the browser never calculates or rerounds calories (REQ-078), it
+ * only formats the string for display.
+ *
+ * @param value - the backend-projected whole calorie value
+ * @returns the formatted `value kcal` string
+ */
+export function formatCaloriesValue(value: number): string {
+  return `${value} kcal`;
 }

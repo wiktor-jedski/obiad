@@ -464,6 +464,7 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 				Carbohydrate: item.Carbohydrate,
 				Fat:          item.Fat,
 			},
+			Calories:          item.Calories,
 			SimilarityPercent: item.SimilarityPercent,
 		})
 	}
@@ -476,6 +477,7 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 			Carbohydrate: page.InputMacronutrients.Carbohydrate,
 			Fat:          page.InputMacronutrients.Fat,
 		},
-		Items: items,
+		InputCalories: page.InputCalories,
+		Items:         items,
 	}
 }

@@ -296,7 +296,7 @@ test.describe("food quantity editing", () => {
     await expect(input).toBeDisabled();
     await expect(input).toHaveValue("1");
     await expect(select).toBeDisabled();
-    await expect(page.locator("[data-value-spinner]")).toHaveCount(3);
+    await expect(page.locator("[data-value-spinner]")).toHaveCount(4);
     const spinnerSize = await page
       .locator("[data-value-spinner]")
       .first()
@@ -386,11 +386,13 @@ test.describe("food quantity editing", () => {
         carbohydrate: number;
         fat: number;
       };
+      inputCalories: number;
       items: Array<{
         foodObjectId: number;
         names: { en: string };
         matchedQuantity: { value: number; unit: string };
         macronutrients: { protein: number; carbohydrate: number; fat: number };
+        calories: number;
         similarityPercent: number;
       }>;
     };
@@ -408,7 +410,9 @@ test.describe("food quantity editing", () => {
     await expect(page.locator("[data-input-macro-fat]")).toHaveText(
       formatMacronutrient(first.inputMacronutrients.fat, "en"),
     );
-
+    await expect(page.locator("[data-input-calories]")).toHaveText(
+      `${first.inputCalories} kcal`,
+    );
     // Edit the enabled quantity after the first result page loads
     // (REQ-027): two Servings commit through Enter and start exactly one
     // fresh request with the same Food Object ID, the selected unit, the
@@ -490,6 +494,16 @@ test.describe("food quantity editing", () => {
       2,
       0.1,
       "input fat",
+    );
+    expectProportional(
+      second.inputCalories,
+      first.inputCalories,
+      2,
+      1,
+      "input calories",
+    );
+    await expect(page.locator("[data-input-calories]")).toHaveText(
+      `${second.inputCalories} kcal`,
     );
 
     // The rendered summary shows only the current response's backend
@@ -770,11 +784,11 @@ test.describe("food quantity editing", () => {
     const summarySpinners = page.locator(
       "[data-selected-food-summary] [data-value-spinner]",
     );
-    await expect(summarySpinners).toHaveCount(3);
+    await expect(summarySpinners).toHaveCount(4);
     const cardSpinners = page.locator(
       "[data-result-card] [data-value-spinner]",
     );
-    await expect(cardSpinners).toHaveCount(3 * 4);
+    await expect(cardSpinners).toHaveCount(3 * 5);
     const spinnerSize = await summarySpinners.first().evaluate((element) => ({
       width: (element as HTMLElement).offsetWidth,
       height: (element as HTMLElement).offsetHeight,
@@ -823,6 +837,7 @@ test.describe("food quantity editing", () => {
         carbohydrate: number;
         fat: number;
       };
+      inputCalories: number;
     };
     await expect(page.locator("[data-input-macro-protein]")).toHaveText(
       formatMacronutrient(second.inputMacronutrients.protein, "en"),
@@ -832,6 +847,9 @@ test.describe("food quantity editing", () => {
     );
     await expect(page.locator("[data-input-macro-fat]")).toHaveText(
       formatMacronutrient(second.inputMacronutrients.fat, "en"),
+    );
+    await expect(page.locator("[data-input-calories]")).toHaveText(
+      `${second.inputCalories} kcal`,
     );
     await expect(
       page.locator("[data-selected-input-region]"),

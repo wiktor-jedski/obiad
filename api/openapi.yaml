@@ -145,12 +145,12 @@ paths:
           description: >
             The first page of display-ready Substitutes: the echoed page
             index, the total number of eligible Substitutes, whether a later
-            page exists, the backend-derived macronutrients of the
-            Substitution Input at the committed quantity, and zero to three
-            unique items with stable Food Object IDs, both localized names,
-            the optional image key, the whole Matched Quantity, the scaled
-            macronutrients, and the whole similarity percentage. The envelope
-            has no unknown fields.
+            page exists, the backend-derived macronutrients and whole calories
+            of the Substitution Input at the committed quantity, and zero to
+            three unique items with stable Food Object IDs, both localized
+            names, the optional image key, the whole Matched Quantity, the
+            scaled macronutrients, whole calories, and the whole similarity
+            percentage. The envelope has no unknown fields.
           content:
             application/json:
               schema:
@@ -432,15 +432,16 @@ components:
       description: >
         The closed page-0 response: the echoed page index, the total number of
         eligible Substitutes, whether a later page exists, the backend-derived
-        macronutrients of the Substitution Input at the committed quantity,
-        and zero to three unique display-ready items. The envelope has no
-        unknown fields.
+        macronutrients and whole calories of the Substitution Input at the
+        committed quantity, and zero to three unique display-ready items. The
+        envelope has no unknown fields.
       type: object
       required:
         - pageIndex
         - totalEligibleCount
         - hasMore
         - inputMacronutrients
+        - inputCalories
         - items
       additionalProperties: false
       properties:
@@ -467,6 +468,16 @@ components:
             the committed Food Quantity, rounded to 0.1 g by the same backend
             display projection as the result cards (ISSUE-010).
           $ref: "#/components/schemas/Macronutrients"
+        inputCalories:
+          description: >
+            The whole display calories of the Substitution Input at the
+            committed Food Quantity, calculated from full-precision scaled
+            Macro Profile as 4 * protein + 4 * carbohydrate + 9 * fat and
+            rounded to the nearest whole integer by the backend display
+            projection (REQ-078). Nonnegative 64-bit integer.
+          type: integer
+          format: int64
+          minimum: 0
         items:
           description: The first page of zero to three unique display-ready Substitutes.
           type: array
@@ -487,6 +498,7 @@ components:
         - names
         - matchedQuantity
         - macronutrients
+        - calories
         - similarityPercent
       additionalProperties: false
       properties:
@@ -507,6 +519,16 @@ components:
           $ref: "#/components/schemas/MatchedQuantity"
         macronutrients:
           $ref: "#/components/schemas/Macronutrients"
+        calories:
+          description: >
+            The whole display calories of the Substitute at the unrounded
+            Matched Quantity, calculated from full-precision scaled Macro
+            Profile as 4 * protein + 4 * carbohydrate + 9 * fat and rounded
+            to the nearest whole integer by the backend display
+            projection (REQ-078). Nonnegative 64-bit integer.
+          type: integer
+          format: int64
+          minimum: 0
         similarityPercent:
           description: >
             The Macro similarity of the candidate to the input, rounded to a

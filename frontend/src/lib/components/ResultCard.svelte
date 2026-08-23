@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { SubstituteItem } from "../../client/types.gen";
   import { foodPlaceholderUrl, resolveFoodImage } from "../assets";
-  import { formatMacronutrientValue, getDictionary } from "../i18n";
+  import {
+    formatCaloriesValue,
+    formatMacronutrientValue,
+    getDictionary,
+  } from "../i18n";
   import type { InterfaceLanguage } from "../i18n";
 
   /**
@@ -161,6 +165,22 @@
             ></span>
           {:else}
             {formatMacronutrientValue(item.macronutrients.fat, language)}
+          {/if}
+        </dd>
+      </div>
+      <div class="flex items-baseline justify-between gap-4">
+        <dt class="font-medium text-dark-text-muted">
+          {dictionary.caloriesLabel()}
+        </dt>
+        <dd data-result-card-calories class="text-right text-dark-text-primary">
+          {#if pending}
+            <span
+              data-value-spinner
+              aria-hidden="true"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+            ></span>
+          {:else}
+            {formatCaloriesValue(item.calories)}
           {/if}
         </dd>
       </div>
