@@ -30,8 +30,10 @@
 // equal-calorie Matched Quantity of every eligible Substitution candidate,
 // excludes the input and its Food Family, orders the candidates by
 // decreasing unrounded similarity, the ISSUE-004-pinned English collation,
-// and stable Food Object ID, and returns the page-0 total eligible count,
-// hasMore, and the first three unique items. The Module's exported surface
+// and stable Food Object ID, and returns the requested page with total
+// eligible count, hasMore, and zero to three unique items; page 0 is valid
+// when zero eligible Substitutes exist, and a nonzero page whose first rank
+// does not exist returns PAGE_OUT_OF_RANGE. The Module's exported surface
 // is the concrete FindSubstitutePage type, its domain values, and its
 // stable failure codes; the calorie, cosine, and Matched Quantity
 // calculations and the ranking internals stay private, and no generated

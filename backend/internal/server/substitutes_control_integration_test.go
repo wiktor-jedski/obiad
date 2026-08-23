@@ -26,7 +26,7 @@ package server
 // failures (400 INVALID_REQUEST with the exact field or omission), the
 // semantic quantity, unit, Serving, and range failures (the specific 422
 // stable codes with their exact ISSUE-005 fields), and PAGE_OUT_OF_RANGE for
-// every nonzero page index. The failures test proves every applicable
+// out-of-range nonzero page indexes. The failures test proves every applicable
 // stable server error — 400, 404, 413, 422, 503, 504, and 500 — with the
 // exact ISSUE-005 field or omission and no response leakage, in isolated
 // real database-outage, pool-blocking, deadline, and catalog-invariant
@@ -153,7 +153,7 @@ func partialRawRequest(t *testing.T, addr, head string) httpResult {
 // 100,001 boundaries; a nonpositive Food Object ID as
 // 400 INVALID_REQUEST with foodObjectId; a negative page as
 // 422 INVALID_PAGE_INDEX with pageIndex; and PAGE_OUT_OF_RANGE with
-// pageIndex for every nonzero page (P04-G2, P04-G4).
+// pageIndex for out-of-range nonzero pages (P04-G2, P04-G4, P11-G1).
 func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
@@ -439,13 +439,17 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType, `{"foodObjectId":32,"quantity":{"value":1000,"unit":"serving"},"pageIndex":0}`)
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 
-	// Page index failures: a negative page returns
-	// 422 INVALID_PAGE_INDEX with pageIndex, and every nonzero page —
-	// including the minimum page 1, the page-size boundary 3, and the
-	// int32 maximum — returns 422 PAGE_OUT_OF_RANGE with pageIndex until
-	// Phase 11 (ISSUE-005).
+	// Page index validation: negative page returns 422 INVALID_PAGE_INDEX with
+	// pageIndex; valid intermediate and last pages return 200; out-of-range
+	// pages (the first page after the last page and math.MaxInt32) return 422
+	// PAGE_OUT_OF_RANGE with pageIndex.
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":-1}`), http.StatusUnprocessableEntity, "INVALID_PAGE_INDEX", "pageIndex")
-	for _, page := range []string{"1", "2", "3", "2147483647"} {
+	for _, page := range []string{"1", "2", "3", "11"} {
+		body := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":` + page + `}`
+		status, body, contentType = postSubstitutes(t, baseURL, jsonType, body)
+		assertSubstituteSuccessEnvelope(t, status, body, contentType)
+	}
+	for _, page := range []string{"12", "13", "2147483647"} {
 		body := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":` + page + `}`
 		assertError(t, postSubstitutesResult(t, baseURL, jsonType, body), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
 	}
@@ -528,7 +532,7 @@ func TestSubstituteSearchFailuresHTTPIntegration(t *testing.T) {
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":9999,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
 	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":1}`), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":12}`), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
 
 	// Isolated storage outage: the admin drops the disposable database,
 	// terminating every backend including the pool's connections. Both a

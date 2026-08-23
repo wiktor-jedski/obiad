@@ -12,11 +12,11 @@ import { expect, test, type Page } from "@playwright/test";
  * The scenario drives the production editable selected-food summary over
  * task 33's generated contract and observes:
  *
- *   - the complete disabled initial summary with three compact spinners
+ *   - the complete disabled initial summary with one centered card spinner
  *     and the localized `Loading nutrition values` status for seeded
  *     solid-Serving, liquid-Serving, solid-base-only, and liquid-base-only
  *     inputs, then the enabled editor after the first result page loads
- *     (P10-G2, REQ-027);
+ *     (P10-G2, REQ-027, REQ-081);
  *   - the default-first and current-first two-unit selector orders, the
  *     plural `servings` / `porcje` Serving labels, and the static single
  *     base units of base-only inputs (P10-G2);
@@ -31,11 +31,10 @@ import { expect, test, type Page } from "@playwright/test";
  *     entered numeric value equals the committed value (P10-G3);
  *   - one delayed recalculation per changed commit — one request with the
  *     selected Food Object ID, selected unit, committed or clamped number,
- *     and unchanged current page — with controls enabled, one localized
- *     busy status, and aria-hidden `16px` spinners in every
- *     quantity-dependent selected-food and card value while names, images,
- *     labels, and quantity-independent similarity stay visible (P10-G7,
- *     REQ-028); and
+ *     and unchanged current page — with one localized busy status, exactly
+ *     one centered spinner per card, hidden non-image card content, visible
+ *     result images, and unchanged card dimensions (P10-G7, REQ-028,
+ *     REQ-081); and
  *   - the response page index and ordered Food Object IDs equal the first
  *     page, and rendered card-name order matches those IDs (P10-G8).
  *
@@ -257,7 +256,7 @@ function expectProportional(
 }
 
 test.describe("food quantity editing", () => {
-  test("the four seeded input kinds render the complete disabled initial summary with three compact spinners and the localized loading status, then the default-first selector order, plural serving labels, and static single base units", async ({
+  test("the four seeded input kinds render one centered spinner over the hidden disabled initial summary with the localized loading status, then the default-first selector order, plural serving labels, and static single base units", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -267,10 +266,8 @@ test.describe("food quantity editing", () => {
     // the real Fiber and PostgreSQL response stays pending while the
     // initial disabled summary is observed (P10-G2, REQ-027).
     let postCount = 0;
-    let releaseFirst: () => void = () => {};
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const { promise: firstGate, resolve: releaseFirst } =
+      Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
       postCount += 1;
       if (postCount === 1) {
@@ -285,26 +282,24 @@ test.describe("food quantity editing", () => {
     // 350 g Serving, default 1 serving), held in the pending transition.
     await selectFoodObjectPending(page, "margherita", 1, COPY.en);
 
-    // The complete disabled initial summary: the captured name row, the
-    // disabled number field and unit selector, three compact spinners in
-    // the input-macronutrient value positions, the region marked busy, and
-    // the polite `Loading nutrition values` status (ISSUE-010, P10-G2).
+    // The complete disabled initial summary keeps its layout but hides its
+    // card content behind one centered aria-hidden spinner and retains the
+    // polite `Loading nutrition values` status (P10-G2, REQ-081).
     const input = numberInput(page);
     const select = unitSelect(page);
-    await expect(summary(page)).toContainText("Pizza Margherita");
-    await expect(input).toBeVisible();
+    const selectedContent = summary(page).locator("[data-card-content]");
+    const selectedSpinner = summary(page).locator("[data-card-spinner]");
+    await expect(selectedContent).toHaveCSS("opacity", "0");
     await expect(input).toBeDisabled();
     await expect(input).toHaveValue("1");
     await expect(select).toBeDisabled();
-    await expect(page.locator("[data-value-spinner]")).toHaveCount(4);
-    const spinnerSize = await page
-      .locator("[data-value-spinner]")
-      .first()
-      .evaluate((element) => ({
-        width: (element as HTMLElement).offsetWidth,
-        height: (element as HTMLElement).offsetHeight,
-        ariaHidden: element.getAttribute("aria-hidden"),
-      }));
+    await expect(selectedSpinner).toHaveCount(1);
+    await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
+    const spinnerSize = await selectedSpinner.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+      ariaHidden: element.getAttribute("aria-hidden"),
+    }));
     expect(spinnerSize).toEqual({ width: 16, height: 16, ariaHidden: "true" });
     await expect(summary(page)).toHaveAttribute("aria-busy", "true");
     await expect(editorStatus(page)).toHaveText(COPY.en.loadingNutritionValues);
@@ -318,6 +313,8 @@ test.describe("food quantity editing", () => {
       "data-interaction-state",
       "results",
     );
+    await expect(selectedContent).toHaveCSS("opacity", "1");
+    await expect(selectedSpinner).toHaveCount(0);
     await expect(input).toBeEnabled();
     await expect(select).toBeEnabled();
     await expect(input).toHaveValue("1");
@@ -734,7 +731,7 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(postsAfterSelection + 5);
   });
 
-  test("a delayed valid recalculation leaves the controls enabled, exposes one localized busy status, and puts aria-hidden 16px spinners in every quantity-dependent selected-food and card value while names, images, labels, and similarity stay visible", async ({
+  test("a delayed valid recalculation keeps settled card sizes, exposes one localized busy status, hides each card's non-image content, and shows one centered aria-hidden 16px spinner per card while result images stay visible", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -743,10 +740,8 @@ test.describe("food quantity editing", () => {
     // Hold the second Substitution Search POST (the recalculation) at the
     // browser boundary so the pending state can be observed (P10-G7).
     let postCount = 0;
-    let releaseSecond: () => void = () => {};
-    const secondGate = new Promise<void>((resolve) => {
-      releaseSecond = resolve;
-    });
+    const { promise: secondGate, resolve: releaseSecond } =
+      Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
       postCount += 1;
       if (postCount === 2) {
@@ -758,43 +753,60 @@ test.describe("food quantity editing", () => {
     await page.goto("/");
     await selectFoodObject(page, "margherita", 1, COPY.en);
     await expect.poll(() => posts[0]?.response).toBeTruthy();
-    const first = posts[0]?.response as {
-      inputMacronutrients: { protein: number };
-      items: Array<{
-        names: { en: string };
-        similarityPercent: number;
-      }>;
-    };
-    const firstSimilarities = first.items.map((item) => item.similarityPercent);
+    const cards = page.locator("[data-result-card]");
+    const selectedCard = summary(page);
+    const settledSelectedCardSize = await selectedCard.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+    }));
+    const settledCardSizes = await cards.evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: (element as HTMLElement).offsetWidth,
+        height: (element as HTMLElement).offsetHeight,
+      })),
+    );
 
     // Commit a changed quantity; the recalculation is held at the browser
-    // boundary. During the pending interval the controls stay enabled, the
-    // combined region stays busy with one `Updating quantities` status,
-    // and every quantity-dependent value — the three summary macronutrients
-    // and each card's Matched Quantity, protein, carbohydrate, and fat —
-    // is replaced by an aria-hidden 16px spinner, while names, images,
-    // labels, and quantity-independent similarity stay visible (P10-G7,
-    // ISSUE-010).
+    // boundary. During the pending interval the combined region stays busy
+    // with one `Updating quantities` status. Each selected-food and result
+    // card hides its complete non-image content behind one centered,
+    // aria-hidden 16px spinner while preserving its settled dimensions and
+    // keeping result images visible (P10-G7, REQ-081, ISSUE-010).
     const input = numberInput(page);
     await input.fill("2");
     await commitWithEnter(input);
     await expect(input).toBeEnabled();
     await expect(unitSelect(page)).toBeEnabled();
 
-    const summarySpinners = page.locator(
-      "[data-selected-food-summary] [data-value-spinner]",
-    );
-    await expect(summarySpinners).toHaveCount(4);
-    const cardSpinners = page.locator(
-      "[data-result-card] [data-value-spinner]",
-    );
-    await expect(cardSpinners).toHaveCount(3 * 5);
-    const spinnerSize = await summarySpinners.first().evaluate((element) => ({
+    const selectedSpinner = selectedCard.locator("[data-card-spinner]");
+    await expect(selectedSpinner).toHaveCount(1);
+    const resultSpinners = cards.locator("[data-card-spinner]");
+    await expect(resultSpinners).toHaveCount(3);
+    await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
+    const spinnerSize = await selectedSpinner.evaluate((element) => ({
       width: (element as HTMLElement).offsetWidth,
       height: (element as HTMLElement).offsetHeight,
       ariaHidden: element.getAttribute("aria-hidden"),
     }));
     expect(spinnerSize).toEqual({ width: 16, height: 16, ariaHidden: "true" });
+    const pendingCardSizes = await cards.evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: (element as HTMLElement).offsetWidth,
+        height: (element as HTMLElement).offsetHeight,
+      })),
+    );
+    const pendingSelectedCardSize = await selectedCard.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+    }));
+    expect(
+      pendingSelectedCardSize,
+      "the single spinner does not resize the settled selected-food card",
+    ).toEqual(settledSelectedCardSize);
+    expect(
+      pendingCardSizes,
+      "single spinners do not resize settled result cards",
+    ).toEqual(settledCardSizes);
     await expect(page.locator("[data-selected-input-region]")).toHaveAttribute(
       "aria-busy",
       "true",
@@ -805,31 +817,34 @@ test.describe("food quantity editing", () => {
     );
     await expect(editorStatus(page)).toHaveText(COPY.en.updatingQuantities);
 
-    // Names, images, labels, and similarity stay visible during the
-    // recalculation (P10-G7).
-    const cards = page.locator("[data-result-card]");
+    // Every card hides its non-image content while result images stay
+    // visible during recalculation (P10-G7, REQ-081).
+    const selectedContent = selectedCard.locator("[data-card-content]");
+    await expect(selectedContent).toHaveCSS("opacity", "0");
     await expect(cards).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) {
-      await expect(cards.nth(index).getByRole("heading")).toHaveText(
-        first.items[index].names.en,
+      await expect(cards.nth(index).locator("[data-card-content]")).toHaveCSS(
+        "opacity",
+        "0",
       );
       await expect(
         cards.nth(index).locator("[data-result-card-image]"),
       ).toBeVisible();
-      await expect(cards.nth(index)).toContainText(COPY.en.protein);
-      await expect(cards.nth(index)).toContainText(
-        `${firstSimilarities[index]}%`,
+    }
+
+    // Fulfillment removes the card spinners, restores card content, renders
+    // only the current response's backend values, and clears the busy
+    // status (P10-G7, REQ-028, REQ-081).
+    releaseSecond();
+    await expect(selectedSpinner).toHaveCount(0);
+    await expect(resultSpinners).toHaveCount(0);
+    await expect(selectedContent).toHaveCSS("opacity", "1");
+    for (let index = 0; index < 3; index += 1) {
+      await expect(cards.nth(index).locator("[data-card-content]")).toHaveCSS(
+        "opacity",
+        "1",
       );
     }
-    await expect(summary(page)).toContainText("Pizza Margherita");
-
-    // Fulfillment renders only the current response's backend values: the
-    // spinners disappear, the summary shows the two-serving input
-    // macronutrients, the cards show the doubled values, and the busy
-    // status clears (P10-G7, REQ-028).
-    releaseSecond();
-    await expect(summarySpinners).toHaveCount(0);
-    await expect(cardSpinners).toHaveCount(0);
     await expect.poll(() => posts[1]?.response).toBeTruthy();
     const second = posts[1]?.response as {
       inputMacronutrients: {

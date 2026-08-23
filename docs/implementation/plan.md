@@ -286,7 +286,7 @@ Phases 4 and 6.
 - Select a suggestion with a pointer.
 - Replace the Search Query text with the selected suggestion's active-language name before starting the search.
 - Send page 0 with the returned default Food Quantity.
-- Show the new-search spinner below the Search control.
+- Do not show a spinner below the Search control while a new search is pending.
 - Show the selected Substitution Input.
 - Show zero or three result cards.
 - Use the result-state layout.
@@ -312,7 +312,7 @@ Phases 4 and 6.
 - [REQ-037](../requirements/requirements.md#req-037--card-data)
 - [REQ-038](../requirements/requirements.md#req-038--base-unit-matched-quantity)
 - [REQ-044](../requirements/requirements.md#req-044--zero-result-state)
-- [REQ-046](../requirements/requirements.md#req-046--search-spinner)
+- [REQ-080](../requirements/requirements.md#req-080--no-search-loading-spinner)
 - [REQ-061](../requirements/requirements.md#req-061--result-state-layout)
 - [REQ-064](../requirements/requirements.md#req-064--search-focus)
 - [REQ-077](../requirements/requirements.md#req-077--selected-suggestion-in-search)
@@ -403,6 +403,7 @@ Phase 7.
 - Request the current page after a valid commit.
 - Update result values after a valid commit.
 - Keep result IDs, order, and page.
+- While values are pending, preserve each card's size and result image, hide its non-image content, and show one centered spinner per card.
 
 **Requirements that become testable**
 
@@ -410,10 +411,11 @@ Phase 7.
 - [REQ-026](../requirements/requirements.md#req-026--invalid-quantity)
 - [REQ-027](../requirements/requirements.md#req-027--quantity-editing)
 - [REQ-028](../requirements/requirements.md#req-028--quantity-recalculation)
+- [REQ-081](../requirements/requirements.md#req-081--single-card-loading-spinner)
 
 **Phase gate**
 
-Run `bun test` and `bun run test:e2e` from `frontend/`. Change the Food Quantity after the first result page loads. Check valid base-unit integers and dot-decimal Serving counts. Reject fractional base values, comma decimals, zero, negatives, empty text, and letters. Verify that invalid text, focus, and localized messages remain visible. Verify zero requests for invalid values. Verify that valid changes produce proportional values. Verify that result IDs, order, and page do not change.
+Run `bun test` and `bun run test:e2e` from `frontend/`. Change the Food Quantity after the first result page loads. Check valid base-unit integers and dot-decimal Serving counts. Reject fractional base values, comma decimals, zero, negatives, empty text, and letters. Verify that invalid text, focus, and localized messages remain visible. Verify zero requests for invalid values. Verify that valid changes produce proportional values. Verify that result IDs, order, and page do not change. While values are pending, verify exactly one centered spinner per card, hidden non-image content, visible result images, and unchanged card dimensions.
 
 **Review stop**
 
@@ -433,7 +435,7 @@ Phases 7 and 10.
 
 - Complete valid later-page behavior in ARCH-018.
 - Add the MORE! control.
-- Show the MORE! spinner inside the control.
+- Keep the localized MORE! label and show the control as gray and non-operable while its request is pending.
 - Replace current cards with the requested page.
 - Hide MORE! on the last page.
 - Reset a new Substitution Search to page 0.
@@ -452,7 +454,7 @@ Phases 7 and 10.
 - [REQ-042](../requirements/requirements.md#req-042--unique-substitutes)
 - [REQ-043](../requirements/requirements.md#req-043--last-result-page)
 - [REQ-045](../requirements/requirements.md#req-045--new-search-reset)
-- [REQ-047](../requirements/requirements.md#req-047--more-spinner)
+- [REQ-082](../requirements/requirements.md#req-082--pending-more-control)
 - [REQ-065](../requirements/requirements.md#req-065--more-focus)
 - [REQ-066](../requirements/requirements.md#req-066--last-page-focus)
 - [REQ-072](../requirements/requirements.md#req-072--test-designed-nutrition)
@@ -460,7 +462,7 @@ Phases 7 and 10.
 
 **Phase gate**
 
-Run `go test ./...` from `backend/`. Verify the full-precision ID order and all documented scores and quantities. Verify that all pages exclude the Substitution Input and the Substitution Input's Food Family. Run `bun run test:e2e` from `frontend/`. Keep a real MORE! request pending and verify that the spinner replaces the label until the request ends. Check full and partial last pages. Verify replacement instead of append. Verify that all result IDs across all pages are unique. Verify intermediate-page focus, last-page heading focus, and expected ranks 1 through 3 after a new Search from page 2.
+Run `go test ./...` from `backend/`. Verify the full-precision ID order and all documented scores and quantities. Verify that all pages exclude the Substitution Input and the Substitution Input's Food Family. Run `bun run test:e2e` from `frontend/`. Keep a real MORE! request pending and verify that the focused control retains its localized label, becomes gray and `aria-disabled`, and accepts no additional activation until the request ends. Check full and partial last pages. Verify replacement instead of append. Verify that all result IDs across all pages are unique. Verify intermediate-page MORE! focus, last-page results-heading focus, and a new Food Object selected from page 2 resetting to page 0.
 
 **Review stop**
 

@@ -9,7 +9,7 @@
 // it through pool Acquire and the concrete Find Substitute Page Run
 // operation to pgx, maps every failure to the ISSUE-005-resolved stable
 // HTTP status, code, and optional field, and serializes the exact
-// generated page-0 SubstituteSearchResponse envelope with omitted-not-null
+// generated SubstituteSearchResponse envelope with omitted-not-null
 // optional image keys. Generated transport values never enter the Module,
 // and Module domain values never reach the wire un-mapped (ISSUE-005).
 
@@ -53,7 +53,7 @@ const maxRequestBodyBytes = 4096
 // context (ARCH-019) and passes it through pool Acquire and the concrete
 // Find Substitute Page Run operation to pgx, maps every failure to the
 // ISSUE-005-resolved stable status, code, and optional field, and
-// serializes the exact generated page-0 envelope with omitted-not-null
+// serializes the exact generated envelope with omitted-not-null
 // optional image keys. Generated transport values never enter the Module
 // (ARCH-008).
 func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
@@ -180,7 +180,7 @@ func substituteRunError(err error) (status int, code transport.ErrorCode, field 
 		case repository.CodeInvalidPageIndex:
 			return fiber.StatusUnprocessableEntity, transport.INVALIDPAGEINDEX, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is negative", moduleErr.Field)
 		case repository.CodePageOutOfRange:
-			return fiber.StatusUnprocessableEntity, transport.PAGEOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is out of range: only page 0 exists until Phase 11", moduleErr.Field)
+			return fiber.StatusUnprocessableEntity, transport.PAGEOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is out of range", moduleErr.Field)
 		case repository.CodeCatalogUnavailable:
 			return fiber.StatusServiceUnavailable, transport.CATALOGUNAVAILABLE, nil, err.Error()
 		case repository.CodeInternalError:

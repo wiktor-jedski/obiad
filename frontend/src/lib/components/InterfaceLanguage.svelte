@@ -11,8 +11,9 @@
    *
    * The native select exposes the active language code and a small visual
    * chevron while preserving native pointer and keyboard interaction. It is
-   * absolutely positioned at the responsive page gutter, so it does not move
-   * the Search field from its established vertical center.
+   * absolutely positioned `16px` from the viewport top and at the responsive
+   * right page gutter, so it does not move the Search field from its
+   * established vertical center.
    */
 
   /** The active Interface Language from the persisted store. */
@@ -30,7 +31,7 @@
 
 <div
   data-interface-language
-  class="absolute right-4 top-4 flex h-11 items-center sm:right-6 sm:top-6 lg:right-8 lg:top-8"
+  class="absolute right-4 top-4 flex h-11 items-center sm:right-6 lg:right-8"
 >
   <select
     aria-label={dictionary.interfaceLanguage()}

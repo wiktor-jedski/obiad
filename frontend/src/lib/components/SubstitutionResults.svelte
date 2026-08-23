@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import ResultCard from "./ResultCard.svelte";
   import SelectedFoodSummary from "./SelectedFoodSummary.svelte";
   import { getDictionary } from "../i18n";
@@ -7,20 +8,20 @@
   import { createSubstitutionSearchQuery } from "../substitutionSearch";
 
   /**
-   * Result-state composition (task 30; ARCH-001, ARCH-002, ARCH-003,
-   * ARCH-011, ARCH-019, ARCH-020, ARCH-022, REQ-003, REQ-036, REQ-037,
-   * REQ-044, REQ-061, ISSUE-008) with the ISSUE-010 editable selected-food
-   * summary and quantity recalculation (task 34, ARCH-018, REQ-027,
-   * REQ-028).
+   * Result-state composition (task 30, task 37, task 38; ARCH-001, ARCH-002,
+   * ARCH-003, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022, REQ-003,
+   * REQ-036, REQ-037, REQ-041, REQ-042, REQ-043, REQ-044, REQ-045, REQ-047,
+   * REQ-058, REQ-061, REQ-062, REQ-065, REQ-066, ISSUE-008, ISSUE-010,
+   * ISSUE-011) with the ISSUE-010 editable selected-food summary and quantity
+   * recalculation (task 34, ARCH-018, REQ-027, REQ-028).
    *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
    * Search query and renders the selected-input, result-card, and
    * zero-result regions after the Search region. It stays mounted from
-   * selection onward: from `loadingNew` the initial summary is already
-   * visible with disabled controls, the new-search spinner lives in the
-   * Search region `12px` below the field (REQ-046), and each region here
-   * follows at `24px` intervals (ISSUE-008).
+   * selection onward: from `loadingNew`, the initial summary is visible with
+   * disabled controls. Each region follows the Search field at `24px`
+   * intervals without a separate spinner below Search (REQ-080, ISSUE-008).
    *
    * TanStack Query owns the HTTP response data and pending state; the
    * interaction state receives only the success outcome through
@@ -30,11 +31,11 @@
    * valid commit replaces the committed quantity and starts one fresh
    * generated-client request with the same Food Object ID and current page
    * (REQ-027, REQ-028). While that recalculation is pending,
-   * `placeholderData: keepPreviousData` retains the previous page so the
-   * summary and cards keep names, images, labels, and quantity-independent
-   * similarity visible while every quantity-dependent value shows an
-   * aria-hidden `16px` spinner and the combined region stays busy with one
-   * polite `Updating quantities` announcement (ISSUE-010). The transition
+   * `placeholderData: keepPreviousData` retains the previous page. Each
+   * selected-food and result card keeps its layout and result image, hides
+   * its non-image content, and shows one centered, aria-hidden `16px`
+   * spinner while the combined region stays busy with one polite `Updating
+   * quantities` announcement (REQ-081, ISSUE-010). The transition
    * effect fires only for the current response — never for retained
    * placeholder data — so the union reaches `results`/`zeroResults` exactly
    * once per new selection.
@@ -46,14 +47,35 @@
    * substitutes found` or `Nie znaleziono zamienników` (REQ-044). The
    * message, selected-food summary, and cards follow the active Interface
    * Language dictionary and localized Food Object names (ARCH-003,
-   * REQ-058). There is no MORE!, failure state, result announcement, or card
-   * motion here; Phase 12 owns request-failure presentation.
+   * REQ-058).
+   *
+   * Task 37 and Task 38 complete MORE! result paging (REQ-041, REQ-043,
+   * REQ-045, REQ-065, REQ-066, REQ-082). Whenever a later page exists
+   * (`hasMore: true`), one visible and accessibly named `MORE!` button is
+   * rendered after the result grid. While a next-page request is pending
+   * (`loadingMore`), the focused control keeps its localized label, becomes
+   * gray and `aria-disabled`, and its guarded handler accepts no additional
+   * activation (REQ-082). On intermediate success (`hasMore: true`), the
+   * requested page's cards replace the previous cards and focus stays on
+   * the MORE! button (REQ-041, REQ-065). On final-page success
+   * (`hasMore: false`), the
+   * remaining one to three cards are rendered, MORE! is omitted, and
+   * programmatic focus moves to the stable results heading (REQ-043,
+   * REQ-066). When the user selects a new Food Object from any page, the
+   * interaction state commits page 0 (REQ-045).
    */
 
-  /** The current discriminated interaction state (ARCH-002). */
-  const state = $derived($interactionState);
+  /**
+   * The current discriminated interaction state (ARCH-002). It is named
+   * `interaction`, not `state`, so the `$state` runes below are never
+   * shadowed by a store-like identifier (svelte-check resolves `$state` as
+   * a legacy store subscription when a variable named `state` is in scope).
+   */
+  const interaction = $derived($interactionState);
   /** The active dictionary for the localized zero-result message (ARCH-003). */
   const dictionary = $derived(getDictionary($interfaceLanguage));
+  /** Reference to the stable results heading for last-page focus (REQ-066). */
+  let headingElement: HTMLHeadingElement | null = $state(null);
   /**
    * The primitive pieces of the committed Substitution Search input
    * (task 34, ISSUE-010). They are derived separately so the committed
@@ -65,7 +87,9 @@
    * never re-subscribes the query observer and never starts a second
    * request (ARCH-019, REQ-022).
    */
-  const searchState = $derived(state.name === "empty" ? undefined : state);
+  const searchState = $derived(
+    interaction.name === "empty" ? undefined : interaction,
+  );
   const committedFoodObjectId = $derived(searchState?.selected.foodObjectId);
   const committedQuantityValue = $derived(searchState?.committedValue);
   const committedQuantityUnit = $derived(searchState?.committedUnit);
@@ -104,72 +128,103 @@
    */
   const substitutionSearch = createSubstitutionSearchQuery({
     committed: () => committed,
+    minimumCardLoadingDurationEnabled: () => interaction.name !== "loadingMore",
   });
 
   /**
    * Whether a valid quantity recalculation is pending (task 34,
    * ISSUE-010): a completed result transition is visible while TanStack
    * Query holds the retained previous page as placeholder data for the
-   * fresh committed-quantity key. Controls stay enabled, the combined
-   * region stays busy, and quantity-dependent values show spinners.
+   * fresh committed-quantity key. The combined region stays busy while each
+   * card hides its non-image content behind one centered spinner (REQ-081).
    */
   const recalculating = $derived(
-    state.name !== "loadingNew" && substitutionSearch.isPlaceholderData,
+    interaction.name === "results" && substitutionSearch.isPlaceholderData,
   );
 
   /**
-   * Result transition (task 28, ARCH-002): the first page-0 response data
-   * arriving while the state is `loadingNew` transitions the union to
-   * `results` when the page contains items and to `zeroResults` when it is
-   * empty. The response data itself stays in TanStack Query; the store
-   * receives only the outcome, and the spinner covers the complete pending
-   * interval. The guard on `isPlaceholderData` (task 34) keeps retained
-   * previous-page rows — visible while a fresh selection or recalculation
-   * is pending — from ever driving a transition.
+   * Result transition (task 28, task 37, task 38; ARCH-002): the first
+   * page-0 response data arriving while the state is `loadingNew` transitions
+   * the union to `results` when the page contains items and to `zeroResults`
+   * when it is empty. A subsequent page response arriving while the state
+   * is `loadingMore` transitions the union back to `results` (REQ-041).
+   * When that subsequent page is the last page (`hasMore: false`), focus
+   * moves to the stable results heading (REQ-066). The response data itself
+   * stays in TanStack Query; the store receives only the outcome.
    */
   $effect(() => {
     const data = substitutionSearch.data;
     if (
-      state.name === "loadingNew" &&
+      (interaction.name === "loadingNew" ||
+        interaction.name === "loadingMore") &&
       data !== undefined &&
       !substitutionSearch.isPlaceholderData
     ) {
+      const wasLoadingMore = interaction.name === "loadingMore";
+      const isLastPage = !data.hasMore;
       interactionState.applySearchResult(data.items.length > 0);
+      if (wasLoadingMore && isLastPage) {
+        tick().then(() => {
+          headingElement?.focus();
+        });
+      }
     }
   });
+
+  /**
+   * Next-page request handler (task 37, REQ-041): activates MORE! from a
+   * completed result state, committing `pageIndex + 1`.
+   */
+  function onMoreClick(): void {
+    if (interaction.name === "results") {
+      interactionState.loadNextPage();
+    }
+  }
 </script>
 
-{#if state.name !== "empty"}
+{#if interaction.name !== "empty"}
   <div
     data-selected-input-region
     aria-busy={recalculating}
     class="mt-6 flex justify-center"
   >
     <SelectedFoodSummary
-      interaction={state}
+      {interaction}
       data={substitutionSearch.data}
       {recalculating}
     />
   </div>
 {/if}
-{#if state.name === "results" && substitutionSearch.data !== undefined}
+{#if (interaction.name === "results" || interaction.name === "loadingMore") && substitutionSearch.data !== undefined}
   <!--
-    Result-card region (task 30; ARCH-001, ARCH-020, ARCH-022, REQ-036,
-    REQ-037, REQ-058, REQ-061, REQ-062): the successful page-0 response
-    renders exactly its zero-to-three display-ready Substitutes in ranked
-    order at `24px` below the selected-input region. The layout has one card
-    column below 1024px and three equal columns from 1024px. Each card uses
-    the active Interface Language, so current names, labels, and localized
-    numeric values update locally without another request. While a valid
-    quantity recalculation is pending (task 34), the retained previous page
-    stays rendered with every quantity-dependent card value replaced by an
-    aria-hidden `16px` spinner (`pending`), while names, images, labels,
-    and quantity-independent similarity stay visible (ISSUE-010).
+    Result-card region (task 30, task 37; ARCH-001, ARCH-002, ARCH-003,
+    ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037, REQ-041,
+    REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-065, REQ-081,
+    ISSUE-008, ISSUE-011): the successful page response renders exactly its
+    zero-to-three display-ready Substitutes in ranked order at `24px` below
+    the selected-input region. The layout has one card column below 1024px
+    and three equal columns from 1024px. Each card uses the active
+    Interface Language, so current names, labels, and localized numeric
+    values update locally without another request. While a valid quantity
+    recalculation is pending (task 34), the retained previous page keeps
+    each result image visible, hides each card's non-image content without
+    changing layout, and shows one centered, aria-hidden `16px` spinner in
+    that content area (REQ-081, ISSUE-010).
+
+    Task 37 renders one visible and accessibly named `MORE!` button after
+    the result grid whenever a later page exists (`hasMore: true`). While a
+    next-page request is pending (`loadingMore`), the current cards remain
+    visible and the focused control keeps its localized label with a gray,
+    `aria-disabled` non-operable presentation (REQ-082). On intermediate
+    success, the requested page's cards replace the previous cards and
+    focus stays on the MORE! button (REQ-041, REQ-065).
   -->
   <div data-result-region aria-busy={recalculating} class="mt-6">
     <h2
+      bind:this={headingElement}
+      tabindex="-1"
       data-substitutions-heading
-      class="text-center text-lg font-bold text-dark-text-primary"
+      class="text-center text-lg font-bold text-dark-text-primary focus:outline-none"
     >
       {dictionary.foundSubstitutionsHeading()}
     </h2>
@@ -182,9 +237,26 @@
         />
       {/each}
     </div>
+    {#if substitutionSearch.data.hasMore || interaction.name === "loadingMore"}
+      <div class="mt-6 flex justify-center">
+        <button
+          type="button"
+          data-more-button
+          aria-label={dictionary.moreButtonLabel()}
+          aria-disabled={interaction.name === "loadingMore"}
+          onclick={onMoreClick}
+          class="inline-flex min-h-11 min-w-28 items-center justify-center rounded px-6 py-2.5 font-ui text-sm font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary {interaction.name ===
+          'loadingMore'
+            ? 'cursor-not-allowed bg-gray-600 text-gray-300'
+            : 'bg-dark-primary text-dark-text-on-bright hover:bg-dark-secondary'}"
+        >
+          {dictionary.moreButtonLabel()}
+        </button>
+      </div>
+    {/if}
   </div>
 {/if}
-{#if state.name === "zeroResults"}
+{#if interaction.name === "zeroResults"}
   <!--
     Zero-result region (task 30; REQ-044, ISSUE-008): a successful empty
     page-0 response replaces the result area with exactly the localized

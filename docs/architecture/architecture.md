@@ -340,7 +340,7 @@ Count all eligible Substitutes, then slice pages of three. A page contains uniqu
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-046–REQ-051, REQ-074–REQ-075 |
+| Requirements | REQ-048–REQ-051, REQ-074–REQ-075, REQ-080, REQ-082 |
 | Dependencies | ARCH-002, ARCH-008, ARCH-010–ARCH-011, ARCH-016 |
 
 **Responsibility:** Bound request concurrency, duration, retry behavior, and visible failure transitions.
@@ -359,14 +359,14 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-069, REQ-073 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-069, REQ-073, REQ-080–REQ-082 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
 
 **Behavior:** Tailwind renders one primary content column. The empty state centers the search control. The result state places it near the top and cards below it. The layout uses one card column from 320 px through 1023 px and three columns from 1024 px. Content does not overflow the viewport.
 
-The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage.
+The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage. While card values are pending, each card hides its non-image content and shows one centered spinner without changing size. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
 
 After new-search success, focus remains in the search field. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. After intermediate MORE! success, focus remains on MORE!. After final-page success, focus moves to the results heading. A screen-reader status region receives the localized result count or result state.
 
@@ -455,8 +455,8 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-043 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
 | REQ-044 | ARCH-002, ARCH-003, ARCH-005, ARCH-011, ARCH-020 |
 | REQ-045 | ARCH-002, ARCH-005, ARCH-011 |
-| REQ-046 | ARCH-002, ARCH-011, ARCH-019 |
-| REQ-047 | ARCH-002, ARCH-011, ARCH-019 |
+| REQ-046 (Deprecated) | Superseded by REQ-080 |
+| REQ-047 (Deprecated) | Superseded by REQ-082 |
 | REQ-048 | ARCH-002, ARCH-011, ARCH-019 |
 | REQ-049 | ARCH-002, ARCH-019 |
 | REQ-050 | ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-019 |
@@ -487,3 +487,6 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
+| REQ-080 | ARCH-002, ARCH-011, ARCH-019 |
+| REQ-081 | ARCH-002, ARCH-019, ARCH-020 |
+| REQ-082 | ARCH-002, ARCH-019, ARCH-020 |

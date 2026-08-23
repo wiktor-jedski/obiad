@@ -420,3 +420,137 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     expect(state.committedValue).toBe(250);
   });
 });
+
+describe("the intermediate MORE! result-paging transitions", () => {
+  test("loadNextPage transitions results to loadingMore with pageIndex incremented", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+
+    store.loadNextPage();
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state).toEqual({
+      name: "loadingMore",
+      query: "Butter",
+      focused: false,
+      selected: SELECTED,
+      quantityText: "100",
+      draftUnit: "g",
+      committedValue: 100,
+      committedUnit: "g",
+      quantityInvalid: false,
+      pageIndex: 1,
+    });
+  });
+
+  test("loadNextPage is a no-op when not in results state", () => {
+    const store = createInteractionState();
+    // empty state
+    store.loadNextPage();
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("empty");
+
+    // loadingNew state
+    store.selectSuggestion(SELECTED);
+    store.loadNextPage();
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("loadingNew");
+    expect(state.pageIndex).toBe(0);
+
+    // zeroResults state
+    store.applySearchResult(false);
+    expect(state.name).toBe("zeroResults");
+    store.loadNextPage();
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("zeroResults");
+    expect(state.pageIndex).toBe(0);
+  });
+
+  test("applySearchResult transitions loadingMore back to results on intermediate success", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    store.loadNextPage();
+
+    store.applySearchResult(true);
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("results");
+    expect(state.pageIndex).toBe(1);
+    expect(state.selected).toEqual(SELECTED);
+    expect("items" in state).toBe(false);
+    expect("data" in state).toBe(false);
+  });
+
+  test("a fresh selection from page 2 resets pageIndex to 0 and transitions to loadingNew", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    // Advance to page 1
+    store.loadNextPage();
+    store.applySearchResult(true);
+    // Advance to page 2
+    store.loadNextPage();
+    store.applySearchResult(true);
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("results");
+    expect(state.pageIndex).toBe(2);
+
+    const nextSelected: SelectedFoodObject = {
+      foodObjectId: 10,
+      names: { en: "Milk", pl: "Mleko" },
+      quantity: { value: 100, unit: "ml" },
+      allowedQuantities: [{ unit: "ml", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+    store.selectSuggestion(nextSelected);
+
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("loadingNew");
+    expect(state.pageIndex).toBe(0);
+    expect(state.selected).toEqual(nextSelected);
+    expect(state.query).toBe("Milk");
+  });
+
+  test("quantity commit on page 2 preserves current pageIndex", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    // Advance to page 1
+    store.loadNextPage();
+    store.applySearchResult(true);
+    // Advance to page 2
+    store.loadNextPage();
+    store.applySearchResult(true);
+
+    store.setQuantityText("200");
+    store.commitQuantity();
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.pageIndex).toBe(2);
+    expect(state.committedValue).toBe(200);
+  });
+});

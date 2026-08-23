@@ -55,10 +55,10 @@ const (
 	// from the catalog (ISSUE-005: 404 FOOD_OBJECT_NOT_FOUND with field
 	// foodObjectId).
 	CodeFoodObjectNotFound Code = "FOOD_OBJECT_NOT_FOUND"
-	// CodePageOutOfRange reports a nonzero page index. Every nonzero page
-	// is out of range until Phase 11 adds valid later-page behavior
-	// (ISSUE-005: 422 PAGE_OUT_OF_RANGE with field pageIndex); a negative
-	// page is the separate CodeInvalidPageIndex failure.
+	// CodePageOutOfRange reports a nonzero page index whose first rank does
+	// not exist (ARCH-005, ARCH-018: 422 PAGE_OUT_OF_RANGE with field
+	// pageIndex); page 0 remains valid when zero eligible Substitutes exist,
+	// and a negative page is the separate CodeInvalidPageIndex failure.
 	CodePageOutOfRange Code = "PAGE_OUT_OF_RANGE"
 )
 
@@ -473,22 +473,22 @@ func NewFindSubstitutePage(conn *pgx.Conn) (*FindSubstitutePage, error) {
 // decreasing unrounded Nutritional Similarity, the pinned English collation
 // of the stored English names, and stable Food Object ID, and returns the
 // total eligible count, hasMore, the input macronutrients at the committed
-// quantity, and the first zero to three unique items. Every ranking and
+// quantity, and the requested zero to three unique items. Every ranking and
 // calculation stays in float64 until the final display projection
 // (REQ-040), which rounds the Matched Quantity to a whole candidate base
 // unit, the scaled macronutrients — including the input macronutrients of
-// the committed Substitution Input quantity (ISSUE-010) — to 0.1 g, and
-// 100 × similarity to a whole percentage (REQ-039). A schema-valid finite
-// Macro Profile whose derived calories, similarity, Matched Quantity, or
-// scaled macronutrients are not finite, or whose projected Matched Quantity
-// does not fit the int64 display range, is classified as an internal failure
-// at the Module boundary instead of reaching a page or the ranking order.
+// the committed Substitution Input quantity (ISSUE-010) — to 0.1 g, and 100 ×
+// similarity to a whole percentage (REQ-039). A schema-valid finite Macro
+// Profile whose derived calories, similarity, Matched Quantity, or scaled
+// macronutrients are not finite, or whose projected Matched Quantity does
+// not fit the int64 display range, is classified as an internal failure at
+// the Module boundary instead of reaching a page or the ranking order.
 // Failures are stable Error values with a Code and an optional Field.
-// Catalog-independent request failures (page index, Food Object ID,
-// quantity value or unit) are rejected before the single catalog read, and
-// object-dependent failures (absent ID, unit mismatch, unavailable Serving,
-// converted-value limit) after it, so Run never reads the catalog twice and
-// never retries.
+// Catalog-independent request failures (negative page index, Food Object
+// ID, quantity value or unit) are rejected before the single catalog read,
+// and object-dependent failures (absent ID, unit mismatch, unavailable
+// Serving, converted-value limit, page out of range) after it, so Run
+// never reads the catalog twice and never retries.
 func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pageIndex int32) (*Page, error) {
 	if input.FoodObjectID <= 0 {
 		return nil, &Error{
@@ -502,13 +502,6 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 			Code:  CodeInvalidPageIndex,
 			Field: "pageIndex",
 			cause: fmt.Errorf("page index %d must be nonnegative", pageIndex),
-		}
-	}
-	if pageIndex != 0 {
-		return nil, &Error{
-			Code:  CodePageOutOfRange,
-			Field: "pageIndex",
-			cause: fmt.Errorf("page index %d is out of range: only page 0 exists until Phase 11", pageIndex),
 		}
 	}
 	if err := validateQuantityValue(input.Quantity); err != nil {
@@ -578,19 +571,30 @@ func (f *FindSubstitutePage) Run(ctx context.Context, input SubstituteInput, pag
 	}
 
 	total := len(ranked)
+	startIndex := int64(pageIndex) * pageSize
+	if pageIndex > 0 && startIndex >= int64(total) {
+		return nil, &Error{
+			Code:  CodePageOutOfRange,
+			Field: "pageIndex",
+			cause: fmt.Errorf("page index %d is out of range for %d eligible substitutes", pageIndex, total),
+		}
+	}
+	start := int(startIndex)
+	end := min(start+pageSize, total)
+
 	page := &Page{
 		PageIndex:          pageIndex,
 		TotalEligibleCount: total,
-		HasMore:            total > pageSize,
+		HasMore:            end < total,
 		InputMacronutrients: Macronutrients{
 			Protein:      projectMacronutrient(inputProtein),
 			Carbohydrate: projectMacronutrient(inputCarbohydrate),
 			Fat:          projectMacronutrient(inputFat),
 		},
 		InputCalories: inputProjectedCalories,
-		Items:         make([]SubstituteItem, 0, pageSize),
+		Items:         make([]SubstituteItem, 0, end-start),
 	}
-	for _, r := range ranked[:min(pageSize, total)] {
+	for _, r := range ranked[start:end] {
 		mq := matchedQuantity(inputCalories, calories(r.profile))
 		protein := r.profile.protein * mq / 100
 		carbohydrate := r.profile.carbohydrate * mq / 100

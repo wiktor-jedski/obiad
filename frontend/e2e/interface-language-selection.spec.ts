@@ -20,6 +20,7 @@ const MIN_TARGET_PX = 44;
 const FIELD_HEIGHT_PX = 56;
 const FIELD_MAX_WIDTH_PX = 640;
 const VERTICAL_CENTER_DVH = 0.45;
+const CONTROL_TOP_PX = 16;
 const REVIEW_COPY_DIR = "/tmp/obiad-interface-language-dropdown";
 
 const COPY = {
@@ -212,7 +213,7 @@ async function assertControlAtViewport(
     width: number;
     height: number;
   };
-  expect(Math.abs(wrapperBox.y - viewport.gutterPx)).toBeLessThanOrEqual(1);
+  expect(Math.abs(wrapperBox.y - CONTROL_TOP_PX)).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
       viewport.width - (wrapperBox.x + wrapperBox.width) - viewport.gutterPx,

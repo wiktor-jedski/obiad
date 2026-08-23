@@ -64,6 +64,8 @@ export interface Messages {
   foundSubstitutionsHeading: () => string;
   /** Localized result-area message for a successful empty page (task 30, REQ-044, ISSUE-008). */
   zeroResultsMessage: () => string;
+  /** Visible label and accessible name of the MORE! paging button (task 37, REQ-041). */
+  moreButtonLabel: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -87,6 +89,7 @@ const en = {
   similarityLabel: () => "Similarity",
   foundSubstitutionsHeading: () => "Found substitutions",
   zeroResultsMessage: () => "No substitutes found",
+  moreButtonLabel: () => "MORE!",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -110,6 +113,7 @@ const pl = {
   similarityLabel: () => "Podobieństwo",
   foundSubstitutionsHeading: () => "Znalezione zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
+  moreButtonLabel: () => "WIĘCEJ!",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */

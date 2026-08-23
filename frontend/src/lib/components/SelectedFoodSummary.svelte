@@ -9,16 +9,16 @@
   import { interfaceLanguage } from "../interfaceLanguage";
   import {
     interactionState,
+    type LoadingMoreInteractionState,
     type LoadingNewInteractionState,
     type QuantityUnit,
     type ResultsInteractionState,
     type ZeroResultsInteractionState,
   } from "../interactionState";
-
   /**
    * ISSUE-010 editable selected-food summary (task 34; ARCH-001, ARCH-002,
    * ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022,
-   * REQ-025, REQ-026, REQ-027, REQ-028).
+   * REQ-025, REQ-026, REQ-027, REQ-028, REQ-081).
    *
    * From selection onward the region renders one unbordered five-row
    * summary at every supported width: the active localized food name; the
@@ -32,12 +32,12 @@
    * or `porcje`. The `localized name · quantity unit` accessible value
    * updates with the active Interface Language (REQ-058).
    *
-   * During the initial new Search the complete summary renders with
-   * disabled controls, one aria-hidden `16px` spinner in each
-   * input-macronutrient value position, the region marked busy, and one
-   * polite announcement of `Loading nutrition values` / `Ładowanie
-   * wartości odżywczych`. After success the summary shows the committed
-   * quantity editor enabled and the response's input macronutrients.
+   * During the initial new Search the complete summary keeps its settled
+   * layout but hides its non-image content behind one centered, aria-hidden
+   * `16px` spinner. The region stays busy and makes one polite announcement
+   * of `Loading nutrition values` / `Ładowanie wartości odżywczych`. After
+   * success the spinner is removed and the enabled quantity editor and
+   * response values become visible (REQ-081).
    *
    * The number control is a text input so every invalid raw value remains
    * visible. The exact raw text stays in the interaction state until Enter
@@ -67,9 +67,9 @@
     /** The current non-empty interaction state (ARCH-002). */
     interaction:
       | LoadingNewInteractionState
+      | LoadingMoreInteractionState
       | ResultsInteractionState
       | ZeroResultsInteractionState;
-    /** The current Substitution Search response, or undefined while none exists. */
     data: SubstituteSearchResponse | undefined;
     /** Whether a valid quantity recalculation is pending (ISSUE-010). */
     recalculating: boolean;
@@ -208,191 +208,188 @@
   data-selected-input
   data-selected-food-summary
   aria-busy={busy}
-  class="flex w-full max-w-md flex-col gap-3 rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
+  class="relative w-full max-w-md rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
 >
-  <!--
+  <div
+    data-card-content
+    class="flex flex-col gap-3"
+    class:opacity-0={busy}
+    class:pointer-events-none={busy}
+  >
+    <!--
     Visually hidden region label and localized selection summary (REQ-058).
     The active dictionary and Food Object name update together when the
     Interface Language changes.
   -->
-  <span class="sr-only">{dictionary.selectedFoodLabel()}: {selectedValue}</span>
+    <span class="sr-only"
+      >{dictionary.selectedFoodLabel()}: {selectedValue}</span
+    >
 
-  <!-- Row 1: the active localized Food Object name (REQ-058). -->
-  <div
-    data-selected-name
-    class="text-center text-base font-medium text-dark-text-primary"
-  >
-    {selectedName}
-  </div>
+    <!-- Row 1: the active localized Food Object name (REQ-058). -->
+    <div
+      data-selected-name
+      class="text-center text-base font-medium text-dark-text-primary"
+    >
+      {selectedName}
+    </div>
 
-  <!--
+    <!--
     Row 2: the quantity editor. A text input keeps every invalid raw value
     visible (REQ-025, REQ-026); the unit control is a native selector with
     the committed unit first when two units are allowed, or static `g`/`ml`
     text when only one is allowed (ISSUE-010). During the initial new
     Search the complete editor is disabled.
   -->
-  <div
-    data-quantity-editor
-    onfocusout={onEditorFocusOut}
-    class="flex flex-wrap items-center justify-center gap-2"
-  >
-    <label for="quantity-number" class="sr-only"
-      >{dictionary.quantityLabel()}</label
+    <div
+      data-quantity-editor
+      onfocusout={onEditorFocusOut}
+      class="flex flex-wrap items-center justify-center gap-2"
     >
-    <input
-      id="quantity-number"
-      data-quantity-number
-      type="text"
-      inputmode="decimal"
-      autocomplete="off"
-      spellcheck="false"
-      value={interaction.quantityText}
-      aria-invalid={interaction.quantityInvalid || undefined}
-      aria-describedby={interaction.quantityInvalid
-        ? QUANTITY_ERROR_ID
-        : undefined}
-      disabled={initial}
-      oninput={onNumberInput}
-      onkeydown={onNumberKeydown}
-      class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
-    />
-    {#if twoUnitsAllowed}
-      <label for="quantity-unit" class="sr-only">{dictionary.unitLabel()}</label
+      <label for="quantity-number" class="sr-only"
+        >{dictionary.quantityLabel()}</label
       >
-      <select
-        id="quantity-unit"
-        data-quantity-unit
-        value={interaction.draftUnit}
+      <input
+        id="quantity-number"
+        data-quantity-number
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        spellcheck="false"
+        value={interaction.quantityText}
+        aria-invalid={interaction.quantityInvalid || undefined}
+        aria-describedby={interaction.quantityInvalid
+          ? QUANTITY_ERROR_ID
+          : undefined}
         disabled={initial}
-        onchange={onUnitChange}
-        class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
-      >
-        {#each orderedUnits as unit (unit)}
-          <option value={unit}>{unitOptionLabel(unit)}</option>
-        {/each}
-      </select>
-    {:else}
-      <!--
+        oninput={onNumberInput}
+        onkeydown={onNumberKeydown}
+        class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
+      />
+      {#if twoUnitsAllowed}
+        <label for="quantity-unit" class="sr-only"
+          >{dictionary.unitLabel()}</label
+        >
+        <select
+          id="quantity-unit"
+          data-quantity-unit
+          value={interaction.draftUnit}
+          disabled={initial}
+          onchange={onUnitChange}
+          class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
+        >
+          {#each orderedUnits as unit (unit)}
+            <option value={unit}>{unitOptionLabel(unit)}</option>
+          {/each}
+        </select>
+      {:else}
+        <!--
         One-unit static presentation (ISSUE-010): the visible `g` or `ml`
         value keeps the visually hidden localized `Unit` / `Jednostka`
         label associated through `aria-labelledby`, mirroring the label
         the two-unit selector receives, so a screen reader never hears an
         unlabeled adjacent unit text.
       -->
-      <span
-        data-quantity-unit-presentation
-        role="group"
-        aria-labelledby="quantity-static-unit-label"
-        class="inline-flex items-baseline gap-1"
-      >
-        <span id="quantity-static-unit-label" class="sr-only"
-          >{dictionary.unitLabel()}</span
-        >
         <span
-          data-quantity-static-unit
-          class="font-data text-sm text-dark-text-primary"
-          >{allowedQuantities[0].unit}</span
+          data-quantity-unit-presentation
+          role="group"
+          aria-labelledby="quantity-static-unit-label"
+          class="inline-flex items-baseline gap-1"
         >
-      </span>
-    {/if}
-  </div>
-  <p
-    data-input-calories
-    aria-label={dictionary.caloriesLabel()}
-    class="text-center font-data text-sm text-dark-text-primary"
-  >
-    {#if busy || inputCalories === undefined}
-      <span
-        data-value-spinner
-        aria-hidden="true"
-        class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-      ></span>
-    {:else}
-      {formatCaloriesValue(inputCalories)}
-    {/if}
-  </p>
+          <span id="quantity-static-unit-label" class="sr-only"
+            >{dictionary.unitLabel()}</span
+          >
+          <span
+            data-quantity-static-unit
+            class="font-data text-sm text-dark-text-primary"
+            >{allowedQuantities[0].unit}</span
+          >
+        </span>
+      {/if}
+    </div>
+    <p
+      data-input-calories
+      aria-label={dictionary.caloriesLabel()}
+      class="text-center font-data text-sm text-dark-text-primary"
+    >
+      {#if inputCalories !== undefined}
+        {formatCaloriesValue(inputCalories)}
+      {/if}
+    </p>
 
-  {#if interaction.quantityInvalid}
-    <!--
+    {#if interaction.quantityInvalid}
+      <!--
       The associated polite live quantity error (REQ-026, ISSUE-010): the
       exact localized message is visible, announced politely, referenced by
       the number field's `aria-describedby`, and removed as soon as the
       draft becomes syntactically valid. Natural focus never moves.
     -->
-    <p
-      id={QUANTITY_ERROR_ID}
-      data-quantity-error
-      aria-live="polite"
-      class="font-data text-sm text-dark-error"
-    >
-      {dictionary.invalidQuantityMessage()}
-    </p>
-  {/if}
-
-  <!--
-    The backend-provided input macronutrients at the committed quantity use
-    active-language labels and one-decimal formatting (REQ-058). While a
-    value is pending — the initial new Search or a recalculation — each value
-    position shows one aria-hidden `16px` spinner instead; the browser never
-    calculates or rerounds nutrition (REQ-040).
-  -->
-  <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
-    <div class="flex items-baseline justify-between gap-4">
-      <dt class="font-medium text-dark-text-muted">
-        {dictionary.proteinLabel()}
-      </dt>
-      <dd data-input-macro-protein class="text-right text-dark-text-primary">
-        {#if busy || inputMacros === undefined}
-          <span
-            data-value-spinner
-            aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-          ></span>
-        {:else}
-          {formatMacronutrientValue(inputMacros.protein, $interfaceLanguage)}
-        {/if}
-      </dd>
-    </div>
-    <div class="flex items-baseline justify-between gap-4">
-      <dt class="font-medium text-dark-text-muted">
-        {dictionary.carbohydratesLabel()}
-      </dt>
-      <dd
-        data-input-macro-carbohydrate
-        class="text-right text-dark-text-primary"
+      <p
+        id={QUANTITY_ERROR_ID}
+        data-quantity-error
+        aria-live="polite"
+        class="font-data text-sm text-dark-error"
       >
-        {#if busy || inputMacros === undefined}
-          <span
-            data-value-spinner
-            aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-          ></span>
-        {:else}
-          {formatMacronutrientValue(
-            inputMacros.carbohydrate,
-            $interfaceLanguage,
-          )}
-        {/if}
-      </dd>
+        {dictionary.invalidQuantityMessage()}
+      </p>
+    {/if}
+
+    <!--
+      The backend-provided input macronutrients at the committed quantity use
+      active-language labels and one-decimal formatting (REQ-058). Pending
+      presentation is owned by the single card-level spinner; the browser
+      never calculates or rerounds nutrition (REQ-040, REQ-081).
+    -->
+    <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
+      <div class="flex items-baseline justify-between gap-4">
+        <dt class="font-medium text-dark-text-muted">
+          {dictionary.proteinLabel()}
+        </dt>
+        <dd data-input-macro-protein class="text-right text-dark-text-primary">
+          {#if inputMacros !== undefined}
+            {formatMacronutrientValue(inputMacros.protein, $interfaceLanguage)}
+          {/if}
+        </dd>
+      </div>
+      <div class="flex items-baseline justify-between gap-4">
+        <dt class="font-medium text-dark-text-muted">
+          {dictionary.carbohydratesLabel()}
+        </dt>
+        <dd
+          data-input-macro-carbohydrate
+          class="text-right text-dark-text-primary"
+        >
+          {#if inputMacros !== undefined}
+            {formatMacronutrientValue(
+              inputMacros.carbohydrate,
+              $interfaceLanguage,
+            )}
+          {/if}
+        </dd>
+      </div>
+      <div class="flex items-baseline justify-between gap-4">
+        <dt class="font-medium text-dark-text-muted">
+          {dictionary.fatLabel()}
+        </dt>
+        <dd data-input-macro-fat class="text-right text-dark-text-primary">
+          {#if inputMacros !== undefined}
+            {formatMacronutrientValue(inputMacros.fat, $interfaceLanguage)}
+          {/if}
+        </dd>
+      </div>
+    </dl>
+  </div>
+  {#if busy}
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-0 flex items-center justify-center"
+    >
+      <span
+        data-card-spinner
+        aria-hidden="true"
+        class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
+      ></span>
     </div>
-    <div class="flex items-baseline justify-between gap-4">
-      <dt class="font-medium text-dark-text-muted">
-        {dictionary.fatLabel()}
-      </dt>
-      <dd data-input-macro-fat class="text-right text-dark-text-primary">
-        {#if busy || inputMacros === undefined}
-          <span
-            data-value-spinner
-            aria-hidden="true"
-            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-          ></span>
-        {:else}
-          {formatMacronutrientValue(inputMacros.fat, $interfaceLanguage)}
-        {/if}
-      </dd>
-    </div>
-  </dl>
+  {/if}
 
   <!--
     The polite busy status live region (ISSUE-010): it carries exactly one

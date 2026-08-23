@@ -150,6 +150,17 @@ export interface LoadingNewInteractionState extends SubstitutionSearchInteractio
 }
 
 /**
+ * The next-page transition: MORE! was activated from a successful result
+ * with later pages and the next-page Substitution Search request is
+ * pending (task 37, ARCH-002, REQ-041, REQ-047). The current cards stay
+ * retained and the spinner inside the MORE! control shows for the complete
+ * pending interval.
+ */
+export interface LoadingMoreInteractionState extends SubstitutionSearchInteractionState {
+  readonly name: "loadingMore";
+}
+
+/**
  * The successful result transition: the first page-0 response arrived with
  * at least one eligible Substitute (REQ-022, REQ-036). The response data
  * stays in TanStack Query; later phases render the result cards.
@@ -169,16 +180,16 @@ export interface ZeroResultsInteractionState extends SubstitutionSearchInteracti
 
 /**
  * The discriminated browser-interaction state union (ARCH-002). Task 27
- * reached only `empty`; task 28 adds the required `loadingNew`, `results`,
- * and `zeroResults` transitions and nothing else. Transitions, not
- * independent booleans, determine the visible controls.
+ * reached only `empty`; task 28 adds `loadingNew`, `results`, and
+ * `zeroResults`; task 37 adds `loadingMore` (REQ-041).
+ * Transitions, not independent booleans, determine the visible controls.
  */
 export type InteractionState =
   | EmptyInteractionState
   | LoadingNewInteractionState
+  | LoadingMoreInteractionState
   | ResultsInteractionState
   | ZeroResultsInteractionState;
-
 /** The typed Browser Interaction Module surface of the interaction state. */
 export interface InteractionStateStore extends Readable<InteractionState> {
   /**
@@ -199,12 +210,20 @@ export interface InteractionStateStore extends Readable<InteractionState> {
    */
   selectSuggestion: (selected: SelectedFoodObject) => void;
   /**
-   * Applies the first page-0 response outcome: transitions `loadingNew` to
-   * `results` when the page contains items, otherwise to `zeroResults`.
-   * The response data itself stays in TanStack Query; the store receives
-   * only the outcome.
+   * Applies the Substitution Search response outcome (task 28, task 37,
+   * ARCH-002): transitions `loadingNew` or `loadingMore` to `results` when
+   * the page contains items, otherwise to `zeroResults`. The response data
+   * itself stays in TanStack Query; the store receives only the outcome.
    */
   applySearchResult: (hasItems: boolean) => void;
+  /**
+   * Commits the next page index (`pageIndex + 1`) from a successful result
+   * (task 37, ARCH-002, REQ-041): transitions `results` to `loadingMore`
+   * with the unchanged selected Food Object, committed Food Quantity, and
+   * `pageIndex: state.pageIndex + 1`. It is a no-op when not in the `results`
+   * state.
+   */
+  loadNextPage: () => void;
   /**
    * Applies draft number text from the quantity editor (task 34,
    * ISSUE-010): the exact raw text is kept unchanged, and the validation
@@ -314,12 +333,24 @@ export function createInteractionState(): InteractionStateStore {
     },
     applySearchResult(hasItems) {
       update((state) => {
-        if (state.name !== "loadingNew") {
+        if (state.name !== "loadingNew" && state.name !== "loadingMore") {
           return state;
         }
         return {
           ...state,
           name: hasItems ? "results" : "zeroResults",
+        };
+      });
+    },
+    loadNextPage() {
+      update((state) => {
+        if (state.name !== "results") {
+          return state;
+        }
+        return {
+          ...state,
+          name: "loadingMore",
+          pageIndex: state.pageIndex + 1,
         };
       });
     },

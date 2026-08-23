@@ -461,8 +461,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | Browser check: The spinner stays below the search control until the request ends. |
+| Status | Deprecated |
+| Verification | Superseded by REQ-080. |
+
+**Notes:** Deprecated by the project owner on 2026-08-23 because the pending new-search state shall not show a spinner below Search. REQ-080 replaces this requirement.
 
 ## REQ-047 — MORE! spinner
 
@@ -471,8 +473,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | Browser check: The spinner replaces the control label until the request ends. |
+| Status | Deprecated |
+| Verification | Superseded by REQ-082. |
+
+**Notes:** Deprecated by the project owner on 2026-08-23 because the pending MORE! control shall keep its label and use a gray disabled presentation. REQ-082 replaces this requirement.
 
 ## REQ-048 — Single pending request
 
@@ -793,3 +797,33 @@ This document is the source of truth for the active product requirements of the 
 | Type | Quality (Usability) |
 | Status | Active |
 | Verification | Playwright: At 1920 × 1080, after a three-card result search, `scrollHeight` is not more than `clientHeight`; the selected-food card and substitutions heading are centered. |
+
+## REQ-080 — No Search loading spinner
+
+**Statement:** WHILE a new search request is pending, the system shall not show a spinner below the Search control.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: During a controlled pending new-search request, no spinner is present below Search. |
+
+## REQ-081 — Single card loading spinner
+
+**Statement:** WHILE card values are pending, each visible selected-food card and result card shall show exactly one centered spinner in place of its non-image content.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: Each pending card has one centered spinner, its non-image content is hidden, result images remain visible, and card dimensions do not change. |
+
+## REQ-082 — Pending MORE! control
+
+**Statement:** WHILE a MORE! request is pending, the system shall keep the localized MORE! label visible and present the control as gray and non-operable.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: During a controlled pending MORE! request, the focused control keeps its localized label, has `aria-disabled=true`, uses the specified gray colors, and repeated activation starts no additional request. |
