@@ -39,7 +39,7 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-018–REQ-021, REQ-025–REQ-028, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-064–REQ-067 |
+| Requirements | REQ-018–REQ-021, REQ-025–REQ-028, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-003, ARCH-008, ARCH-010–ARCH-012, ARCH-019–ARCH-021 |
 
 **Responsibility:** Own browser interaction transitions.
@@ -54,12 +54,12 @@ The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResult
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-013, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-067–REQ-068 |
+| Requirements | REQ-013, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-068, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-014 |
 
 **Responsibility:** Produce all localized interface and accessibility text.
 
-**Contract:** Typed static English and Polish dictionaries expose message functions. The Module uses `Intl.PluralRules` for result counts. It owns interface labels, validation text, retry text, accessible names, and status announcements. Food Object names remain Food Catalog data.
+**Contract:** Typed static English and Polish dictionaries expose message functions. The Module owns interface labels, validation text, retry text, accessible names, and the existing loading, validation, and failure announcements. It exposes no successful-result count or result-status message. Food Object names remain Food Catalog data.
 
 ## ARCH-004 — Suggest Food Objects Module
 
@@ -191,7 +191,7 @@ Selection replaces the Search Query with the exact returned selected name for th
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-020, REQ-022, REQ-025–REQ-028, REQ-036–REQ-037, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-064–REQ-067, REQ-074–REQ-075 |
+| Requirements | REQ-020, REQ-022, REQ-025–REQ-028, REQ-036–REQ-037, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-074–REQ-075, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-005, ARCH-006, ARCH-008, ARCH-018–ARCH-021 |
 
 **Responsibility:** Coordinate new searches, quantity recalculation, and result-page replacement.
@@ -200,7 +200,7 @@ Selection replaces the Search Query with the exact returned selected name for th
 
 **Runtime behavior:** New selection requests page `0`. A quantity edit remains raw local text until Enter or blur. A valid committed value requests the current page. MORE! requests the next page. These operations share one global request lock. Related actions are visibly and accessibly disabled while the lock is held. The system queues no later intent.
 
-A new-search failure clears cards, retains the input, and shows the localized retry state. A MORE! failure retains cards and the control. A successful intermediate page retains focus on MORE!. A successful final page moves focus to the results heading. Each result state updates the screen-reader status region.
+A new-search failure clears cards, retains the input, keeps focus in Search, and shows the localized retry state. A MORE! failure retains cards and the control, keeps focus on MORE!, and shows the localized retry state. After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure announcements remain unchanged.
 
 ## ARCH-012 — Interface Language Change Collaboration
 
@@ -359,7 +359,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-069, REQ-073, REQ-080–REQ-082 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-080–REQ-085 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
@@ -368,7 +368,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 
 The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage. While card values are pending, each card hides its non-image content and shows one centered spinner without changing size. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
 
-After new-search success, focus remains in the search field. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. After intermediate MORE! success, focus remains on MORE!. After final-page success, focus moves to the results heading. A screen-reader status region receives the localized result count or result state.
+After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure live announcements remain unchanged.
 
 **Quality constraints:** All text and interactive states meet WCAG 2.1 AA contrast. Each control has a localized accessible name and visible focus indication. The required behavior works in latest stable Chromium at 320 px, 768 px, and 1280 px.
 
@@ -473,10 +473,6 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-061 | ARCH-001, ARCH-020 |
 | REQ-062 | ARCH-020 |
 | REQ-063 | ARCH-020 |
-| REQ-064 | ARCH-002, ARCH-011, ARCH-020 |
-| REQ-065 | ARCH-002, ARCH-011, ARCH-020 |
-| REQ-066 | ARCH-002, ARCH-011, ARCH-020 |
-| REQ-067 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-068 | ARCH-003, ARCH-020 |
 | REQ-069 | ARCH-015, ARCH-020 |
 | REQ-070 | ARCH-006, ARCH-007, ARCH-013, ARCH-022 |
@@ -487,6 +483,11 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
+| REQ-078 | ARCH-001, ARCH-005, ARCH-008 |
+| REQ-079 | ARCH-001 |
 | REQ-080 | ARCH-002, ARCH-011, ARCH-019 |
 | REQ-081 | ARCH-002, ARCH-019, ARCH-020 |
 | REQ-082 | ARCH-002, ARCH-019, ARCH-020 |
+| REQ-083 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
+| REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
+| REQ-085 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |

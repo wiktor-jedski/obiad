@@ -645,8 +645,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: The search field is the active element after cards appear. |
+
+**Notes:** Deprecated on 2026-08-24. REQ-083 replaces this focus behavior.
 
 ## REQ-065 — MORE! focus
 
@@ -655,8 +657,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: MORE! is the active element on an intermediate page. |
+
+**Notes:** Deprecated on 2026-08-24. REQ-083 replaces this focus behavior.
 
 ## REQ-066 — Last-page focus
 
@@ -665,8 +669,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: The results heading is the active element on the last page. |
+
+**Notes:** Deprecated on 2026-08-24. REQ-083 replaces this focus behavior.
 
 ## REQ-067 — Result announcement
 
@@ -675,8 +681,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Accessibility check: The status region gets the correct text for result and zero-result states. |
+
+**Notes:** Deprecated on 2026-08-24. REQ-083, REQ-084, and REQ-085 replace this result-state notification behavior.
 
 ## REQ-068 — Accessible controls
 
@@ -827,3 +835,35 @@ This document is the source of truth for the active product requirements of the 
 | Type | Behavior |
 | Status | Active |
 | Verification | Playwright: During a controlled pending MORE! request, the focused control keeps its localized label, has `aria-disabled=true`, uses the specified gray colors, and repeated activation starts no additional request. |
+
+## REQ-083 — Successful result-page focus
+
+**Statement:** WHEN a new Search or MORE! request succeeds and renders one or more result cards, the system shall move keyboard focus to the localized results heading after it renders the result page.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Quality (Accessibility) |
+| Status | Active |
+| Verification | Playwright: After a new Search, an intermediate MORE! page, and the last page, the localized results heading is the active element in English and Polish. |
+
+## REQ-084 — Zero-result focus
+
+**Statement:** WHEN a new Search succeeds and renders zero result cards, the system shall move keyboard focus to the localized zero-result message after it renders the zero-result state.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Quality (Accessibility) |
+| Status | Active |
+| Verification | Component integration: A successful zero-item response renders zero cards and makes the localized zero-result message the active element in English and Polish. |
+
+## REQ-085 — No successful-result live announcement
+
+**Statement:** WHEN a successful result state loads, the system shall not send a result count or result-status message through a live region.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Accessibility check: Successful nonzero and zero-result transitions produce no result count or result-status live-region update while focus moves to the required result target. |
+
+**Notes:** Existing loading, validation, and failure announcements remain unchanged.

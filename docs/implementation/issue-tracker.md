@@ -267,3 +267,19 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - No new happy-dom or `@testing-library/svelte` component integration scenario is planned. Such a scenario must synthesize a TanStack Query error or replace the generated-client network boundary, and it cannot prove the real stable backend error, separate Fiber and PostgreSQL outage, request count, or no-retry contract. Serial real-stack Playwright scenario `substitution-request-failures.spec.ts` supplies this evidence for both retained states and both Interface Languages. The existing `bun test` suite remains regression coverage.
+
+## ISSUE-014: Phase 14 result-update accessibility decision
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-24. A successful page with one or more result cards sends no result count or result-status live announcement. Phase 15 moves programmatic focus to the localized results heading after every successful new Search, intermediate MORE! page, and last page.
+- Resolved with the project owner on 2026-08-24. A successful zero-result new Search sends no result-status live announcement. Phase 15 moves programmatic focus to the localized zero-result message.
+- Resolved with the project owner on 2026-08-24. Keep the existing loading, quantity-validation, and request-failure live announcements unchanged. Remove only the planned successful-result announcement and its `Intl.PluralRules` contract.
+- Resolved with the project owner on 2026-08-24. REQ-064 through REQ-067 are deprecated. REQ-083 through REQ-085 record the replacement focus and no-success-announcement behavior.
+
+### Testing coverage deviations
+
+- The supported deterministic catalog cannot produce zero eligible Substitutes, as recorded in ISSUE-003. For `P14-G4`, extend `App.result-state.test.ts` to change language in the production `zeroResults` state and assert zero cards, retained state, exact English and Polish visible and accessibility text, and no additional fetch. Do not add a database fixture, a production eligibility rule, or a catalog exception. All reachable page, validation, and failure transitions remain real-stack Playwright coverage.
