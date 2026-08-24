@@ -250,3 +250,20 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Resolved with the project owner on 2026-08-23. Phase 12 adds no happy-dom or `@testing-library/svelte` component integration scenario. The required evidence spans the shared TanStack Query lock, generated client, real Fiber and PostgreSQL response, attempts through every related control, and the browser interval from `PerformanceResourceTiming.responseEnd` to spinner removal. Real-stack Playwright scenarios `substitution-request-lock.spec.ts` and `spinner-stop-time.spec.ts` provide that evidence. A fetch-stub component scenario cannot prove the real-response timing and would duplicate the same control transitions. The existing `bun test` suite remains regression coverage.
+
+## ISSUE-013: Phase 13 substitution failure presentation decisions
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-24. Both failure states use one shared visible retry message. The exact English text is `Could not load substitutions. Try again.` The exact Polish text is `Nie udało się wczytać zamienników. Spróbuj ponownie.`
+- Resolved with the project owner on 2026-08-24. Put the retry message at the stable top of the result area, below the selected Substitution Input and above any result heading or cards.
+- Resolved with the project owner on 2026-08-24. The exact visible retry message is the only failure announcement. Render it in one atomic polite status region so it is announced one time without interrupting current screen-reader speech. Do not add a duplicate visually hidden message.
+- Resolved with the project owner on 2026-08-24. Do not move focus programmatically after a failure. A new-Search failure keeps focus in Search. A MORE! failure keeps focus on the retained MORE! control.
+- Resolved with the project owner on 2026-08-24. Add no Retry button. A user retries a new Search through the existing suggestion control. After a MORE! failure, restore the displayed page index and make the retained MORE! control operable. Its next activation requests the same failed next page and does not skip a page.
+
+### Testing coverage deviations
+
+- No new happy-dom or `@testing-library/svelte` component integration scenario is planned. Such a scenario must synthesize a TanStack Query error or replace the generated-client network boundary, and it cannot prove the real stable backend error, separate Fiber and PostgreSQL outage, request count, or no-retry contract. Serial real-stack Playwright scenario `substitution-request-failures.spec.ts` supplies this evidence for both retained states and both Interface Languages. The existing `bun test` suite remains regression coverage.
