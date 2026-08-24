@@ -6,6 +6,7 @@
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
   import {
+    createRetainedPageQuery,
     createSubstitutionSearchQuery,
     substitutionSearchLock,
   } from "../substitutionSearch";
@@ -79,6 +80,23 @@
    * error and response data; no automatic or lifecycle retry exists, no
    * successful response is reused, and the visitor retries through the
    * existing suggestion control.
+   *
+   * Task 42 completes the failed MORE! slice (REQ-051, ISSUE-013). When
+   * the current `loadingMore` generated-client request reaches its
+   * terminal error, the union transitions to `moreFailure`: the exact
+   * selected Substitution Input and committed Food Quantity are retained,
+   * the page index returns to the displayed page, and the retained-page
+   * query keeps that page's ordered cards in TanStack Query while the
+   * owning query re-attaches to the retained key, so the cards and the
+   * MORE! control stay rendered with no automatic refetch. The pending
+   * presentation ends, the global request lock releases, MORE! becomes
+   * operable and keeps its natural focus, exactly the ISSUE-013 retry
+   * message renders above the retained cards in one atomic polite status
+   * region, and a manual MORE! activation requests the same failed next
+   * page without skipping one. TanStack Query continues to own the
+   * terminal error and retained response data; no automatic or lifecycle
+   * retry exists, no successful response is reused, and the visitor
+   * retries by activating MORE! or selecting a fresh suggestion.
    */
 
   /**
@@ -153,6 +171,36 @@
     committed: () => committed,
   });
   /**
+   * The displayed page index (task 42, REQ-051): the page whose ordered
+   * cards the result region renders right now. While a next-page request
+   * is pending (`loadingMore`) the requested page index is already
+   * committed, but the displayed cards are still the previous page's;
+   * after a MORE! failure (`moreFailure`) the interaction state has
+   * already restored the displayed page index. Every other non-empty
+   * transition displays its committed page.
+   */
+  const displayedPageIndex = $derived(
+    interaction.name === "empty"
+      ? undefined
+      : interaction.name === "loadingMore"
+        ? interaction.pageIndex - 1
+        : interaction.pageIndex,
+  );
+  /**
+   * The retained-page query (task 42, REQ-051, ARCH-019): it subscribes
+   * to the displayed page's exact query key for the whole lifetime of the
+   * component and never fetches, so `gcTime: 0` cannot evict the current
+   * page's successful response while a next-page request is in flight.
+   * When that request reaches its terminal error and the union
+   * transitions to `moreFailure`, the owning query re-attaches to the
+   * retained key and renders the current page's ordered cards from the
+   * cache without any automatic refetch.
+   */
+  const retainedPageSearch = createRetainedPageQuery({
+    committed: () => committed,
+    displayedPageIndex: () => displayedPageIndex,
+  });
+  /**
    * Whether a valid quantity recalculation is pending (task 34,
    * ISSUE-010): a completed result transition is visible while TanStack
    * Query holds the retained previous page as placeholder data for the
@@ -223,14 +271,40 @@
   });
 
   /**
-   * Next-page request handler (task 37, REQ-041): activates MORE! from a
-   * completed result state, committing `pageIndex + 1`.
+   * Failed next-page transition (task 42, REQ-051, ARCH-002, ARCH-019):
+   * when the current `loadingMore` generated-client request reaches its
+   * terminal error, TanStack Query owns that error and the union
+   * transitions to `moreFailure`, restoring the displayed page index.
+   * The exact Substitution Input and committed Food Quantity are
+   * retained, the retained-page query keeps the current page's ordered
+   * cards in TanStack Query, and the owning query re-attaches to the
+   * retained key, so the cards and MORE! control stay rendered, the
+   * pending presentation ends, the global request lock releases, and the
+   * ISSUE-013 retry message appears above the cards. No automatic or
+   * lifecycle retry exists, so the visitor retries by activating the
+   * retained MORE! control or selecting a fresh suggestion.
+   */
+  $effect(() => {
+    if (
+      interaction.name === "loadingMore" &&
+      substitutionSearch.error !== null
+    ) {
+      interactionState.applyMoreFailure();
+    }
+  });
+
+  /**
+   * Next-page request handler (task 37, REQ-041; task 42, REQ-051):
+   * activates MORE! from a completed result state or after a MORE!
+   * failure, committing `pageIndex + 1`. From `moreFailure` the restored
+   * page index makes the manual activation request the same failed next
+   * page without skipping one.
    */
   function onMoreClick(): void {
     if (locked) {
       return;
     }
-    if (interaction.name === "results") {
+    if (interaction.name === "results" || interaction.name === "moreFailure") {
       interactionState.loadNextPage();
     }
   }
@@ -249,16 +323,19 @@
     />
   </div>
 {/if}
-{#if interaction.name === "newSearchFailure"}
+{#if interaction.name === "newSearchFailure" || interaction.name === "moreFailure"}
   <!--
-    Failed new-search region (task 41; REQ-050, ISSUE-013): the terminal
-    failure of the current new-search request replaces the result area
-    with exactly the ISSUE-013 retry message at the stable top of the
+    Failed request region (task 41, task 42; REQ-050, REQ-051, ISSUE-013):
+    the terminal failure of the current new-Search or next-page request
+    renders exactly the ISSUE-013 retry message at the stable top of the
     result area, below the selected Substitution Input and above any
-    result heading or cards. One atomic polite status region (`role="status"`)
-    renders and announces the exact visible message once without
-    interrupting current screen-reader speech; no duplicate visually
-    hidden message exists and no focus moves, so Search keeps focus.
+    result heading or cards. After a new-Search failure the result area
+    contains no cards; after a MORE! failure the retained current page's
+    cards and the MORE! control stay rendered below the message. One
+    atomic polite status region (`role="status"`) renders and announces
+    the exact visible message once without interrupting current
+    screen-reader speech; no duplicate visually hidden message exists and
+    no focus moves, so Search or the retained MORE! control keeps focus.
   -->
   <div data-failure-region class="mt-6">
     <p
@@ -270,7 +347,7 @@
     </p>
   </div>
 {/if}
-{#if (interaction.name === "results" || interaction.name === "loadingMore") && substitutionSearch.data !== undefined}
+{#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
   <!--
     Result-card region (task 30, task 37; ARCH-001, ARCH-002, ARCH-003,
     ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037, REQ-041,
@@ -293,6 +370,18 @@
     `aria-disabled` non-operable presentation (REQ-082). On intermediate
     success, the requested page's cards replace the previous cards and
     focus stays on the MORE! button (REQ-041, REQ-065).
+
+    Task 42 retains this region through a MORE! failure (REQ-051,
+    ISSUE-013): after the terminal error of the current next-page request,
+    the union is `moreFailure`, the current page's ordered cards and the
+    MORE! control stay rendered from the retained TanStack Query data, the
+    pending presentation ends, the control becomes operable again and
+    keeps its natural focus, and the ISSUE-013 retry message appears above
+    the heading in the failed-request region. The region itself stays
+    mounted across the failure transition — the grid is guarded by the
+    retained response while the MORE! control is not — so the focused
+    control is never removed from the DOM and no programmatic focus
+    movement is needed (ISSUE-013).
   -->
   <div data-result-region aria-busy={recalculating} class="mt-6">
     <h2
@@ -303,16 +392,18 @@
     >
       {dictionary.foundSubstitutionsHeading()}
     </h2>
-    <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-      {#each substitutionSearch.data.items as item (item.foodObjectId)}
-        <ResultCard
-          {item}
-          language={$interfaceLanguage}
-          pending={recalculating}
-        />
-      {/each}
-    </div>
-    {#if substitutionSearch.data.hasMore || interaction.name === "loadingMore"}
+    {#if substitutionSearch.data !== undefined}
+      <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {#each substitutionSearch.data.items as item (item.foodObjectId)}
+          <ResultCard
+            {item}
+            language={$interfaceLanguage}
+            pending={recalculating}
+          />
+        {/each}
+      </div>
+    {/if}
+    {#if (substitutionSearch.data !== undefined && substitutionSearch.data.hasMore) || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
       <div class="mt-6 flex justify-center">
         <button
           type="button"
