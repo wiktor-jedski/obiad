@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Real-stack Substitution request-failure scenario (task 41; ARCH-001,
- * ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-019, ARCH-020, ARCH-022,
- * REQ-050, ISSUE-013; P13-G1).
+ * Real-stack Substitution request-failure scenario (task 41, task 42;
+ * ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-019, ARCH-020,
+ * ARCH-022, REQ-050, REQ-051, ISSUE-013; P13-G1, P13-G2).
  *
  * This scenario runs serially on the separate outage stack behind `bun run
  * test:e2e` (ARCH-022): the launcher hands the fixed loopback Fiber
@@ -13,40 +13,63 @@ import { expect, test, type Page } from "@playwright/test";
  * the normal stack's PostgreSQL, credentials, or preview. The outage
  * container name reaches the spec through `OBIAD_E2E_OUTAGE_CONTAINER`.
  *
- * It verifies the failed new-Search slice over task 40:
+ * It verifies the failed new-Search slice over task 40 and the failed
+ * MORE! slice over task 41:
  * - One English page and one Polish page prepare successful browser state
  *   — three result cards for a first suggestion and an open suggestion
  *   panel holding a second suggestion — before the outage begins.
+ * - Two further English and Polish pages prepare a successful
+ *   intermediate result page — page 0 followed by one successful MORE!
+ *   activation reaching page 1 with MORE! still present — before the
+ *   outage begins.
  * - Stopping only the outage stack's PostgreSQL process makes the outage
  *   Fiber report catalog unavailability (`GET /health` stops returning
  *   ready) while the Fiber process itself stays up.
- * - Selecting the prepared suggestion produces exactly one current
- *   generated-client `POST /api/v1/substitutes/search` and one closed
- *   `503 CATALOG_UNAVAILABLE` response without `field`; no second POST
- *   starts automatically (ARCH-019: no retry, no queued intent, no
- *   successful-response reuse).
- * - Each page reaches the `newSearchFailure` interaction transition,
- *   keeps the exact newly selected Substitution Input (name and committed
- *   100 g quantity), the exact returned Search text, and Search focus,
- *   renders zero result cards and no MORE!, removes every pending
- *   spinner, makes the related controls operable after the request ends,
- *   and shows and announces the exact ISSUE-013 retry message
+ * - Selecting the prepared suggestion on the first pair produces exactly
+ *   one current generated-client `POST /api/v1/substitutes/search` and
+ *   one closed `503 CATALOG_UNAVAILABLE` response without `field`; no
+ *   second POST starts automatically (ARCH-019: no retry, no queued
+ *   intent, no successful-response reuse). Each page reaches the
+ *   `newSearchFailure` interaction transition, keeps the exact newly
+ *   selected Substitution Input (name and committed 100 g quantity), the
+ *   exact returned Search text, and Search focus, renders zero result
+ *   cards and no MORE!, removes every pending spinner, makes the related
+ *   controls operable after the request ends, and shows and announces the
+ *   exact ISSUE-013 retry message
  *   (`Could not load substitutions. Try again.` / `Nie udało się wczytać
  *   zamienników. Spróbuj ponownie.`) in one atomic polite status region
  *   (`role="status"`), with no duplicate visually hidden message and no
  *   programmatic focus movement (REQ-050, ISSUE-013).
+ * - Activating MORE! on the second pair produces exactly one current
+ *   next-page `POST` (pageIndex 2) and one closed `503
+ *   CATALOG_UNAVAILABLE` response without `field`; no automatic retry or
+ *   second POST follows. Each page reaches the `moreFailure` interaction
+ *   transition, keeps the exact Substitution Input, the displayed page
+ *   index and the current page's ordered card IDs and content in TanStack
+ *   Query, the MORE! control, and its natural focus, removes the pending
+ *   presentation, restores the control's operable state, and shows and
+ *   announces the exact ISSUE-013 retry message in the active Interface
+ *   Language. A deliberate manual re-activation of the retained MORE!
+ *   control produces exactly one further `POST` with the same failed next
+ *   page index (pageIndex 2) — no skip — fails again with the same closed
+ *   `503`, and the page retains the same cards and failure state with no
+ *   third request (REQ-051, ISSUE-013).
  */
 
 const COPY = {
   en: {
+    language: "en",
     searchPlaceholder: "Search foods",
     retryMessage: "Could not load substitutions. Try again.",
     chickenName: "Chicken breast",
+    pizzaName: "Pizza Margherita",
   },
   pl: {
+    language: "pl",
     searchPlaceholder: "Szukaj potraw",
     retryMessage: "Nie udało się wczytać zamienników. Spróbuj ponownie.",
     chickenName: "Pierś z kurczaka",
+    pizzaName: "Pizza margherita",
   },
 } as const;
 
@@ -54,6 +77,13 @@ const COPY = {
 const PIZZA_FOOD_OBJECT_ID = 1;
 /** The seeded Chicken breast suggestion (ID 5, 100 g, no Serving). */
 const CHICKEN_FOOD_OBJECT_ID = 5;
+/**
+ * The seeded Pizza Margherita page-1 ranking (ISSUE-002, REQ-072): the
+ * successful intermediate result page this scenario prepares before the
+ * outage, so the failed MORE! request targets page 2 while page 1's
+ * ordered cards must stay retained.
+ */
+const PIZZA_PAGE_1_IDS = [30, 3, 35] as const;
 
 /** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
@@ -269,8 +299,146 @@ async function expectNewSearchFailure(
   expect(posts).toHaveLength(2);
 }
 
+/**
+ * Drives one Pizza Margherita selection followed by one successful MORE!
+ * activation, so the page reaches the successful intermediate result page
+ * 1 (ranks 4 through 6) with MORE! still present before the outage begins
+ * (task 42, REQ-051, ISSUE-011).
+ */
+async function prepareSuccessfulIntermediatePage(
+  page: Page,
+  copy: (typeof COPY)[keyof typeof COPY],
+): Promise<void> {
+  await prepareSuccessfulCards(page, "margherita", PIZZA_FOOD_OBJECT_ID, copy);
+  const moreButton = page.locator("[data-more-button]");
+  await expect(moreButton).toBeVisible();
+  await moreButton.click();
+  await expect
+    .poll(async () => renderedCardIDs(page))
+    .toEqual([...PIZZA_PAGE_1_IDS]);
+  await expect(moreButton).toBeVisible();
+  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+}
+
+/** Returns the Food Object IDs of all currently rendered result cards. */
+async function renderedCardIDs(page: Page): Promise<number[]> {
+  const cards = page.locator("[data-result-card]");
+  return cards.evaluateAll((elements) =>
+    elements.map((element) =>
+      Number(element.getAttribute("data-food-object-id")),
+    ),
+  );
+}
+
+/** Asserts the complete MORE! failure surface on one page. */
+async function expectMoreFailure(
+  page: Page,
+  posts: SubstitutePost[],
+  copy: (typeof COPY)[keyof typeof COPY],
+): Promise<void> {
+  const moreButton = page.locator("[data-more-button]");
+  const retryMessage = page.locator("[data-retry-message]");
+
+  // Activating MORE! produces exactly one current next-page POST with the
+  // unchanged Substitution Input and pageIndex 2, and one closed 503
+  // CATALOG_UNAVAILABLE response without `field`; no automatic retry.
+  await moreButton.click();
+  await expect.poll(() => posts.length).toBe(3);
+  expect(posts[0]?.body).toEqual({
+    foodObjectId: PIZZA_FOOD_OBJECT_ID,
+    quantity: { value: 1, unit: "serving" },
+    pageIndex: 0,
+  });
+  expect(posts[1]?.body).toEqual({
+    foodObjectId: PIZZA_FOOD_OBJECT_ID,
+    quantity: { value: 1, unit: "serving" },
+    pageIndex: 1,
+  });
+  expect(posts[2]?.body).toEqual({
+    foodObjectId: PIZZA_FOOD_OBJECT_ID,
+    quantity: { value: 1, unit: "serving" },
+    pageIndex: 2,
+  });
+  await expect.poll(() => posts[2]?.status).toBe(503);
+  await expect.poll(() => posts[2]?.responseBody).toBeDefined();
+  const body = posts[2]?.responseBody as Record<string, unknown> | undefined;
+  expect(body?.code).toBe("CATALOG_UNAVAILABLE");
+  expect("field" in (body ?? {})).toBe(false);
+
+  // The page reaches the moreFailure interaction transition.
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "moreFailure",
+  );
+
+  // The exact Substitution Input is retained: the selected Food Object
+  // name and the committed 1 serving quantity.
+  await expect(page.locator("[data-selected-name]")).toHaveText(copy.pizzaName);
+  await expect(page.locator("[data-quantity-number]")).toHaveValue("1");
+  await expect(page.locator("[data-quantity-unit]")).toHaveValue("serving");
+
+  // The displayed page index and the current page's ordered card IDs and
+  // content stay retained from the successful page-1 response.
+  const page1Response = posts[1]?.responseBody as
+    | {
+        pageIndex: number;
+        items?: Array<{
+          foodObjectId: number;
+          names: { en: string; pl: string };
+        }>;
+      }
+    | undefined;
+  expect(page1Response?.pageIndex).toBe(1);
+  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
+  await expect(page.locator("[data-result-card]")).toHaveCount(3);
+  const firstCardName = await page
+    .locator("[data-result-card] h3")
+    .first()
+    .textContent();
+  expect(firstCardName).toBe(page1Response?.items?.[0]?.names[copy.language]);
+
+  // The retained MORE! control keeps its natural focus, removes the
+  // pending presentation, and becomes operable again.
+  await expect(moreButton).toBeFocused();
+  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+
+  // The exact ISSUE-013 retry message renders visibly in one atomic polite
+  // status region and is the only failure announcement.
+  await expect(retryMessage).toBeVisible();
+  await expect(retryMessage).toHaveText(copy.retryMessage);
+  await expect(retryMessage).toHaveAttribute("role", "status");
+  await expect(page.getByText(copy.retryMessage)).toHaveCount(1);
+
+  // No automatic retry or second POST follows the terminal failure.
+  await page.waitForTimeout(500);
+  expect(posts).toHaveLength(3);
+
+  // A deliberate manual re-activation of the retained MORE! control
+  // requests the same failed next page (pageIndex 2) without skipping one;
+  // the second failure retains the same cards, control, and failure state,
+  // and no third request follows.
+  await moreButton.click();
+  await expect.poll(() => posts.length).toBe(4);
+  expect(posts[3]?.body).toEqual({
+    foodObjectId: PIZZA_FOOD_OBJECT_ID,
+    quantity: { value: 1, unit: "serving" },
+    pageIndex: 2,
+  });
+  await expect.poll(() => posts[3]?.status).toBe(503);
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "moreFailure",
+  );
+  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
+  await expect(moreButton).toBeFocused();
+  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+  await expect(retryMessage).toHaveText(copy.retryMessage);
+  await page.waitForTimeout(500);
+  expect(posts).toHaveLength(4);
+}
+
 test.describe("Substitution request failures", () => {
-  test("a new Search fails after only the outage stack's PostgreSQL stops: each prepared English and Polish page keeps the exact selected input, Search text, and focus, clears cards and MORE!, ends every spinner, releases the lock, and shows and announces the exact ISSUE-013 retry message with exactly one 503 CATALOG_UNAVAILABLE response and no automatic retry (P13-G1, REQ-050)", async ({
+  test("a new Search and a MORE! request fail after only the outage stack's PostgreSQL stops: each prepared English and Polish page keeps its retained state, control state, and focus, ends every pending spinner, releases the lock, and shows and announces the exact ISSUE-013 retry message with exactly one closed 503 CATALOG_UNAVAILABLE response per activation and no automatic retry (P13-G1, P13-G2, REQ-050, REQ-051)", async ({
     browser,
   }) => {
     const englishContext = await browser.newContext({
@@ -286,8 +454,19 @@ test.describe("Substitution request failures", () => {
     const englishPosts = trackSubstitutePosts(englishPage);
     const polishPosts = trackSubstitutePosts(polishPage);
 
+    // A second page pair prepares successful intermediate result pages for
+    // the MORE! failure slice (task 42, REQ-051).
+    const englishMorePage = await englishContext.newPage();
+    const polishMorePage = await polishContext.newPage();
+    await useBrowserLanguages(englishMorePage, ["en-US"]);
+    await useBrowserLanguages(polishMorePage, ["pl-PL"]);
+    const englishMorePosts = trackSubstitutePosts(englishMorePage);
+    const polishMorePosts = trackSubstitutePosts(polishMorePage);
+
     await englishPage.goto("/");
     await polishPage.goto("/");
+    await englishMorePage.goto("/");
+    await polishMorePage.goto("/");
 
     // Prepare successful English and Polish pages with three result cards
     // and a second suggestion before the outage begins.
@@ -316,6 +495,11 @@ test.describe("Substitution request failures", () => {
       COPY.pl,
     );
 
+    // Prepare successful English and Polish intermediate result pages
+    // (page 1 with MORE! still present) for the MORE! failure slice.
+    await prepareSuccessfulIntermediatePage(englishMorePage, COPY.en);
+    await prepareSuccessfulIntermediatePage(polishMorePage, COPY.pl);
+
     // Stop only the outage stack's PostgreSQL process.
     await stopOutagePostgresAndWait();
 
@@ -331,6 +515,14 @@ test.describe("Substitution request failures", () => {
       .locator(`#food-suggestion-option-${CHICKEN_FOOD_OBJECT_ID}`)
       .click();
     await expectNewSearchFailure(polishPage, polishPosts, COPY.pl);
+
+    // Activating MORE! on each intermediate page produces exactly one
+    // current next-page POST and one closed 503 CATALOG_UNAVAILABLE
+    // response without `field`; no automatic retry follows, the retained
+    // cards, input, page index, and MORE! control stay, and a manual
+    // re-activation requests the same failed next page without a skip.
+    await expectMoreFailure(englishMorePage, englishMorePosts, COPY.en);
+    await expectMoreFailure(polishMorePage, polishMorePosts, COPY.pl);
 
     await englishContext.close();
     await polishContext.close();

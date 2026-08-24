@@ -11,6 +11,7 @@
     interactionState,
     type LoadingMoreInteractionState,
     type LoadingNewInteractionState,
+    type MoreFailureInteractionState,
     type NewSearchFailureInteractionState,
     type QuantityUnit,
     type ResultsInteractionState,
@@ -64,7 +65,11 @@
    * the current response's backend values. After a terminal new-search
    * failure (task 41, REQ-050), the region is not busy: the retained
    * Substitution Input renders without value spinners and the ISSUE-013
-   * retry message appears in the result area.
+   * retry message appears in the result area. After a MORE! failure
+   * (task 42, REQ-051) the region is also not busy: the retained
+   * Substitution Input and its stored values stay visible while the
+   * quantity editor remains non-operable, because the retry path is the
+   * retained MORE! control or a fresh suggestion selection.
    */
 
   interface Props {
@@ -74,7 +79,8 @@
       | LoadingMoreInteractionState
       | ResultsInteractionState
       | ZeroResultsInteractionState
-      | NewSearchFailureInteractionState;
+      | NewSearchFailureInteractionState
+      | MoreFailureInteractionState;
     data: SubstituteSearchResponse | undefined;
     /** Whether a valid quantity recalculation is pending (ISSUE-010). */
     recalculating: boolean;
@@ -120,8 +126,20 @@
   const initial = $derived(interaction.name === "loadingNew");
   /** Whether any quantity-dependent value is pending (initial or recalculation). */
   const busy = $derived(initial || recalculating);
-  /** Whether the global substitution request lock is active (ARCH-011, ARCH-019, REQ-048). */
-  const locked = $derived($substitutionSearchLock || initial || recalculating);
+  /**
+   * Whether the quantity editor is non-operable (ARCH-011, ARCH-019,
+   * REQ-048): the global substitution request lock, the initial new
+   * Search, a pending recalculation, or the MORE! failure transition.
+   * After a MORE! failure (task 42, REQ-051) the retry path is the
+   * retained MORE! control or a fresh suggestion selection, so the
+   * quantity editor stays non-operable like during a pending request.
+   */
+  const locked = $derived(
+    $substitutionSearchLock ||
+      initial ||
+      recalculating ||
+      interaction.name === "moreFailure",
+  );
   const inputMacros = $derived(data?.inputMacronutrients);
   /** The response's input calories at the committed quantity, when present. */
   const inputCalories = $derived(data?.inputCalories);

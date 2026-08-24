@@ -554,3 +554,135 @@ describe("the intermediate MORE! result-paging transitions", () => {
     expect(state.committedValue).toBe(200);
   });
 });
+
+describe("the failed MORE! transitions (task 42, REQ-051)", () => {
+  test("applyMoreFailure transitions loadingMore to moreFailure and restores the displayed page index", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    store.loadNextPage();
+
+    store.applyMoreFailure();
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state).toEqual({
+      name: "moreFailure",
+      query: "Butter",
+      focused: false,
+      selected: SELECTED,
+      quantityText: "100",
+      draftUnit: "g",
+      committedValue: 100,
+      committedUnit: "g",
+      quantityInvalid: false,
+      pageIndex: 0,
+    });
+    expect("data" in state).toBe(false);
+    expect("error" in state).toBe(false);
+  });
+
+  test("applyMoreFailure is a no-op outside the loadingMore transition", () => {
+    const store = createInteractionState();
+    // empty state
+    store.applyMoreFailure();
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("empty");
+
+    // loadingNew state
+    store.selectSuggestion(SELECTED);
+    store.applyMoreFailure();
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("loadingNew");
+    expect(state.pageIndex).toBe(0);
+
+    // results state
+    store.applySearchResult(true);
+    store.applyMoreFailure();
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("results");
+    expect(state.pageIndex).toBe(0);
+
+    // newSearchFailure state
+    store.selectSuggestion(SELECTED);
+    store.applyNewSearchFailure();
+    store.applyMoreFailure();
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("newSearchFailure");
+  });
+
+  test("loadNextPage from moreFailure requests the same failed next page without skipping one", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    // Advance to page 1
+    store.loadNextPage();
+    store.applySearchResult(true);
+    // The page-2 request fails: the state returns to displayed page 1.
+    store.loadNextPage();
+    store.applyMoreFailure();
+
+    store.loadNextPage();
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("loadingMore");
+    // The manual activation commits the same failed next page (page 2),
+    // not a skip to page 3.
+    expect(state.pageIndex).toBe(2);
+    expect(state.selected).toEqual(SELECTED);
+    expect(state.committedValue).toBe(100);
+  });
+
+  test("applySearchResult is a no-op from moreFailure: the retained cards never trigger a success transition", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    store.loadNextPage();
+    store.applyMoreFailure();
+
+    store.applySearchResult(true);
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("moreFailure");
+    expect(state.pageIndex).toBe(0);
+  });
+
+  test("quantity actions are no-ops from moreFailure", () => {
+    const store = createInteractionState();
+    store.selectSuggestion(SELECTED);
+    store.applySearchResult(true);
+    store.loadNextPage();
+    store.applyMoreFailure();
+
+    store.setQuantityText("200");
+    store.selectUnit("serving");
+    store.commitQuantity();
+
+    let state: Record<string, unknown> = {};
+    store.subscribe((next) => {
+      state = { ...next };
+    });
+    expect(state.name).toBe("moreFailure");
+    expect(state.quantityText).toBe("100");
+    expect(state.committedValue).toBe(100);
+    expect(state.committedUnit).toBe("g");
+    expect(state.quantityInvalid).toBe(false);
+  });
+});
