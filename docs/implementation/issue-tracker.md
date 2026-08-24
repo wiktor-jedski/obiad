@@ -241,3 +241,12 @@ Status: ready-for-agent
 
 - Resolved with the project owner on 2026-08-23. Phase 11 adds no happy-dom or `@testing-library/svelte` component integration scenario. Extended real-PostgreSQL Module and HTTP integration tests cover page bounds, complete deterministic ranking fixtures, exclusions, uniqueness, projections, and stable errors. The real-stack Playwright scenario `more-result-paging.spec.ts` covers the production state transitions, generated client, Fiber Adapter, retained pending cards, in-control spinner, replacement pages, full and partial last pages, complete-search uniqueness, new-search reset, and focus. A fetch-stub component scenario would duplicate these observable contracts and give weaker ARCH-022 evidence. The existing `bun test` component integration suite still runs for regression coverage.
 - Superseded by the project owner on 2026-08-23. The real-stack Playwright scenario now verifies the pending control's retained localized label, gray colors, `aria-disabled` state, blocked repeated activation, retained cards, replacement pages, full and partial last pages, complete-search uniqueness, new-search reset, and focus.
+
+## ISSUE-012: Phase 12 request-lock test boundary
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Testing coverage deviations
+
+- Resolved with the project owner on 2026-08-23. Phase 12 adds no happy-dom or `@testing-library/svelte` component integration scenario. The required evidence spans the shared TanStack Query lock, generated client, real Fiber and PostgreSQL response, attempts through every related control, and the browser interval from `PerformanceResourceTiming.responseEnd` to spinner removal. Real-stack Playwright scenarios `substitution-request-lock.spec.ts` and `spinner-stop-time.spec.ts` provide that evidence. A fetch-stub component scenario cannot prove the real-response timing and would duplicate the same control transitions. The existing `bun test` suite remains regression coverage.

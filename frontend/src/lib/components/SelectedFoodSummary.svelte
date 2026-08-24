@@ -15,6 +15,7 @@
     type ResultsInteractionState,
     type ZeroResultsInteractionState,
   } from "../interactionState";
+  import { substitutionSearchLock } from "../substitutionSearch";
   /**
    * ISSUE-010 editable selected-food summary (task 34; ARCH-001, ARCH-002,
    * ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022,
@@ -115,7 +116,8 @@
   const initial = $derived(interaction.name === "loadingNew");
   /** Whether any quantity-dependent value is pending (initial or recalculation). */
   const busy = $derived(initial || recalculating);
-  /** The response's input macronutrients at the committed quantity, when present. */
+  /** Whether the global substitution request lock is active (ARCH-011, ARCH-019, REQ-048). */
+  const locked = $derived($substitutionSearchLock || initial || recalculating);
   const inputMacros = $derived(data?.inputMacronutrients);
   /** The response's input calories at the committed quantity, when present. */
   const inputCalories = $derived(data?.inputCalories);
@@ -161,6 +163,9 @@
    * the draft becomes syntactically valid without committing it.
    */
   function onNumberInput(event: Event): void {
+    if (locked) {
+      return;
+    }
     interactionState.setQuantityText(
       (event.currentTarget as HTMLInputElement).value,
     );
@@ -168,21 +173,27 @@
 
   /**
    * Commits the draft number on Enter while retaining number-field focus
-   * (ISSUE-010). Enter never blurs the field; a valid commit that resolves
+   * (ISSUE-010, REQ-048). Enter never blurs the field; a valid commit that resolves
    * to the committed value starts no request.
    */
   function onNumberKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter") {
       event.preventDefault();
+      if (locked) {
+        return;
+      }
       interactionState.commitQuantity();
     }
   }
 
   /**
    * Applies a unit selection: the draft is replaced with `1` for Serving
-   * or `100` for a base unit and committed immediately (ISSUE-010).
+   * or `100` for a base unit and committed immediately (ISSUE-010, REQ-048).
    */
   function onUnitChange(event: Event): void {
+    if (locked) {
+      return;
+    }
     interactionState.selectUnit(
       (event.currentTarget as HTMLSelectElement).value as QuantityUnit,
     );
@@ -193,9 +204,12 @@
    * editor (the number field and the unit selector together). Moving focus
    * inside the editor — for example from the number field to the selector
    * — never commits an old unit before a selector change, so the
-   * `relatedTarget` check commits only on a real exit (ISSUE-010).
+   * `relatedTarget` check commits only on a real exit (ISSUE-010, REQ-048).
    */
   function onEditorFocusOut(event: FocusEvent): void {
+    if (locked) {
+      return;
+    }
     const editor = event.currentTarget as HTMLElement;
     const next = event.relatedTarget as Node | null;
     if (next === null || !editor.contains(next)) {
@@ -260,10 +274,11 @@
         aria-describedby={interaction.quantityInvalid
           ? QUANTITY_ERROR_ID
           : undefined}
-        disabled={initial}
+        aria-disabled={locked ? "true" : undefined}
+        readonly={locked || undefined}
         oninput={onNumberInput}
         onkeydown={onNumberKeydown}
-        class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
+        class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none"
       />
       {#if twoUnitsAllowed}
         <label for="quantity-unit" class="sr-only"
@@ -273,9 +288,10 @@
           id="quantity-unit"
           data-quantity-unit
           value={interaction.draftUnit}
-          disabled={initial}
+          aria-disabled={locked ? "true" : undefined}
+          tabindex={locked ? -1 : undefined}
           onchange={onUnitChange}
-          class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none disabled:opacity-60"
+          class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none"
         >
           {#each orderedUnits as unit (unit)}
             <option value={unit}>{unitOptionLabel(unit)}</option>

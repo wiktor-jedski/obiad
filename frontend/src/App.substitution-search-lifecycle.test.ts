@@ -38,7 +38,7 @@ import {
   interactionState,
   type SelectedFoodObject,
 } from "./lib/interactionState";
-
+import { queryClient } from "./lib/queryClient";
 /** A captured Butter selection fixture for lifecycle setup. */
 const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
@@ -94,6 +94,7 @@ describe("the Substitution Search lifecycle", () => {
     // Reset both to make this scenario order-independent.
     interfaceLanguage.set("en");
     interactionState.reset();
+    queryClient.clear();
   });
 
   afterEach(() => {

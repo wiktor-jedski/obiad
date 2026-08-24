@@ -20,8 +20,10 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { plugin } from "bun";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import process from "node:process";
 import { compile, compileModule } from "svelte/compiler";
 
+process.env.NODE_ENV = "test";
 GlobalRegistrator.register();
 
 /**
