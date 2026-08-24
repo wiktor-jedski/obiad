@@ -10,12 +10,13 @@
     substitutionSearchLock,
   } from "../substitutionSearch";
   /**
-   * Result-state composition (task 30, task 37, task 38; ARCH-001, ARCH-002,
-   * ARCH-003, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022, REQ-003,
-   * REQ-036, REQ-037, REQ-041, REQ-042, REQ-043, REQ-044, REQ-045, REQ-047,
-   * REQ-058, REQ-061, REQ-062, REQ-065, REQ-066, ISSUE-008, ISSUE-010,
-   * ISSUE-011) with the ISSUE-010 editable selected-food summary and quantity
-   * recalculation (task 34, ARCH-018, REQ-027, REQ-028).
+   * Result-state composition (task 30, task 37, task 38, task 41;
+   * ARCH-001, ARCH-002, ARCH-003, ARCH-011, ARCH-018, ARCH-019,
+   * ARCH-020, ARCH-022, REQ-003, REQ-036, REQ-037, REQ-041, REQ-042,
+   * REQ-043, REQ-044, REQ-045, REQ-047, REQ-050, REQ-058, REQ-061,
+   * REQ-062, REQ-065, REQ-066, ISSUE-008, ISSUE-010, ISSUE-011,
+   * ISSUE-013) with the ISSUE-010 editable selected-food summary and
+   * quantity recalculation (task 34, ARCH-018, REQ-027, REQ-028).
    *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
@@ -65,6 +66,19 @@
    * programmatic focus moves to the stable results heading (REQ-043,
    * REQ-066). When the user selects a new Food Object from any page, the
    * interaction state commits page 0 (REQ-045).
+   *
+   * Task 41 completes the failed new-Search slice (REQ-050, ISSUE-013).
+   * When the current `loadingNew` generated-client request reaches its
+   * terminal error, the union transitions to `newSearchFailure`: the
+   * exact Search Query, selected Substitution Input, committed Food
+   * Quantity, and Search focus are retained, result cards and MORE! leave
+   * the rendered state, every pending spinner ends, the global request
+   * lock releases with the request, and exactly the ISSUE-013 retry
+   * message renders in one atomic polite status region at the stable top
+   * of the result area. TanStack Query continues to own the terminal
+   * error and response data; no automatic or lifecycle retry exists, no
+   * successful response is reused, and the visitor retries through the
+   * existing suggestion control.
    */
 
   /**
@@ -154,19 +168,25 @@
   );
 
   /**
-   * Result transition (task 28, task 37, task 38; ARCH-002): the first
-   * the union to `results` when the page contains items and to `zeroResults`
-   * when it is empty. A subsequent page response arriving while the state
-   * is `loadingMore` transitions the union back to `results` (REQ-041).
-   * When that subsequent page is the last page (`hasMore: false`), focus
-   * moves to the stable results heading (REQ-066). The response data itself
-   * stays in TanStack Query; the store receives only the outcome.
+   * Result transition (task 28, task 37, task 38, task 41; ARCH-002):
+   * the current response transitions the union to `results` when the page
+   * contains items and to `zeroResults` when it is empty. A subsequent
+   * page response arriving while the state is `loadingMore` transitions
+   * the union back to `results` (REQ-041). When that subsequent page is
+   * the last page (`hasMore: false`), focus moves to the stable results
+   * heading (REQ-066). From `newSearchFailure` (task 41), a success
+   * completes a retry started through a changed valid Food Quantity
+   * commit: the pending interval keeps the failure state and its retry
+   * message, and the response transitions the union to `results` or
+   * `zeroResults`. The response data itself stays in TanStack Query; the
+   * store receives only the outcome.
    */
   $effect(() => {
     const data = substitutionSearch.data;
     if (
       (interaction.name === "loadingNew" ||
-        interaction.name === "loadingMore") &&
+        interaction.name === "loadingMore" ||
+        interaction.name === "newSearchFailure") &&
       data !== undefined &&
       !substitutionSearch.isPlaceholderData
     ) {
@@ -178,6 +198,27 @@
           headingElement?.focus();
         });
       }
+    }
+  });
+
+  /**
+   * Failed new-search transition (task 41, REQ-050, ARCH-002, ARCH-019):
+   * when the current `loadingNew` generated-client request reaches its
+   * terminal error, TanStack Query owns that error and the union
+   * transitions to `newSearchFailure`. The exact Search Query, selected
+   * Substitution Input, committed Food Quantity, and Search focus are
+   * retained; result cards and MORE! leave the rendered state, every
+   * pending spinner ends, and the global request lock releases with the
+   * request. No automatic or lifecycle retry exists and no successful
+   * response is reused, so the visitor retries through the existing
+   * suggestion control.
+   */
+  $effect(() => {
+    if (
+      interaction.name === "loadingNew" &&
+      substitutionSearch.error !== null
+    ) {
+      interactionState.applyNewSearchFailure();
     }
   });
 
@@ -206,6 +247,27 @@
       data={substitutionSearch.data}
       {recalculating}
     />
+  </div>
+{/if}
+{#if interaction.name === "newSearchFailure"}
+  <!--
+    Failed new-search region (task 41; REQ-050, ISSUE-013): the terminal
+    failure of the current new-search request replaces the result area
+    with exactly the ISSUE-013 retry message at the stable top of the
+    result area, below the selected Substitution Input and above any
+    result heading or cards. One atomic polite status region (`role="status"`)
+    renders and announces the exact visible message once without
+    interrupting current screen-reader speech; no duplicate visually
+    hidden message exists and no focus moves, so Search keeps focus.
+  -->
+  <div data-failure-region class="mt-6">
+    <p
+      role="status"
+      data-retry-message
+      class="text-center font-data text-sm text-dark-text-primary"
+    >
+      {dictionary.retryMessage()}
+    </p>
   </div>
 {/if}
 {#if (interaction.name === "results" || interaction.name === "loadingMore") && substitutionSearch.data !== undefined}
