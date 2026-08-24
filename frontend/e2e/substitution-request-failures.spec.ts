@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Real-stack Substitution request-failure scenario (task 41, task 42;
- * ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-019, ARCH-020,
- * ARCH-022, REQ-050, REQ-051, ISSUE-013; P13-G1, P13-G2).
+ * Real-stack Substitution request-failure scenario (task 41, task 42,
+ * task 44; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-012,
+ * ARCH-014, ARCH-019, ARCH-020, ARCH-022, REQ-050, REQ-051, REQ-055,
+ * REQ-058, ISSUE-013, ISSUE-014; P13-G1, P13-G2, P14-G4, P14-G5).
  *
  * This scenario runs serially on the separate outage stack behind `bun run
  * test:e2e` (ARCH-022): the launcher hands the fixed loopback Fiber
@@ -51,9 +52,21 @@ import { expect, test, type Page } from "@playwright/test";
  *   announces the exact ISSUE-013 retry message in the active Interface
  *   Language. A deliberate manual re-activation of the retained MORE!
  *   control produces exactly one further `POST` with the same failed next
- *   page index (pageIndex 2) — no skip — fails again with the same closed
+ *   same failed next page index (pageIndex 2) — no skip — fails again with the same closed
  *   `503`, and the page retains the same cards and failure state with no
  *   third request (REQ-051, ISSUE-013).
+ *
+ * Task 44 extends the same outage scenario with a real Interface Language
+ * selection inside each failure state (P14-G4, REQ-050, REQ-051, REQ-058,
+ * ISSUE-014): while the outage is active, the English new-Search failure
+ * page and the English MORE! failure page each switch to Polish. The
+ * language action starts no request — the Substitute POST ledger and the
+ * full request ledger stay byte-for-byte unchanged (P14-G5) — and the
+ * failure transition, the retained Substitution Input, the displayed page
+ * index, the ordered retained cards, the MORE! control, and the exact
+ * Search text stay retained while the ISSUE-013 retry message, the Food
+ * Object names, and the control labels change in place to the Polish
+ * dictionary (REQ-055, REQ-058).
  */
 
 const COPY = {
@@ -63,6 +76,8 @@ const COPY = {
     retryMessage: "Could not load substitutions. Try again.",
     chickenName: "Chicken breast",
     pizzaName: "Pizza Margherita",
+    moreButton: "MORE!",
+    control: "Interface language",
   },
   pl: {
     language: "pl",
@@ -70,8 +85,20 @@ const COPY = {
     retryMessage: "Nie udało się wczytać zamienników. Spróbuj ponownie.",
     chickenName: "Pierś z kurczaka",
     pizzaName: "Pizza margherita",
+    moreButton: "WIĘCEJ!",
+    control: "Język interfejsu",
   },
 } as const;
+
+/**
+ * The seeded Polish names of the Pizza Margherita page-1 cards retained
+ * through the MORE! failure (task 44, REQ-058; seed migration 0005).
+ */
+const PIZZA_PAGE_1_PL_NAMES = [
+  "Zupa pho",
+  "Lazania",
+  "Pastel de nata",
+] as const;
 
 /** The seeded Pizza Margherita suggestion (ID 1, 1 serving = 350 g). */
 const PIZZA_FOOD_OBJECT_ID = 1;
@@ -437,6 +464,124 @@ async function expectMoreFailure(
   expect(posts).toHaveLength(4);
 }
 
+/**
+ * Asserts the task-44 real language selection inside the `newSearchFailure`
+ * state while the outage is active (P14-G4, REQ-050, REQ-058, ISSUE-014):
+ * the language action starts zero HTTP requests (P14-G5), the failure
+ * transition and every retained value survive unchanged, and the ISSUE-013
+ * retry message, the selected Food Object name, and the Search placeholder
+ * change in place to the Polish dictionary. The exact Search text stays the
+ * retained English name — language changes never translate retained text
+ * (REQ-059).
+ */
+async function expectNewSearchFailureLanguageChange(
+  page: Page,
+  posts: SubstitutePost[],
+  ledger: string[],
+): Promise<void> {
+  const ledgerBeforeChange = ledger.length;
+  const control = page.getByRole("combobox", { name: "Interface language" });
+  await control.focus();
+  await control.selectOption("pl");
+  expect(
+    ledger.slice(ledgerBeforeChange),
+    "the language action in newSearchFailure starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+  ).toEqual([]);
+  expect(posts).toHaveLength(2);
+  // The control's accessible name follows the selected dictionary, so the
+  // focus assertion re-locates it under the Polish name.
+  const polishControl = page.getByRole("combobox", { name: COPY.pl.control });
+
+  // The failure transition and its retained state survive unchanged.
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "newSearchFailure",
+  );
+  const retryMessage = page.locator("[data-retry-message]");
+  await expect(retryMessage).toHaveText(COPY.pl.retryMessage);
+  await expect(retryMessage).toHaveAttribute("role", "status");
+  await expect(page.getByText(COPY.pl.retryMessage)).toHaveCount(1);
+
+  // The retained Substitution Input updates its Food Object name in place
+  // while the committed 100 g quantity stays exact (REQ-058).
+  await expect(page.locator("[data-selected-name]")).toHaveText(
+    COPY.pl.chickenName,
+  );
+  await expect(page.locator("[data-quantity-number]")).toHaveValue("100");
+  await expect(page.locator("[data-quantity-static-unit]")).toHaveText("g");
+
+  // The Search field keeps the exact retained query text (the selected
+  // English name is not translated), its placeholder follows the active
+  // dictionary, and the real interaction moved focus to the control.
+  const searchInput = page.getByPlaceholder(COPY.pl.searchPlaceholder);
+  await expect(searchInput).toHaveValue(COPY.en.chickenName);
+  await expect(searchInput).not.toBeFocused();
+  await expect(polishControl).toBeFocused();
+
+  // Zero cards and no MORE! stay as the new-Search failure contract.
+  await expect(page.locator("[data-result-card]")).toHaveCount(0);
+  await expect(page.locator("[data-more-button]")).toHaveCount(0);
+}
+
+/**
+ * Asserts the task-44 real language selection inside the `moreFailure`
+ * state while the outage is active (P14-G4, REQ-051, REQ-058, ISSUE-014):
+ * the language action starts zero HTTP requests (P14-G5), the failure
+ * transition, the displayed page index, the ordered retained cards, the
+ * Substitution Input, and the MORE! control survive unchanged, and the
+ * ISSUE-013 retry message, the Food Object names, and the control labels
+ * change in place to the Polish dictionary (REQ-055).
+ */
+async function expectMoreFailureLanguageChange(
+  page: Page,
+  posts: SubstitutePost[],
+  ledger: string[],
+): Promise<void> {
+  const ledgerBeforeChange = ledger.length;
+  const control = page.getByRole("combobox", { name: "Interface language" });
+  await control.focus();
+  await control.selectOption("pl");
+  expect(
+    ledger.slice(ledgerBeforeChange),
+    "the language action in moreFailure starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+  ).toEqual([]);
+  expect(posts).toHaveLength(4);
+  // The control's accessible name follows the selected dictionary, so the
+  // focus assertion re-locates it under the Polish name.
+  const polishControl = page.getByRole("combobox", { name: COPY.pl.control });
+
+  // The failure transition, the displayed page index, and the ordered
+  // retained cards survive unchanged (REQ-051, REQ-058).
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "moreFailure",
+  );
+  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
+  const cardNames = await page
+    .locator("[data-result-card] h3")
+    .allTextContents();
+  expect(cardNames).toEqual([...PIZZA_PAGE_1_PL_NAMES]);
+
+  // The ISSUE-013 retry message changes in place to the Polish dictionary.
+  const retryMessage = page.locator("[data-retry-message]");
+  await expect(retryMessage).toHaveText(COPY.pl.retryMessage);
+  await expect(retryMessage).toHaveAttribute("role", "status");
+  await expect(page.getByText(COPY.pl.retryMessage)).toHaveCount(1);
+
+  // The retained Substitution Input and the retained MORE! control update
+  // their labels and accessible names in place while staying operable.
+  await expect(page.locator("[data-selected-name]")).toHaveText(
+    COPY.pl.pizzaName,
+  );
+  await expect(page.locator("[data-quantity-number]")).toHaveValue("1");
+  await expect(page.locator("[data-quantity-unit]")).toHaveValue("serving");
+  const moreButton = page.locator("[data-more-button]");
+  await expect(moreButton).toHaveText(COPY.pl.moreButton);
+  await expect(moreButton).toHaveAttribute("aria-label", COPY.pl.moreButton);
+  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+  await expect(polishControl).toBeFocused();
+}
+
 test.describe("Substitution request failures", () => {
   test("a new Search and a MORE! request fail after only the outage stack's PostgreSQL stops: each prepared English and Polish page keeps its retained state, control state, and focus, ends every pending spinner, releases the lock, and shows and announces the exact ISSUE-013 retry message with exactly one closed 503 CATALOG_UNAVAILABLE response per activation and no automatic retry (P13-G1, P13-G2, REQ-050, REQ-051)", async ({
     browser,
@@ -453,6 +598,9 @@ test.describe("Substitution request failures", () => {
     await useBrowserLanguages(polishPage, ["pl-PL"]);
     const englishPosts = trackSubstitutePosts(englishPage);
     const polishPosts = trackSubstitutePosts(polishPage);
+    // Full request ledgers for the language-change proof (task 44, P14-G5).
+    const englishLedger: string[] = [];
+    englishPage.on("request", (request) => englishLedger.push(request.url()));
 
     // A second page pair prepares successful intermediate result pages for
     // the MORE! failure slice (task 42, REQ-051).
@@ -462,6 +610,10 @@ test.describe("Substitution request failures", () => {
     await useBrowserLanguages(polishMorePage, ["pl-PL"]);
     const englishMorePosts = trackSubstitutePosts(englishMorePage);
     const polishMorePosts = trackSubstitutePosts(polishMorePage);
+    const englishMoreLedger: string[] = [];
+    englishMorePage.on("request", (request) =>
+      englishMoreLedger.push(request.url()),
+    );
 
     await englishPage.goto("/");
     await polishPage.goto("/");
@@ -511,6 +663,15 @@ test.describe("Substitution request failures", () => {
       .click();
     await expectNewSearchFailure(englishPage, englishPosts, COPY.en);
 
+    // P14-G4: a real language selection inside `newSearchFailure` updates
+    // the full failure surface in place with no request and no retained
+    // state change (REQ-050, REQ-055, REQ-058, ISSUE-014).
+    await expectNewSearchFailureLanguageChange(
+      englishPage,
+      englishPosts,
+      englishLedger,
+    );
+
     await polishPage
       .locator(`#food-suggestion-option-${CHICKEN_FOOD_OBJECT_ID}`)
       .click();
@@ -522,6 +683,17 @@ test.describe("Substitution request failures", () => {
     // cards, input, page index, and MORE! control stay, and a manual
     // re-activation requests the same failed next page without a skip.
     await expectMoreFailure(englishMorePage, englishMorePosts, COPY.en);
+
+    // P14-G4: a real language selection inside `moreFailure` updates the
+    // retry message, the retained Food Object names, and the control
+    // labels in place with no request and no retained state change
+    // (REQ-051, REQ-055, REQ-058, ISSUE-014).
+    await expectMoreFailureLanguageChange(
+      englishMorePage,
+      englishMorePosts,
+      englishMoreLedger,
+    );
+
     await expectMoreFailure(polishMorePage, polishMorePosts, COPY.pl);
 
     await englishContext.close();

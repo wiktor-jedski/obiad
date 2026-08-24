@@ -23,6 +23,16 @@
  * message `No substitutes found` / `Nie znaleziono zamienników`, the
  * read-only selected-input region still present, and the main element's
  * `data-interaction-state` at `zeroResults`.
+ *
+ * Task 44 extends the same scenario to change the Interface Language in
+ * the production `zeroResults` state (P14-G4, REQ-044, REQ-058, ISSUE-014):
+ * the language change performs no additional fetch, keeps zero cards and
+ * the retained selection, and updates every visible and accessibility
+ * string of the zero-result surface — the localized message, the selected
+ * Food Object name, the sr-only `Selected food` / `Wybrany produkt`
+ * region value, the quantity and unit accessible names, the macronutrient
+ * labels, and the localized one-decimal values — in place to the active
+ * dictionary, in English and in Polish.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -138,9 +148,45 @@ describe("the root result-state composition", () => {
       expect(zeroRegion).not.toBeNull();
       expect(zeroRegion?.textContent).toBe("No substitutes found");
 
-      // The zero-result message follows the active Interface Language
+      // The complete English zero-result surface (task 44, P14-G4,
+      // REQ-044, REQ-055, REQ-058): the retained selected Food Object and
+      // the localized sr-only region value, quantity and unit accessible
+      // names, macronutrient labels, and one-decimal values.
+      expect(document.querySelector("[data-selected-name]")?.textContent).toBe(
+        "Butter",
+      );
+      const englishSrOnly = Array.from(
+        document.querySelectorAll("[data-selected-food-summary] .sr-only"),
+      ).map((element) => element.textContent);
+      expect(englishSrOnly).toContain("Selected food: Butter · 100 g");
+      expect(englishSrOnly).toContain("Quantity");
+      expect(englishSrOnly).toContain("Unit");
+      expect(
+        Array.from(
+          document.querySelectorAll("[data-input-macronutrients] dt"),
+        ).map((element) => element.textContent),
+      ).toEqual(["Protein", "Carbohydrates", "Fat"]);
+      expect(
+        document.querySelector("[data-input-macro-protein]")?.textContent,
+      ).toBe("35.0 g");
+      expect(
+        document
+          .querySelector("[data-input-calories]")
+          ?.getAttribute("aria-label"),
+      ).toBe("Calories");
+      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
+        "875 kcal",
+      );
+      expect(
+        document.querySelector("[data-quantity-static-unit]")?.textContent,
+      ).toBe("g");
+
+      // The zero-result surface follows the active Interface Language
       // dictionary (ARCH-003): switching to Polish re-renders the exact
-      // Polish message without touching the captured selection.
+      // Polish message and every visible and accessibility string in place
+      // without touching the captured selection, zero cards, or the
+      // interaction transition, and performs no additional fetch
+      // (P14-G4, REQ-044, REQ-055, REQ-058, ISSUE-014).
       interfaceLanguage.set("pl");
       await tick();
       expect(
@@ -150,6 +196,35 @@ describe("the root result-state composition", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("zeroResults");
+      expect(document.querySelector("[data-selected-name]")?.textContent).toBe(
+        "Masło",
+      );
+      const polishSrOnly = Array.from(
+        document.querySelectorAll("[data-selected-food-summary] .sr-only"),
+      ).map((element) => element.textContent);
+      expect(polishSrOnly).toContain("Wybrany produkt: Masło · 100 g");
+      expect(polishSrOnly).toContain("Ilość");
+      expect(polishSrOnly).toContain("Jednostka");
+      expect(
+        Array.from(
+          document.querySelectorAll("[data-input-macronutrients] dt"),
+        ).map((element) => element.textContent),
+      ).toEqual(["Białko", "Węglowodany", "Tłuszcz"]);
+      expect(
+        document.querySelector("[data-input-macro-protein]")?.textContent,
+      ).toBe("35,0 g");
+      expect(
+        document
+          .querySelector("[data-input-calories]")
+          ?.getAttribute("aria-label"),
+      ).toBe("Kalorie");
+      expect(
+        document.querySelector("[data-quantity-static-unit]")?.textContent,
+      ).toBe("g");
+      expect(
+        postUrls,
+        "the language change in zeroResults performs no additional fetch",
+      ).toHaveLength(1);
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;
