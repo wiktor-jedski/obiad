@@ -514,4 +514,46 @@ test.describe("MORE! result paging", () => {
     await expect(page.locator("[data-more-button]")).toHaveCount(0);
     await expect(page.locator("[data-result-card]")).toHaveCount(1);
   });
+  test("MORE! preserves the Food Quantity controls through pending and fulfilled paging", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    const posts = trackSubstitutePosts(page);
+
+    let postCount = 0;
+    let releaseMoreGate: () => void = () => {};
+    const moreGate = new Promise<void>((resolve) => {
+      releaseMoreGate = resolve;
+    });
+
+    await page.route("**/api/v1/substitutes/search", async (route) => {
+      postCount += 1;
+      if (postCount === 2) {
+        await moreGate;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await selectFoodObject(page, "margherita", 1, COPY.en);
+
+    const numberInput = page.locator("[data-quantity-number]");
+    const unitSelect = page.locator("[data-quantity-unit]");
+    const [numberInputClass, unitSelectClass] = await Promise.all([
+      numberInput.getAttribute("class"),
+      unitSelect.getAttribute("class"),
+    ]);
+    expect(numberInputClass).not.toBeNull();
+    expect(unitSelectClass).not.toBeNull();
+
+    await page.locator("[data-more-button]").click();
+    await expect.poll(() => posts.length).toBe(2);
+    await expect(numberInput).toHaveAttribute("class", numberInputClass!);
+    await expect(unitSelect).toHaveAttribute("class", unitSelectClass!);
+
+    releaseMoreGate();
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await expect(numberInput).toHaveAttribute("class", numberInputClass!);
+    await expect(unitSelect).toHaveAttribute("class", unitSelectClass!);
+  });
 });

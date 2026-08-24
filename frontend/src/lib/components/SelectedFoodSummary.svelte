@@ -278,9 +278,7 @@
         readonly={locked || undefined}
         oninput={onNumberInput}
         onkeydown={onNumberKeydown}
-        class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none {locked
-          ? 'cursor-not-allowed opacity-60'
-          : ''}"
+        class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none"
       />
       {#if twoUnitsAllowed}
         <label for="quantity-unit" class="sr-only"
@@ -293,9 +291,7 @@
           aria-disabled={locked ? "true" : undefined}
           tabindex={locked ? -1 : undefined}
           onchange={onUnitChange}
-          class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none {locked
-            ? 'cursor-not-allowed opacity-60'
-            : ''}"
+          class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none"
         >
           {#each orderedUnits as unit (unit)}
             <option value={unit}>{unitOptionLabel(unit)}</option>
