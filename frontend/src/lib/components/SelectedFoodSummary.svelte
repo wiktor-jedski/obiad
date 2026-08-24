@@ -11,6 +11,7 @@
     interactionState,
     type LoadingMoreInteractionState,
     type LoadingNewInteractionState,
+    type NewSearchFailureInteractionState,
     type QuantityUnit,
     type ResultsInteractionState,
     type ZeroResultsInteractionState,
@@ -60,8 +61,10 @@
    * the region stays busy, the summary macronutrient values are replaced
    * by aria-hidden `16px` spinners, and one polite `Updating quantities`
    * / `Aktualizowanie ilości` announcement fires. The summary renders only
-   * the current response's backend values; Phase 12 owns request-failure
-   * presentation, so a missing response keeps the value spinners visible.
+   * the current response's backend values. After a terminal new-search
+   * failure (task 41, REQ-050), the region is not busy: the retained
+   * Substitution Input renders without value spinners and the ISSUE-013
+   * retry message appears in the result area.
    */
 
   interface Props {
@@ -70,7 +73,8 @@
       | LoadingNewInteractionState
       | LoadingMoreInteractionState
       | ResultsInteractionState
-      | ZeroResultsInteractionState;
+      | ZeroResultsInteractionState
+      | NewSearchFailureInteractionState;
     data: SubstituteSearchResponse | undefined;
     /** Whether a valid quantity recalculation is pending (ISSUE-010). */
     recalculating: boolean;
