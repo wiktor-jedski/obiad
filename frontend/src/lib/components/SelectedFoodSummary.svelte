@@ -11,6 +11,8 @@
     interactionState,
     type LoadingMoreInteractionState,
     type LoadingNewInteractionState,
+    type MoreFailureInteractionState,
+    type NewSearchFailureInteractionState,
     type QuantityUnit,
     type ResultsInteractionState,
     type ZeroResultsInteractionState,
@@ -60,8 +62,14 @@
    * the region stays busy, the summary macronutrient values are replaced
    * by aria-hidden `16px` spinners, and one polite `Updating quantities`
    * / `Aktualizowanie ilości` announcement fires. The summary renders only
-   * the current response's backend values; Phase 12 owns request-failure
-   * presentation, so a missing response keeps the value spinners visible.
+   * the current response's backend values. After a terminal new-search
+   * failure (task 41, REQ-050), the region is not busy: the retained
+   * Substitution Input renders without value spinners and the ISSUE-013
+   * retry message appears in the result area. After a MORE! failure
+   * (task 42, REQ-051) the region is also not busy: the retained
+   * Substitution Input and its stored values stay visible while the
+   * quantity editor remains non-operable, because the retry path is the
+   * retained MORE! control or a fresh suggestion selection.
    */
 
   interface Props {
@@ -70,7 +78,9 @@
       | LoadingNewInteractionState
       | LoadingMoreInteractionState
       | ResultsInteractionState
-      | ZeroResultsInteractionState;
+      | ZeroResultsInteractionState
+      | NewSearchFailureInteractionState
+      | MoreFailureInteractionState;
     data: SubstituteSearchResponse | undefined;
     /** Whether a valid quantity recalculation is pending (ISSUE-010). */
     recalculating: boolean;
@@ -116,8 +126,20 @@
   const initial = $derived(interaction.name === "loadingNew");
   /** Whether any quantity-dependent value is pending (initial or recalculation). */
   const busy = $derived(initial || recalculating);
-  /** Whether the global substitution request lock is active (ARCH-011, ARCH-019, REQ-048). */
-  const locked = $derived($substitutionSearchLock || initial || recalculating);
+  /**
+   * Whether the quantity editor is non-operable (ARCH-011, ARCH-019,
+   * REQ-048): the global substitution request lock, the initial new
+   * Search, a pending recalculation, or the MORE! failure transition.
+   * After a MORE! failure (task 42, REQ-051) the retry path is the
+   * retained MORE! control or a fresh suggestion selection, so the
+   * quantity editor stays non-operable like during a pending request.
+   */
+  const locked = $derived(
+    $substitutionSearchLock ||
+      initial ||
+      recalculating ||
+      interaction.name === "moreFailure",
+  );
   const inputMacros = $derived(data?.inputMacronutrients);
   /** The response's input calories at the committed quantity, when present. */
   const inputCalories = $derived(data?.inputCalories);

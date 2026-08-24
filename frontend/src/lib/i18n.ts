@@ -66,6 +66,12 @@ export interface Messages {
   zeroResultsMessage: () => string;
   /** Visible label and accessible name of the MORE! paging button (task 37, REQ-041). */
   moreButtonLabel: () => string;
+  /**
+   * The ISSUE-013 retry message shown after a failed new Search or MORE!
+   * request (task 41, task 42; REQ-050, REQ-051). Both failure states use
+   * this one shared visible and assistive message.
+   */
+  retryMessage: () => string;
 }
 
 /** The static English dictionary (ISSUE-007 exact copy). */
@@ -90,6 +96,7 @@ const en = {
   foundSubstitutionsHeading: () => "Found substitutions",
   zeroResultsMessage: () => "No substitutes found",
   moreButtonLabel: () => "MORE!",
+  retryMessage: () => "Could not load substitutions. Try again.",
 } satisfies Messages;
 
 /** The static Polish dictionary (ISSUE-007 exact copy). */
@@ -114,6 +121,7 @@ const pl = {
   foundSubstitutionsHeading: () => "Znalezione zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
   moreButtonLabel: () => "WIĘCEJ!",
+  retryMessage: () => "Nie udało się wczytać zamienników. Spróbuj ponownie.",
 } satisfies Messages;
 
 /** Shape-checked static dictionaries keyed in UI display order. */

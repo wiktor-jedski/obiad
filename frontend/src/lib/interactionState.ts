@@ -179,9 +179,43 @@ export interface ZeroResultsInteractionState extends SubstitutionSearchInteracti
 }
 
 /**
+ * The failed new-search transition (task 41, REQ-050, ARCH-002): the
+ * page-0 Substitution Search request of the current new search reached
+ * its terminal error. The exact Search Query, selected Substitution
+ * Input, committed Food Quantity, page index, and Search focus intent
+ * are retained unchanged; TanStack Query owns the terminal error and the
+ * response data, and the rendered state shows the ISSUE-013 retry
+ * message instead of result cards or MORE! (ARCH-019). No automatic or
+ * lifecycle retry exists, so the visitor retries through the existing
+ * suggestion control.
+ */
+export interface NewSearchFailureInteractionState extends SubstitutionSearchInteractionState {
+  readonly name: "newSearchFailure";
+}
+
+/**
+ * The failed next-page transition (task 42, REQ-051, ARCH-002): the
+ * next-page Substitution Search request of the current MORE! activation
+ * reached its terminal error. The exact selected Substitution Input,
+ * committed Food Quantity, and Search focus intent are retained
+ * unchanged, and the page index returns to the displayed page — the page
+ * whose ordered cards TanStack Query retains — so a later manual MORE!
+ * activation requests the same failed next page without skipping one.
+ * TanStack Query owns the terminal error and the retained current-page
+ * response data, and the rendered state shows the ISSUE-013 retry
+ * message above the retained cards and MORE! control (ARCH-019). No
+ * automatic or lifecycle retry exists: the visitor retries by activating
+ * the retained MORE! control or selecting a fresh suggestion.
+ */
+export interface MoreFailureInteractionState extends SubstitutionSearchInteractionState {
+  readonly name: "moreFailure";
+}
+
+/**
  * The discriminated browser-interaction state union (ARCH-002). Task 27
  * reached only `empty`; task 28 adds `loadingNew`, `results`, and
- * `zeroResults`; task 37 adds `loadingMore` (REQ-041).
+ * `zeroResults`; task 37 adds `loadingMore` (REQ-041); task 41 adds
+ * `newSearchFailure` (REQ-050); task 42 adds `moreFailure` (REQ-051).
  * Transitions, not independent booleans, determine the visible controls.
  */
 export type InteractionState =
@@ -189,7 +223,9 @@ export type InteractionState =
   | LoadingNewInteractionState
   | LoadingMoreInteractionState
   | ResultsInteractionState
-  | ZeroResultsInteractionState;
+  | ZeroResultsInteractionState
+  | NewSearchFailureInteractionState
+  | MoreFailureInteractionState;
 /** The typed Browser Interaction Module surface of the interaction state. */
 export interface InteractionStateStore extends Readable<InteractionState> {
   /**
@@ -211,17 +247,47 @@ export interface InteractionStateStore extends Readable<InteractionState> {
   selectSuggestion: (selected: SelectedFoodObject) => void;
   /**
    * Applies the Substitution Search response outcome (task 28, task 37,
-   * ARCH-002): transitions `loadingNew` or `loadingMore` to `results` when
-   * the page contains items, otherwise to `zeroResults`. The response data
-   * itself stays in TanStack Query; the store receives only the outcome.
+   * task 41, ARCH-002): transitions `loadingNew`, `loadingMore`, or
+   * `newSearchFailure` to `results` when the page contains items,
+   * otherwise to `zeroResults`. From `newSearchFailure` this completes a
+   * retry started through a changed valid Food Quantity commit, whose
+   * pending interval keeps the failure state and its retry message; the
+   * response data itself stays in TanStack Query, and the store receives
+   * only the outcome.
    */
   applySearchResult: (hasItems: boolean) => void;
   /**
+   * Applies the terminal failure of the current new-search request
+   * (task 41, REQ-050, ARCH-002, ARCH-019): transitions only `loadingNew`
+   * to `newSearchFailure` when the generated-client request reached its
+   * terminal error, keeping the exact Search Query, selected Substitution
+   * Input, committed Food Quantity, page index, and Search focus intent.
+   * The terminal error and response data stay in TanStack Query; the
+   * store receives only the failure outcome. It is a no-op in every
+   * other state.
+   */
+  applyNewSearchFailure: () => void;
+  /**
+   * Applies the terminal failure of the current next-page request
+   * (task 42, REQ-051, ARCH-002, ARCH-019): transitions only `loadingMore`
+   * to `moreFailure` when the generated-client request reached its
+   * terminal error, keeping the exact selected Substitution Input,
+   * committed Food Quantity, and Search focus intent and restoring the
+   * page index to the displayed page so a manual MORE! activation later
+   * requests the same failed next page without skipping one. The terminal
+   * error and the retained current-page response data stay in TanStack
+   * Query; the store receives only the failure outcome. It is a no-op in
+   * every other state.
+   */
+  applyMoreFailure: () => void;
+  /**
    * Commits the next page index (`pageIndex + 1`) from a successful result
-   * (task 37, ARCH-002, REQ-041): transitions `results` to `loadingMore`
-   * with the unchanged selected Food Object, committed Food Quantity, and
-   * `pageIndex: state.pageIndex + 1`. It is a no-op when not in the `results`
-   * state.
+   * or a MORE! failure (task 37, task 42; ARCH-002, REQ-041, REQ-051):
+   * transitions `results` or `moreFailure` to `loadingMore` with the
+   * unchanged selected Food Object, committed Food Quantity, and
+   * `pageIndex: state.pageIndex + 1`. From `moreFailure` the restored
+   * page index makes the manual activation request the same failed next
+   * page. It is a no-op in every other state.
    */
   loadNextPage: () => void;
   /**
@@ -336,7 +402,11 @@ export function createInteractionState(): InteractionStateStore {
     },
     applySearchResult(hasItems) {
       update((state) => {
-        if (state.name !== "loadingNew" && state.name !== "loadingMore") {
+        if (
+          state.name !== "loadingNew" &&
+          state.name !== "loadingMore" &&
+          state.name !== "newSearchFailure"
+        ) {
           return state;
         }
         return {
@@ -345,12 +415,37 @@ export function createInteractionState(): InteractionStateStore {
         };
       });
     },
+    applyNewSearchFailure() {
+      update((state) => {
+        if (state.name !== "loadingNew") {
+          return state;
+        }
+        return { ...state, name: "newSearchFailure" };
+      });
+    },
+    applyMoreFailure() {
+      update((state) => {
+        if (state.name !== "loadingMore") {
+          return state;
+        }
+        // Restore the displayed page index: the next-page request for
+        // `pageIndex + 1` failed, so the state returns to the page whose
+        // ordered cards TanStack Query retains (task 42, REQ-051). A
+        // manual MORE! activation from `moreFailure` then commits
+        // `pageIndex + 1` again and requests the same failed next page.
+        return {
+          ...state,
+          name: "moreFailure",
+          pageIndex: state.pageIndex - 1,
+        };
+      });
+    },
     loadNextPage() {
       if (isSubstitutionSearchLocked()) {
         return;
       }
       update((state) => {
-        if (state.name !== "results") {
+        if (state.name !== "results" && state.name !== "moreFailure") {
           return state;
         }
         return {
@@ -368,7 +463,8 @@ export function createInteractionState(): InteractionStateStore {
         if (
           state.name === "empty" ||
           state.name === "loadingNew" ||
-          state.name === "loadingMore"
+          state.name === "loadingMore" ||
+          state.name === "moreFailure"
         ) {
           return state;
         }
@@ -387,7 +483,8 @@ export function createInteractionState(): InteractionStateStore {
         if (
           state.name === "empty" ||
           state.name === "loadingNew" ||
-          state.name === "loadingMore"
+          state.name === "loadingMore" ||
+          state.name === "moreFailure"
         ) {
           return state;
         }
@@ -406,7 +503,8 @@ export function createInteractionState(): InteractionStateStore {
         if (
           state.name === "empty" ||
           state.name === "loadingNew" ||
-          state.name === "loadingMore"
+          state.name === "loadingMore" ||
+          state.name === "moreFailure"
         ) {
           return state;
         }

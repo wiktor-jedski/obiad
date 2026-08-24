@@ -94,7 +94,9 @@ export const substitutionSearchLock: Readable<boolean> = readable(
   },
 );
 
-/** The reactive input the Substitution Search query reads from the interaction state. */
+/**
+ * The reactive input the Substitution Search query reads from the interaction state.
+ */
 export interface SubstitutionSearchQueryInput {
   /**
    * The committed Substitution Search input accessor (task 34): the
@@ -102,6 +104,36 @@ export interface SubstitutionSearchQueryInput {
    * the current page index, or undefined before any selection.
    */
   committed: () => CommittedSubstitutionInput | undefined;
+}
+
+/**
+ * The reactive input the retained-page query reads from the interaction
+ * state (task 42): the same committed Substitution Search input plus the
+ * index of the page whose ordered cards are currently displayed.
+ */
+export interface RetainedPageQueryInput extends SubstitutionSearchQueryInput {
+  /**
+   * The displayed page index accessor: the page whose ordered cards the
+   * result region renders right now, or undefined before any selection.
+   */
+  displayedPageIndex: () => number | undefined;
+}
+
+/**
+ * The full query key of one Substitution Search query for a committed
+ * input and page index, matching the key the owning query builds.
+ */
+function substitutionSearchKey(
+  committed: CommittedSubstitutionInput,
+  pageIndex: number,
+): readonly unknown[] {
+  return [
+    ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
+    committed.foodObjectId,
+    committed.quantity.value,
+    committed.quantity.unit,
+    pageIndex,
+  ] as const;
 }
 
 /**
@@ -134,13 +166,7 @@ export function createSubstitutionSearchQuery(
       const queryKey =
         committed === undefined
           ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
-          : ([
-              ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
-              committed.foodObjectId,
-              committed.quantity.value,
-              committed.quantity.unit,
-              committed.pageIndex,
-            ] as const);
+          : substitutionSearchKey(committed, committed.pageIndex);
       return {
         queryKey,
         queryFn: async ({ signal }) => {
@@ -161,6 +187,54 @@ export function createSubstitutionSearchQuery(
         },
         enabled: committed !== undefined,
         placeholderData: keepPreviousData,
+        staleTime: Infinity,
+        retry: false,
+        retryOnMount: false,
+        refetchOnMount: false,
+        refetchOnReconnect: false,
+        refetchOnWindowFocus: false,
+        gcTime: 0,
+      };
+    },
+    () => queryClient,
+  );
+}
+
+/**
+ * Creates the retained-page TanStack Query that keeps the displayed page's
+ * successful response in the cache while a next-page request is in flight
+ * (task 42, REQ-051, ARCH-019).
+ *
+ * The owning Substitution Search query is keyed by the committed page
+ * index, so a MORE! activation moves it to the next-page key and the
+ * displayed page's query would lose its last observer and be evicted by
+ * `gcTime: 0` while the next-page request is still pending. This disabled
+ * query subscribes to the displayed page's exact key for the whole
+ * component lifetime and never fetches, so the current page's ordered
+ * cards stay in TanStack Query. When the next-page request reaches its
+ * terminal error, the interaction state restores the displayed page index
+ * and the owning query re-attaches to the retained key, rendering the
+ * retained cards from the cache without any automatic refetch; a later
+ * manual MORE! activation then starts the same failed next-page request
+ * again.
+ *
+ * @param input - the committed input and displayed-page-index accessors
+ * @returns the disabled retained-page query result
+ */
+export function createRetainedPageQuery(input: RetainedPageQueryInput) {
+  return createQuery(
+    () => {
+      const committed = input.committed();
+      const displayed = input.displayedPageIndex();
+      const queryKey =
+        committed === undefined || displayed === undefined
+          ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
+          : substitutionSearchKey(committed, displayed);
+      return {
+        queryKey,
+        // The query never fetches: it only subscribes to the displayed
+        // page's key so the cache retains that page's response.
+        enabled: false,
         staleTime: Infinity,
         retry: false,
         retryOnMount: false,
