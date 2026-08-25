@@ -219,24 +219,23 @@
   );
 
   /**
-   * Result transition (task 28, task 37, task 38, task 41, task 45,
-   * task 46; ARCH-002, REQ-083, REQ-084): the current response
-   * transitions the union to `results` when the page contains items and
-   * to `zeroResults` when it is empty. A subsequent page response
-   * arriving while the state is `loadingMore` transitions the union back
-   * to `results` (REQ-041). After a successful page with one or more
-   * result cards — a new Search, an intermediate MORE! page, or the last
-   * page — programmatic focus moves to the stable localized results
-   * heading (REQ-083); after a successful page without result cards,
-   * focus moves to the localized zero-result message (REQ-084). The
-   * superseded Search-focus (REQ-064), MORE!-focus (REQ-065), and
-   * last-page-only heading-focus (REQ-066) success paths are removed.
-   * From `newSearchFailure` (task 41), a success completes a retry
-   * started through a changed valid Food Quantity commit: the pending
-   * interval keeps the failure state and its retry message, and the
-   * response transitions the union to `results` or `zeroResults`. The
-   * response data itself stays in TanStack Query; the store receives
-   * only the outcome.
+   * Result transition (task 28, task 37, task 38, task 41, task 45;
+   * ARCH-002, REQ-083): the current response transitions the union to
+   * `results` when the page contains items and to `zeroResults` when it
+   * is empty. A subsequent page response arriving while the state is
+   * `loadingMore` transitions the union back to `results` (REQ-041).
+   * After a successful page with one or more result cards — a new
+   * Search, an intermediate MORE! page, or the last page — programmatic
+   * focus moves to the stable localized results heading (REQ-083),
+   * replacing the superseded Search-focus (REQ-064), MORE!-focus
+   * (REQ-065), and last-page-only heading-focus (REQ-066) success paths.
+   * The zero-result transition (REQ-084) stays a success outcome without
+   * a focus move in this task. From `newSearchFailure` (task 41), a
+   * success completes a retry started through a changed valid Food
+   * Quantity commit: the pending interval keeps the failure state and
+   * its retry message, and the response transitions the union to
+   * `results` or `zeroResults`. The response data itself stays in
+   * TanStack Query; the store receives only the outcome.
    */
   $effect(() => {
     const data = substitutionSearch.data;
@@ -252,10 +251,6 @@
       if (hasItems) {
         tick().then(() => {
           headingElement?.focus();
-        });
-      } else {
-        tick().then(() => {
-          zeroResultMessageElement?.focus();
         });
       }
     }
