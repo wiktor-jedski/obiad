@@ -1344,6 +1344,9 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // client inside Chromium. The serial database-outage scenario
   // (`substitution-request-failures.spec.ts`) is excluded here: ARCH-022
   // gives it a separate Fiber process and disposable PostgreSQL database.
+  // The Result Card motion timing scenario is excluded as well: ARCH-022
+  // requires that timing checks do not share a runner job with parallel
+  // test load, so step 10b runs it alone with one worker afterwards.
   log("running the real-stack Playwright suite on the normal stack");
   const normalStatus = await runStep(
     resources,
@@ -1353,8 +1356,32 @@ async function runStack(resources: OwnedResources): Promise<number> {
       "playwright",
       "test",
       "--grep-invert",
-      "Substitution request failures|Control accessibility failure states",
+      "Substitution request failures|Control accessibility failure states|Result Card motion",
     ],
+    {
+      cwd: FRONTEND,
+      env: {
+        ...process.env,
+        OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle,
+      },
+    },
+  );
+  assertRunning();
+
+  // 10b. Serial Result Card motion timing suite (task 50, ARCH-022): the
+  // Phase 16 gate checks browser timing with a tolerance of one animation
+  // frame, and ARCH-022 requires that timing checks do not share a runner
+  // job with parallel test load. The motion scenario therefore runs alone
+  // on the still-running normal stack with one worker — a single unloaded
+  // browser context — after the parallel suite completes, instead of
+  // inside the fully-parallel main suite where the Web Animations API
+  // finish-event delivery that carries the Svelte transition events would
+  // be delayed by the competing workers.
+  log("running the serial Result Card motion timing suite on the normal stack");
+  const motionStatus = await runStep(
+    resources,
+    "bun",
+    ["x", "playwright", "test", "--grep", "Result Card motion", "--workers=1"],
     {
       cwd: FRONTEND,
       env: {
@@ -1393,7 +1420,11 @@ async function runStack(resources: OwnedResources): Promise<number> {
     }
   }
 
-  return normalStatus !== 0 ? normalStatus : outageStatus;
+  return normalStatus !== 0
+    ? normalStatus
+    : motionStatus !== 0
+      ? motionStatus
+      : outageStatus;
 }
 
 async function main(): Promise<number> {
