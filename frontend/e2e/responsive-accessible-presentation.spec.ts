@@ -89,8 +89,12 @@ const PIZZA_PAGE_0_IDS = [13, 29, 26] as const;
  */
 const PIZZA_PAGE_1_IDS = [30, 3, 35] as const;
 
-/** Where the review PNGs are mirrored so they survive the launcher cleanup. */
-const REVIEW_COPY_DIR = "/tmp/obiad-task52-responsive-accessible-presentation";
+/**
+ * Where the final P17-G6 review PNGs are mirrored so they survive the
+ * launcher cleanup (task 53 evidence; task-52-specific mirror would mix
+ * the two tasks' attachments).
+ */
+const REVIEW_COPY_DIR = "/tmp/obiad-task53-responsive-accessible-presentation";
 
 /** One prepared outage page pair of one viewport and Interface Language. */
 interface PreparedPage {

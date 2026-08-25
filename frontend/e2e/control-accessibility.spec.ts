@@ -8,13 +8,6 @@ import { AxeBuilder } from "@axe-core/playwright";
  * Real-stack accessible-name scenario (task 47; ARCH-001, ARCH-003,
  * ARCH-010, ARCH-011, ARCH-020, ARCH-022, REQ-068; P15-G7).
  *
-import { expect, test, type Page } from "@playwright/test";
-import { AxeBuilder } from "@axe-core/playwright";
-
-/**
- * Real-stack accessible-name scenario (task 47; ARCH-001, ARCH-003,
- * ARCH-010, ARCH-011, ARCH-020, ARCH-022, REQ-068; P15-G7).
- *
  * `bun run test:e2e` runs the "Control accessibility" describe against the
  * complete disposable stack started by `./e2e/launcher.ts`: disposable
  * PostgreSQL 17 seeded by the real setup command, the real Fiber process
@@ -865,51 +858,56 @@ interface EffectiveColors {
 }
 
 /**
- * Samples the painted colors of one presentation in the real browser
- * (P17-G5, REQ-069): the element's own computed foreground color (its
- * text, border, or outline), its own background when opaque, the opaque
- * backdrop painted behind the element (the nearest ancestor background —
- * the body carries the page Background token), and the element's opacity.
- * The backdrop walk always starts at the parent: the element's own
- * background is returned separately because an element's opacity
- * composites its whole painted group (own background plus foreground)
- * over the backdrop behind it.
+ * Samples the painted colors of EVERY matching presentation in the real
+ * browser (P17-G5, REQ-069): for each element it reads the element's own
+ * computed foreground color (its text, border, or outline), its own
+ * background when opaque, the opaque backdrop painted behind the element
+ * (the nearest ancestor background — the body carries the page Background
+ * token), and the element's opacity. The backdrop walk always starts at
+ * the parent: the element's own background is returned separately because
+ * an element's opacity composites its whole painted group (own background
+ * plus foreground) over the backdrop behind it. Enumerating every match —
+ * never just the first — is what proves the "every visible text and
+ * interactive state" audit across repeated cards, options, rows, and
+ * spinners.
  */
-async function sampleEffectiveColors(
+async function sampleEffectiveColorsAll(
   page: Page,
   selector: string,
   kind: ContrastKind,
   pseudo?: string,
-): Promise<EffectiveColors> {
+): Promise<EffectiveColors[]> {
   return page.evaluate(
     ({ selector, kind, pseudo }) => {
-      const element = document.querySelector(selector);
-      if (element === null) {
-        throw new Error(`sampleEffectiveColors: no element for ${selector}`);
+      const elements = Array.from(document.querySelectorAll(selector));
+      if (elements.length === 0) {
+        throw new Error(`sampleEffectiveColorsAll: no element for ${selector}`);
       }
-      const style = getComputedStyle(element);
-      const foreground =
-        pseudo !== undefined
-          ? getComputedStyle(element, pseudo).color
-          : kind === "text"
-            ? style.color
-            : kind === "border"
-              ? style.borderTopColor
-              : kind === "border-bottom"
-                ? style.borderBottomColor
-                : style.outlineColor;
-      const ownBackground = style.backgroundColor;
-      let node: Element | null = element.parentElement;
-      let backdrop = "rgb(255, 255, 255)";
-      while (node !== null) {
-        const candidate = getComputedStyle(node).backgroundColor;
-        if (candidate !== "rgba(0, 0, 0, 0)" && candidate !== "transparent") {
-          backdrop = candidate;
-          break;
+      return elements.map((element) => {
+        const style = getComputedStyle(element);
+        const foreground =
+          pseudo !== undefined
+            ? getComputedStyle(element, pseudo).color
+            : kind === "text"
+              ? style.color
+              : kind === "border"
+                ? style.borderTopColor
+                : kind === "border-bottom"
+                  ? style.borderBottomColor
+                  : style.outlineColor;
+        const ownBackground = style.backgroundColor;
+        let node: Element | null = element.parentElement;
+        let backdrop = "rgb(255, 255, 255)";
+        while (node !== null) {
+          const candidate = getComputedStyle(node).backgroundColor;
+          if (candidate !== "rgba(0, 0, 0, 0)" && candidate !== "transparent") {
+            backdrop = candidate;
+            break;
+          }
+          node = node.parentElement;
         }
-        node = node.parentElement;
-      }
-      return { foreground, ownBackground, backdrop, opacity: style.opacity };
+        return { foreground, ownBackground, backdrop, opacity: style.opacity };
+      });
     },
     { selector, kind, pseudo },
   );
@@ -929,42 +927,44 @@ interface PresentationContrast {
  * both effective colors mix toward the backdrop — the exact rendering the
  * axe color-contrast check observes (P17-G5, REQ-069).
  */
-async function samplePresentation(
+async function samplePresentations(
   page: Page,
   selector: string,
   kind: ContrastKind,
   pseudo?: string,
-): Promise<PresentationContrast> {
-  const { foreground, ownBackground, backdrop, opacity } =
-    await sampleEffectiveColors(page, selector, kind, pseudo);
-  const behind = parseComputedColor(backdrop);
-  const own = parseComputedColor(ownBackground);
-  const alpha = Number.parseFloat(opacity);
-  let fg = parseComputedColor(foreground);
-  if (fg.a < 1) {
-    fg = compositeOver(fg, own.a > 0 ? own : behind, fg.a);
-  }
-  let effectiveForeground: SRGB;
-  let effectiveBackground: SRGB;
-  if (alpha === 1) {
-    effectiveForeground = fg;
-    effectiveBackground =
-      kind === "outline" ? behind : own.a > 0 ? own : behind;
-  } else {
-    // The element's opacity composites its whole painted group over the
-    // backdrop behind it, so the effective foreground and background
-    // both mix toward that backdrop (the exact rendering axe observes).
-    effectiveForeground = compositeOver(fg, behind, alpha);
-    effectiveBackground =
-      kind === "outline" || own.a === 0
-        ? behind
-        : compositeOver(own, behind, alpha);
-  }
-  return {
-    contrast: contrastRatio(effectiveForeground, effectiveBackground),
-    foreground: serializeColor(effectiveForeground),
-    background: serializeColor(effectiveBackground),
-  };
+): Promise<PresentationContrast[]> {
+  const samples = await sampleEffectiveColorsAll(page, selector, kind, pseudo);
+  return samples.map(({ foreground, ownBackground, backdrop, opacity }) => {
+    const behind = parseComputedColor(backdrop);
+    const own = parseComputedColor(ownBackground);
+    const alpha = Number.parseFloat(opacity);
+    let fg = parseComputedColor(foreground);
+    if (fg.a < 1) {
+      fg = compositeOver(fg, own.a > 0 ? own : behind, fg.a);
+    }
+    let effectiveForeground: SRGB;
+    let effectiveBackground: SRGB;
+    if (alpha === 1) {
+      effectiveForeground = fg;
+      effectiveBackground =
+        kind === "outline" ? behind : own.a > 0 ? own : behind;
+    } else {
+      // The element's opacity composites its whole painted group over
+      // the backdrop behind it, so the effective foreground and
+      // background both mix toward that backdrop (the exact rendering
+      // axe observes).
+      effectiveForeground = compositeOver(fg, behind, alpha);
+      effectiveBackground =
+        kind === "outline" || own.a === 0
+          ? behind
+          : compositeOver(own, behind, alpha);
+    }
+    return {
+      contrast: contrastRatio(effectiveForeground, effectiveBackground),
+      foreground: serializeColor(effectiveForeground),
+      background: serializeColor(effectiveBackground),
+    };
+  });
 }
 
 /** One checked presentation of the audit. */
@@ -992,17 +992,48 @@ async function expectContrastTargets(
   targets: readonly ContrastTarget[],
 ): Promise<void> {
   for (const target of targets) {
-    const sample = await samplePresentation(
+    const samples = await samplePresentations(
       page,
       target.selector,
       target.kind,
       target.pseudo,
     );
     expect(
-      sample.contrast,
-      `${target.where}: ${sample.foreground} on ${sample.background} reaches ${target.minimum}:1 (WCAG 2.1 AA, REQ-069)`,
-    ).toBeGreaterThanOrEqual(target.minimum);
+      samples.length,
+      `${target.where}: at least one rendered match for ${target.selector}`,
+    ).toBeGreaterThan(0);
+    for (const [index, sample] of samples.entries()) {
+      expect(
+        sample.contrast,
+        `${target.where} match ${index + 1}/${samples.length}: ${sample.foreground} on ${sample.background} reaches ${target.minimum}:1 (WCAG 2.1 AA, REQ-069)`,
+      ).toBeGreaterThanOrEqual(target.minimum);
+    }
   }
+}
+
+/**
+ * Waits until every rendered result card has settled: computed opacity
+ * exactly `1` and no running animation (task 50, task 51, ARCH-021,
+ * ISSUE-016). The keyed MORE! replacement runs up to 540 ms of coordinated
+ * outro and intro motion after a successful later page, so the outage
+ * failure preparations, computed-color samples, and review attachments
+ * must observe the final presentation rather than a mid-fade one
+ * (P17-G5, REQ-069). A surface without cards passes immediately.
+ */
+async function expectSettledCards(page: Page, where: string): Promise<void> {
+  await expect
+    .poll(async () =>
+      page
+        .locator("[data-result-card]")
+        .evaluateAll((elements) =>
+          elements.every(
+            (element) =>
+              getComputedStyle(element).opacity === "1" &&
+              element.getAnimations().length === 0,
+          ),
+        ),
+    )
+    .toBe(true);
 }
 
 /**
@@ -2157,6 +2188,10 @@ test.describe("Control accessibility failure states", () => {
           ),
       )
       .toEqual([...PIZZA_PAGE_1_IDS]);
+    // The keyed MORE! replacement motion runs up to 540 ms after the
+    // page-1 data renders; the prepared page must be fully settled before
+    // the outage drives the retained-card failure surfaces (P17-G5).
+    await expectSettledCards(page, "prepared intermediate page");
     await expect(moreButton).toBeVisible();
     await expect(moreButton).toHaveAttribute("aria-disabled", "false");
   }
@@ -2272,8 +2307,11 @@ test.describe("Control accessibility failure states", () => {
     await expect(englishNewPage.locator("[data-result-card]")).toHaveCount(0);
     // The retained quantity editor stays operable in newSearchFailure —
     // the retry path is a fresh suggestion selection or a valid quantity
-    // commit (REQ-050) — and the failure surface has no definite WCAG
-    // 2.1 Level A or AA axe violation (ISSUE-015, P15-G2).
+    // commit (REQ-050) — and the retained new-Search failure surface has
+    // no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015,
+    // P15-G2, REQ-069); the pinned scan runs after the failure
+    // presentation renders.
+    await expectWcagAAndAaClean(englishNewPage, "newSearchFailure (en)");
     // P17-G5 (REQ-069): the retained new-Search failure surface keeps the
     // retry message and the retained summary text above the normal-text
     // limit and the focused Search border above the graphics limit; the
@@ -2323,6 +2361,9 @@ test.describe("Control accessibility failure states", () => {
       ["textbox", COPY.pl.quantity],
       ["group", COPY.pl.unit],
     ]);
+    // The Polish retained new-Search failure surface has no definite
+    // WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, REQ-069).
+    await expectWcagAAndAaClean(polishNewPage, "newSearchFailure (pl)");
     // P17-G5 (REQ-069): the Polish failure surface keeps the retry
     // message and the retained summary text above the normal-text limit
     // and the focused Search border above the graphics limit.
@@ -2382,6 +2423,14 @@ test.describe("Control accessibility failure states", () => {
     await expect(
       englishMorePage.locator("[data-quantity-unit]"),
     ).toBeDisabled();
+    await expect(
+      englishMorePage.locator("[data-quantity-unit]"),
+    ).toHaveAttribute("disabled", "");
+    // The retained MORE! failure surface has no definite WCAG 2.1 Level A
+    // or AA axe violation (ISSUE-015, P15-G2, REQ-069); the pinned scan
+    // observes the settled retained cards.
+    await expectSettledCards(englishMorePage, "moreFailure (en)");
+    await expectWcagAAndAaClean(englishMorePage, "moreFailure (en)");
     // P17-G5 (REQ-069): the retained MORE! failure surface keeps the
     // retry message, the retained card names, and the operable MORE!
     // label above the normal-text limit; the review attachment exposes
@@ -2416,6 +2465,12 @@ test.describe("Control accessibility failure states", () => {
     await expect(
       polishMorePage.getByRole("button", { name: COPY.pl.moreButton }),
     ).toHaveAttribute("aria-disabled", "false");
+    await expect(polishMorePage.locator("[data-result-card]")).toHaveCount(3);
+    // The Polish retained MORE! failure surface has no definite WCAG 2.1
+    // Level A or AA axe violation (ISSUE-015, P15-G2, REQ-069); the
+    // pinned scan observes the settled retained cards.
+    await expectSettledCards(polishMorePage, "moreFailure (pl)");
+    await expectWcagAAndAaClean(polishMorePage, "moreFailure (pl)");
     // P17-G5 (REQ-069): the Polish MORE! failure surface keeps the retry
     // message, the retained card names, and the operable MORE! label
     // above the normal-text limit.
