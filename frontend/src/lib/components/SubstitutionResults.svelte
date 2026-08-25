@@ -30,6 +30,21 @@
    * card set; focus moves to it when the successful response renders and
    * motion starts, without waiting for the last intro (REQ-083).
    *
+   * Task 51 completes the keyed replacement over task 50 (REQ-053): when
+   * a successful later-page response replaces the keyed card set, every
+   * current card runs its 120 ms opacity outro together through the same
+   * reusable transition, and each replacement card starts its 220 ms
+   * intro 120 ms later — after the last current-card outro completes —
+   * followed by the 100 ms rank intervals. In reduced-motion mode every
+   * outro and intro has zero duration and delay, so the complete
+   * replacement page appears together in one animation frame (REQ-054).
+   * The stable results heading stays outside the keyed card set and
+   * remains mounted; focus moves to it when the successful response
+   * renders and the replacement motion starts, without waiting for the
+   * replacement intros to finish (REQ-083). The selected-food summary,
+   * the heading, and the MORE! control are not part of the keyed card
+   * set and are never animated (ISSUE-016).
+   *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
    * Search query and renders the selected-input, result-card, and
@@ -388,9 +403,10 @@
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
   <!--
     Result-card region (task 30, task 37, task 45, task 50; ARCH-001, ARCH-002,
-    ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037,
-    REQ-041, REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-081,
-    REQ-083, ISSUE-008, ISSUE-011): the successful page response renders
+    ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-021, ARCH-022, REQ-036,
+    REQ-037, REQ-041, REQ-042, REQ-047, REQ-052, REQ-053, REQ-054,
+    REQ-058, REQ-061, REQ-062, REQ-081, REQ-083, ISSUE-008, ISSUE-011,
+    ISSUE-016): the successful page response renders
     zero-to-three display-ready Substitutes in ranked order at `24px` below
     the selected-input region. The layout has one card column below 1024px
     and three equal columns from 1024px. Each card uses the active
