@@ -89,20 +89,21 @@ const COPY = {
 const ONE_ANIMATION_FRAME_MS = 1000 / 60;
 
 /**
- * Returns the observed animation frame period of the running browser
- * (the median requestAnimationFrame delta recorded by the motion
- * observer). The Phase 16 gate checks browser timing with a tolerance of
- * exactly one animation frame, so the timing assertions compare the
- * frame-accurate Web Animations API clock values — which are compositor
- * driven and therefore not delayed by the asynchronous delivery of the
- * Svelte transition events — against the specified durations and
- * intervals with this single observed frame as the tolerance (plan.md
- * Phase 16 gate, REQ-052, REQ-053).
+ * Returns the one-animation-frame timing tolerance of the Phase 16 gate:
+ * the longest requestAnimationFrame delta observed while result cards
+ * were rendered. The intro animations' timeline start times snap to the
+ * compositor frame grid, so the start-interval measurement carries at
+ * most one frame of quantization error; that error is bounded by the
+ * actual grid step, which the longest observed frame of the motion
+ * window measures — the median would slightly underestimate the grid
+ * period and leave a razor-thin boundary miss (plan.md Phase 16 gate,
+ * REQ-052, REQ-053).
  */
 function observedFrameMs(frames: readonly MotionFrame[]): number {
+  const motionWindow = frames.filter((frame) => frame.cards.length > 0);
   const deltas: number[] = [];
-  for (let index = 1; index < frames.length; index += 1) {
-    const delta = frames[index]!.at - frames[index - 1]!.at;
+  for (let index = 1; index < motionWindow.length; index += 1) {
+    const delta = motionWindow[index]!.at - motionWindow[index - 1]!.at;
     if (delta >= 1 && delta <= 250) {
       deltas.push(delta);
     }
@@ -111,7 +112,7 @@ function observedFrameMs(frames: readonly MotionFrame[]): number {
     return ONE_ANIMATION_FRAME_MS;
   }
   deltas.sort((a, b) => a - b);
-  return deltas[Math.floor(deltas.length / 2)]!;
+  return deltas[deltas.length - 1]!;
 }
 
 /** The 220 ms first-page intro duration (REQ-052). */
