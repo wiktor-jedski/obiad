@@ -312,3 +312,12 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Resolved with the project owner on 2026-08-25. Add no happy-dom or `@testing-library/svelte` scenario for Phase 16. Those environments do not supply the browser animation-frame scheduling, Svelte transition-event timing, or emulated `prefers-reduced-motion` media feature that the phase must verify. Real-stack Playwright scenario `result-card-motion.spec.ts` supplies the required normal-motion and reduced-motion evidence. `bun test` remains regression coverage for existing component behavior.
+
+## ISSUE-017: Phase 17 responsive and contrast verification boundary
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Testing coverage deviations
+
+- Resolved with the project owner on 2026-08-25. Phase 17 adds no happy-dom or `@testing-library/svelte` component integration scenario. Those environments cannot verify Chromium breakpoints, document and body overflow geometry, hover and focus computed colors, WCAG contrast scans, or full-page screenshots. Real-stack Playwright scenarios `responsive-accessible-presentation.spec.ts` and `control-accessibility.spec.ts` supply this evidence at the three required viewport widths and across the normal and failure states. `bun test` remains regression coverage for existing component behavior.
