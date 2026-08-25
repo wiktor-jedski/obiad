@@ -40,10 +40,19 @@
  * zero-result message is the stable programmatically focusable active
  * element in English and Polish, and the transition inserts or updates no
  * result-count or result-status live-region message.
+ *
+ * Task 49 completes the keyboard-only interaction path (P15-G2, P15-G7,
+ * REQ-018, REQ-019, REQ-084): the same scenario drives the selection
+ * through the production Search keyboard handlers — a typed query, the
+ * Arrow Down active-option move, and the Enter key on the combobox — with
+ * no pointer input, so the zero-result message focus target is reached
+ * through the keyboard path that ISSUE-015 keeps inside this component
+ * seam (a successful empty response is unreachable on the supported real
+ * stack).
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { cleanup, render } from "@testing-library/svelte";
+import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import App from "./App.svelte";
 import axe from "axe-core";
@@ -71,6 +80,20 @@ const EMPTY_RESPONSE_BODY = JSON.stringify({
   inputCalories: 875,
   items: [],
 });
+
+/**
+ * The five suggestion items the keyboard-selection stub returns so the
+ * active-descendant panel opens and the production Search keyboard
+ * handlers can move and select through Enter (task 49, REQ-018, REQ-019).
+ * The selection transition captures the exact returned names, default
+ * quantity, and allowed quantity-editor units like a real response.
+ */
+const SUGGESTION_ITEMS = Array.from({ length: 5 }, (_, index) => ({
+  foodObjectId: 6 + index,
+  names: { en: `Food ${6 + index}`, pl: `Potrawa ${6 + index}` },
+  defaultQuantity: { value: 100, unit: "g" },
+  allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+}));
 
 /**
  * The minimal `Request` stand-in happy-dom needs to run the generated
@@ -320,6 +343,107 @@ describe("the root result-state composition", () => {
       // component surface also reports no definite WCAG 2.1 Level A or AA
       // axe violation.
       await expectZeroResultWcagAAndAaClean("pl");
+    } finally {
+      cleanup();
+      globalThis.fetch = originalFetch;
+      globalThis.Request = OriginalRequest;
+    }
+  });
+
+  test("a keyboard-only suggestion selection — typed query, Arrow Down, and Enter on the Search combobox — drives the production state to zeroResults and the localized zero-result message becomes document.activeElement in English and Polish without pointer input (REQ-018, REQ-019, REQ-084)", async () => {
+    // Stub only the network boundary: the suggestion GET returns five
+    // items so the active-descendant panel opens, and the Substitution
+    // Search POST returns a successful empty page-0 envelope (ISSUE-003,
+    // ARCH-022). No pointer event is fired anywhere in this scenario.
+    const postUrls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    const OriginalRequest = globalThis.Request;
+    globalThis.Request = HappyDomRequest as unknown as typeof Request;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (url.includes("/api/v1/substitutes/search")) {
+        postUrls.push(url);
+        return new Response(EMPTY_RESPONSE_BODY, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/api/v1/food-suggestions")) {
+        return new Response(JSON.stringify({ items: SUGGESTION_ITEMS }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      const view = render(App);
+      const search = view.getByRole("combobox", { name: "Search" });
+
+      // The typed query opens the panel with the first option highlighted
+      // and active (REQ-018).
+      await fireEvent.focus(search);
+      await fireEvent.input(search, { target: { value: "butt" } });
+      await settle();
+      const panel = view.getByRole("listbox");
+      const options = panel.querySelectorAll('[role="option"]');
+      expect(options.length).toBe(5);
+
+      const firstOption = options[0];
+      expect(firstOption.getAttribute("aria-selected")).toBe("true");
+      expect(search.getAttribute("aria-activedescendant")).toBe(firstOption.id);
+
+      // Arrow Down moves the active option (REQ-019); Enter selects it
+      // through the same transition a pointer click uses, with no pointer
+      // input reaching the option row.
+      await fireEvent.keyDown(search, { key: "ArrowDown" });
+
+      const movedOption = options[1];
+      expect(movedOption.getAttribute("aria-selected")).toBe("true");
+      expect(search.getAttribute("aria-activedescendant")).toBe(movedOption.id);
+      await fireEvent.keyDown(search, { key: "Enter" });
+      await settle();
+
+      // One POST for the keyboard selection; the empty envelope drives the
+      // production transition to zeroResults with zero cards.
+
+      expect(postUrls, "one POST for the keyboard selection").toHaveLength(1);
+      // The combobox role resolves to the native search input element.
+      const searchInput = search as HTMLInputElement;
+      expect(searchInput.value).toBe("Food 7");
+      expect(view.queryByRole("listbox")).toBeNull();
+      expect(
+        document.querySelector("main")?.getAttribute("data-interaction-state"),
+      ).toBe("zeroResults");
+      expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
+
+      // REQ-084 (task 46, task 49): the localized zero-result message is
+      // the stable programmatically focusable active element, reached
+      // through the keyboard selection path.
+      const zeroMessage = document.querySelector("[data-zero-result-message]");
+      expect(zeroMessage).not.toBeNull();
+      expect(zeroMessage?.textContent).toBe("No substitutes found");
+      expect(document.activeElement).toBe(zeroMessage);
+      // REQ-085: the message carries no live-region semantics.
+      expect(zeroMessage?.hasAttribute("aria-live")).toBe(false);
+      expect(zeroMessage?.hasAttribute("role")).toBe(false);
+
+      // The zero-result surface follows the active language: switching to
+      // Polish re-renders the message in place, keeps the same node as
+      // the active element, and performs no additional fetch.
+      interfaceLanguage.set("pl");
+      await tick();
+      expect(zeroMessage?.textContent).toBe("Nie znaleziono zamienników");
+      expect(document.activeElement).toBe(zeroMessage);
+      expect(postUrls).toHaveLength(1);
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;

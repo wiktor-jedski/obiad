@@ -57,6 +57,25 @@ import { AxeBuilder } from "@axe-core/playwright";
  * unavailability), and then reaches the `newSearchFailure` and
  * `moreFailure` transitions, resolving the controls each failure surface
  * still renders by their exact localized accessible names.
+ *
+ * Task 49 completes one keyboard-only interaction path across every control
+ * (P15-G2, P15-G7, REQ-018, REQ-019, REQ-026, REQ-068): the "Control
+ * keyboard-only flow" describe drives the complete Tab, Shift+Tab, Arrow
+ * key, Enter, Space, and Escape journey in English and Polish with no
+ * pointer input — the autofocused Search combobox, the active-descendant
+ * suggestion list (first-option highlighting, Arrow movement with
+ * clamping, Escape cancellation, Enter selection), the Interface Language
+ * selector, the Food Quantity number and unit controls (invalid draft
+ * rejection, valid commit, unit change), the MORE! button (Space
+ * activation and paging), and the required successful focus targets (the
+ * localized results heading after every successful page). The existing
+ * localized loading, quantity-validation, new-Search failure, and MORE!
+ * failure announcements and their established focus states stay unchanged
+ * and are re-proven by `food-quantity-editing.spec.ts` and
+ * `substitution-request-failures.spec.ts` (P15-G6, REQ-050, REQ-051);
+ * ISSUE-015 keeps the successful zero-result message focus a component
+ * seam, so `src/App.result-state.test.ts` drives the zero-result focus
+ * target through the same keyboard Enter selection path.
  */
 
 const COPY = {
@@ -72,6 +91,8 @@ const COPY = {
     chickenQuery: "chicken",
     pizzaQuery: "pizza",
     chickenName: "Chicken breast",
+    foundSubstitutions: "Found substitutions",
+    pizzaName: "Pizza Margherita",
   },
   pl: {
     search: "Szukaj",
@@ -85,6 +106,8 @@ const COPY = {
     chickenQuery: "kurczak",
     pizzaQuery: "pizza",
     chickenName: "Pierś z kurczaka",
+    foundSubstitutions: "Znalezione zamienniki",
+    wingsName: "Smażone skrzydełka z kurczaka",
   },
 } as const;
 
@@ -113,12 +136,48 @@ const SEEDED_SUGGESTIONS = {
   ],
 } as const;
 
+/** The seeded Pizza Margherita page-0 ranking (ISSUE-002, REQ-072). */
+const PIZZA_PAGE_0_IDS = [13, 29, 26] as const;
+
 /** The seeded Pizza Margherita page-1 ranking (ISSUE-002, REQ-072). */
 const PIZZA_PAGE_1_IDS = [30, 3, 35] as const;
 /** The seeded Pizza Margherita suggestion (ID 1, 1 serving = 350 g). */
 const PIZZA_FOOD_OBJECT_ID = 1;
+
 /** The seeded Chicken breast suggestion (ID 5, 100 g, no Serving). */
 const CHICKEN_FOOD_OBJECT_ID = 5;
+
+/**
+ * The deterministic seeded suggestion lists the keyboard-only flow drives
+ * (task 49): the English `pizza` query and the Polish `kurczak` query
+ * (the same fixtures the search-suggestions and control-accessibility
+ * scenarios document). The flow selects Pizza Margherita (ID 1, two
+ * allowed units: `serving` then `g`) in English and Smażone skrzydełka z
+ * kurczaka (ID 22, two allowed units) in Polish, so the Food Quantity
+ * editor renders the operable Unit selector in both languages.
+ */
+const KEYBOARD_SUGGESTIONS = {
+  en: {
+    query: "pizza",
+    list: [
+      { foodObjectId: 1, name: "Pizza Margherita" },
+      { foodObjectId: 2, name: "Pizza Capricciosa" },
+      { foodObjectId: 13, name: "Gyoza" },
+      { foodObjectId: 10, name: "Milk" },
+      { foodObjectId: 29, name: "Paella" },
+    ],
+  },
+  pl: {
+    query: "kurczak",
+    list: [
+      { foodObjectId: 5, name: "Pierś z kurczaka" },
+      { foodObjectId: 22, name: "Smażone skrzydełka z kurczaka" },
+      { foodObjectId: 15, name: "Kebab" },
+      { foodObjectId: 36, name: "Sernik" },
+      { foodObjectId: 38, name: "Gulasz" },
+    ],
+  },
+} as const;
 
 /** The stable option DOM id of one suggestion (suggestions.ts). */
 function optionId(foodObjectId: number): string {
@@ -138,6 +197,78 @@ async function useBrowserLanguages(
   }, languages);
 }
 
+/**
+ * Records every generated-client `POST /api/v1/substitutes/search` request
+ * body without gating or fabricating a response, so the keyboard-only flow
+ * proves each key operation starts exactly one request with the exact
+ * committed input and page index (REQ-019, REQ-026, REQ-027, REQ-041).
+ */
+function trackSubstitutePosts(page: Page): Array<Record<string, unknown>> {
+  const posts: Array<Record<string, unknown>> = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("/api/v1/substitutes/search")
+    ) {
+      posts.push(request.postDataJSON() as Record<string, unknown>);
+    }
+  });
+  return posts;
+}
+
+/** Returns the Food Object IDs of all currently rendered result cards. */
+async function renderedCardIDs(page: Page): Promise<number[]> {
+  const cards = page.locator("[data-result-card]");
+  return cards.evaluateAll((elements) =>
+    elements.map((element) =>
+      Number(element.getAttribute("data-food-object-id")),
+    ),
+  );
+}
+
+/**
+ * Asserts the keyboard-active option of the open suggestion panel (task
+ * 49, REQ-018, REQ-019): the option at `activeIndex` renders the Primary
+ * active styling and `aria-selected="true"`, every other option renders
+ * the resting text color and `aria-selected="false"`, and the Search
+ * input's `aria-activedescendant` references exactly the active option's
+ * stable id while `aria-expanded` stays true. The auto-retrying
+ * assertions wait out the per-keystroke suggestion refetches, so the
+ * helper proves the final response's panel.
+ */
+async function expectKeyboardActiveOption(
+  page: Page,
+  expected: readonly { foodObjectId: number; name: string }[],
+  activeIndex: number,
+  copy: (typeof COPY)[keyof typeof COPY],
+): Promise<void> {
+  const search = page.getByRole("combobox", { name: copy.search });
+  const panel = page.getByRole("listbox", { name: copy.listbox });
+  const options = panel.getByRole("option");
+  await expect(options).toHaveCount(5);
+  await expect(search).toHaveAttribute("aria-expanded", "true");
+  for (let index = 0; index < expected.length; index += 1) {
+    await expect(options.nth(index)).toHaveText(expected[index].name);
+    await expect(options.nth(index)).toHaveAttribute(
+      "aria-selected",
+      String(index === activeIndex),
+    );
+  }
+  await expect(options.nth(activeIndex)).toHaveCSS(
+    "background-color",
+    PRIMARY_RGB,
+  );
+  await expect(options.nth(activeIndex)).toHaveCSS("color", TEXT_ON_BRIGHT_RGB);
+  for (let index = 0; index < expected.length; index += 1) {
+    if (index !== activeIndex) {
+      await expect(options.nth(index)).toHaveCSS("color", TEXT_PRIMARY_RGB);
+    }
+  }
+  await expect(search).toHaveAttribute(
+    "aria-activedescendant",
+    optionId(expected[activeIndex].foodObjectId),
+  );
+}
 /**
  * Holds every generated-client Substitution Search POST at the browser
  * boundary until the scenario releases it (the spinner-stop-time gate
@@ -268,6 +399,8 @@ const PRIMARY_RGB = "rgb(74, 222, 128)"; // #4ADE80
 const SECONDARY_RGB = "rgb(134, 239, 172)"; // #86EFAC
 /** The Text-On-Bright color on the Primary active option (ISSUE-008). */
 const TEXT_ON_BRIGHT_RGB = "rgb(10, 15, 10)"; // #0A0F0A
+/** The resting Text-Primary color of the non-active options (ISSUE-008). */
+const TEXT_PRIMARY_RGB = "rgb(243, 244, 246)"; // #F3F4F6
 /** Gray background of a pending non-operable MORE! control (REQ-082). */
 const DISABLED_MORE_BACKGROUND_COLOR = "oklch(0.446 0.03 256.802)";
 /** Gray text of a pending non-operable MORE! control (REQ-082). */
@@ -1374,5 +1507,366 @@ test.describe("Control accessibility failure states", () => {
     ).toHaveAttribute("aria-disabled", "false");
     await expect(polishMorePage.locator("[data-result-card]")).toHaveCount(3);
     await expectWcagAAndAaClean(polishMorePage, "moreFailure (pl)");
+  });
+});
+test.describe("Control keyboard-only flow", () => {
+  /**
+   * Drives the keyboard-only suggestion phase of one language (task 49,
+   * REQ-018, REQ-019): the autofocused Search combobox, the typed query,
+   * the open active-descendant panel with the first option highlighted,
+   * Arrow Down and Arrow Up movement with clamping at both ends, Escape
+   * cancellation (panel closed, exact query and Search focus retained, no
+   * Substitution Search), a fresh keyboard reopening, and the Enter
+   * selection of the option at `selectIndex`. Every step uses keyboard
+   * input only — no `fill`, `click`, `selectOption`, or pointer gesture —
+   * and returns the Substitution Search request bodies observed so far so
+   * the caller can prove each later key operation starts exactly one
+   * request with the exact committed input.
+   */
+  async function driveKeyboardSuggestionPhase(
+    page: Page,
+    seedKey: "en" | "pl",
+    copy: (typeof COPY)[keyof typeof COPY],
+    selectIndex: number,
+  ): Promise<Array<Record<string, unknown>>> {
+    const posts = trackSubstitutePosts(page);
+    // Load the application; the Search field carries the autofocus, so it
+    // is focused with no pointer input.
+    await page.goto("/");
+    const fixtures = KEYBOARD_SUGGESTIONS[seedKey];
+    const search = page.getByRole("combobox", { name: copy.search });
+    const panel = page.getByRole("listbox", { name: copy.listbox });
+
+    // The Search field carries the autofocus: it is focused with no
+    // pointer input.
+    await expect(search).toBeFocused();
+    await waitForInteractionState(page, "empty");
+
+    // Typing the query opens the panel with the first option highlighted
+    // (REQ-018): the first option is the active descendant.
+    await page.keyboard.type(fixtures.query);
+    await expect(panel).toBeVisible();
+    await expectKeyboardActiveOption(page, fixtures.list, 0, copy);
+
+    // Arrow Down moves the active option toward the fifth option and
+    // clamps there; Arrow Up moves toward the first option and clamps
+    // there. Every move updates the active styling and the Search input's
+    // `aria-activedescendant` (REQ-019).
+    await search.press("ArrowDown");
+    await expectKeyboardActiveOption(page, fixtures.list, 1, copy);
+    await search.press("ArrowDown");
+    await expectKeyboardActiveOption(page, fixtures.list, 2, copy);
+    await search.press("ArrowUp");
+    await expectKeyboardActiveOption(page, fixtures.list, 1, copy);
+    await search.press("ArrowUp");
+    await search.press("ArrowUp");
+    await expectKeyboardActiveOption(page, fixtures.list, 0, copy);
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await expectKeyboardActiveOption(page, fixtures.list, 4, copy);
+    await search.press("ArrowDown");
+    await expectKeyboardActiveOption(page, fixtures.list, 4, copy);
+    for (let index = 4; index > selectIndex; index -= 1) {
+      await search.press("ArrowUp");
+    }
+    await expectKeyboardActiveOption(page, fixtures.list, selectIndex, copy);
+
+    // Escape cancels the list: the panel closes, the exact Search Query
+    // text and Search focus are retained, and no Substitution Search
+    // starts (REQ-019).
+    await search.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(search).toHaveValue(fixtures.query);
+    await expect(search).toBeFocused();
+    await expect(search).toHaveAttribute("aria-expanded", "false");
+    await expect(search).not.toHaveAttribute("aria-activedescendant");
+    expect(posts).toHaveLength(0);
+
+    // Typing reopens the panel without pointer input; the first option is
+    // active again (REQ-018).
+    await search.press("Backspace");
+    await page.keyboard.type(fixtures.query.at(-1) ?? "");
+    await expect(panel).toBeVisible();
+    await expectKeyboardActiveOption(page, fixtures.list, 0, copy);
+
+    // Move to the intended option and select it with Enter (REQ-019).
+    for (let index = 0; index < selectIndex; index += 1) {
+      await search.press("ArrowDown");
+    }
+    await expectKeyboardActiveOption(page, fixtures.list, selectIndex, copy);
+    await search.press("Enter");
+    return posts;
+  }
+
+  test("[en-US] one keyboard-only path reaches and operates every control — Search and the suggestion list, Interface Language, Quantity number and unit, and MORE! — and the results heading is the focus target after each successful page, without pointer input (REQ-018, REQ-019, REQ-026, REQ-068, REQ-083, P15-G2, P15-G7)", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    // Pizza Margherita (ID 1) allows two units, so the Quantity editor
+    // renders the operable Unit selector.
+    const posts = await driveKeyboardSuggestionPhase(page, "en", COPY.en, 0);
+    const search = page.getByRole("combobox", { name: COPY.en.search });
+    const heading = page.locator("[data-substitutions-heading]");
+
+    // Enter selected Pizza Margherita through the same transition a
+    // pointer click uses: exactly one page-0 POST with the backend default
+    // one-serving quantity, the three seeded first-page cards, and the
+    // localized results heading as the active element (REQ-083).
+    await expect(
+      page.getByRole("listbox", { name: COPY.en.listbox }),
+    ).toHaveCount(0);
+    await expect(search).toHaveValue(COPY.en.pizzaName);
+    await waitForInteractionState(page, "results");
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await expect
+      .poll(() => renderedCardIDs(page))
+      .toEqual([...PIZZA_PAGE_0_IDS]);
+    await expect(heading).toHaveText(COPY.en.foundSubstitutions);
+    await expect(heading).toBeFocused();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toEqual({
+      foodObjectId: PIZZA_FOOD_OBJECT_ID,
+      quantity: { value: 1, unit: "serving" },
+      pageIndex: 0,
+    });
+
+    // Quantity rejection (REQ-026): Tab from the heading to Search, then
+    // to the Quantity number field; type an invalid draft and commit with
+    // Enter. The exact text stays, the localized message renders, the
+    // field keeps focus, and no request starts.
+    const numberInput = page.locator("[data-quantity-number]");
+    await focusWithTab(page, numberInput);
+    await expect(numberInput).toBeFocused();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("abc");
+    await page.keyboard.press("Enter");
+    await expect(numberInput).toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator("[data-quantity-error]")).toHaveText(
+      COPY.en.invalidQuantity,
+    );
+    await expect(numberInput).toBeFocused();
+    expect(posts).toHaveLength(1);
+
+    // Valid quantity commit: replace the draft with `2` and commit with
+    // Enter; exactly one recalculation POST with the changed Serving
+    // count, then the results heading as the focus target again.
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("2");
+    await page.keyboard.press("Enter");
+
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]).toEqual({
+      foodObjectId: PIZZA_FOOD_OBJECT_ID,
+      quantity: { value: 2, unit: "serving" },
+      pageIndex: 0,
+    });
+    // A valid recalculation keeps the initiating number-field focus
+    // (REQ-048); the results heading is not a focus target here.
+    await waitForInteractionState(page, "results");
+    await expect(numberInput).toBeFocused();
+
+    // Unit change: Tab to the Unit selector and press ArrowDown; the draft
+    // becomes `100` and the `g` unit commits immediately (ISSUE-010).
+    const unitSelect = page.locator("[data-quantity-unit]");
+    await focusWithTab(page, unitSelect);
+    await expect(unitSelect).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => posts.length).toBe(3);
+    expect(posts[2]).toEqual({
+      foodObjectId: PIZZA_FOOD_OBJECT_ID,
+      quantity: { value: 100, unit: "g" },
+      pageIndex: 0,
+    });
+
+    await waitForInteractionState(page, "results");
+    await expect(numberInput).toHaveValue("100");
+    await expect(unitSelect).toHaveValue("g");
+    // The initiating unit selector keeps focus through the recalculation
+    // (REQ-048).
+    await expect(unitSelect).toBeFocused();
+
+    // MORE! paging: Tab to the MORE! button and activate it with Space;
+    // exactly one next-page POST and the page-1 cards replace page 0 with
+    // the heading as the focus target (REQ-041, REQ-083).
+    const moreButton = page.locator("[data-more-button]");
+    await focusWithTab(page, moreButton);
+    await expect(moreButton).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect.poll(() => posts.length).toBe(4);
+    expect(posts[3]).toEqual({
+      foodObjectId: PIZZA_FOOD_OBJECT_ID,
+      quantity: { value: 100, unit: "g" },
+      pageIndex: 1,
+    });
+    await waitForInteractionState(page, "results");
+    await expect
+      .poll(() => renderedCardIDs(page))
+      .toEqual([...PIZZA_PAGE_1_IDS]);
+    await expect(heading).toBeFocused();
+
+    // Interface Language selection: Tab to the selector and press
+    // ArrowUp; the native select moves EN → PL (the PL option precedes
+    // the EN option) and every visible and accessibility string switches
+    // in place without a request. The exact Search Query text (the
+    // retained selected name) is not translated (REQ-059).
+    const languageControl = page.getByRole("combobox", {
+      name: COPY.en.languageControl,
+    });
+    await focusWithTab(page, languageControl);
+    await expect(languageControl).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    // The native select re-renders its accessible name in the new
+    // language, so the value and focus assertions use the stable control
+    // selector (the same node keeps focus; task 44).
+    const languageSelect = page.locator("[data-interface-language] select");
+    await expect(languageSelect).toHaveValue("pl");
+    await expect(languageSelect).toBeFocused();
+    await expect(heading).toHaveText(COPY.pl.foundSubstitutions);
+    await expect(page.locator("#food-search")).toHaveValue(COPY.en.pizzaName);
+    await expect(
+      page.getByRole("combobox", { name: COPY.pl.search }),
+    ).toHaveAttribute("placeholder", COPY.pl.searchPlaceholder);
+    await expect(
+      page.getByRole("button", { name: COPY.pl.moreButton }),
+    ).toBeVisible();
+    expect(posts).toHaveLength(4);
+
+    // Shift+Tab returns focus to the retained MORE! control, whose
+    // localized label now reads in Polish.
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      page.getByRole("button", { name: COPY.pl.moreButton }),
+    ).toBeFocused();
+  });
+
+  test("[pl-PL] one keyboard-only path reaches and operates every control — Search and the suggestion list, Interface Language, Quantity number and unit, and MORE! — and the results heading is the focus target after each successful page, without pointer input (REQ-018, REQ-019, REQ-026, REQ-068, REQ-083, P15-G2, P15-G7)", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["pl-PL"]);
+    // The second suggestion (Smażone skrzydełka z kurczaka, ID 22) allows
+    // two units, so the Quantity editor renders the operable Unit
+    // selector in Polish too.
+    const posts = await driveKeyboardSuggestionPhase(page, "pl", COPY.pl, 1);
+    const search = page.getByRole("combobox", { name: COPY.pl.search });
+    const heading = page.locator("[data-substitutions-heading]");
+
+    // Enter selected the second option: exactly one page-0 POST with the
+    // default one-serving quantity and the localized results heading as
+    // the active element (REQ-083).
+    await expect(
+      page.getByRole("listbox", { name: COPY.pl.listbox }),
+    ).toHaveCount(0);
+    await expect(search).toHaveValue(COPY.pl.wingsName);
+    await waitForInteractionState(page, "results");
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await expect(heading).toHaveText(COPY.pl.foundSubstitutions);
+    await expect(heading).toBeFocused();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toEqual({
+      foodObjectId: 22,
+      quantity: { value: 1, unit: "serving" },
+      pageIndex: 0,
+    });
+
+    // Quantity rejection (Polish, REQ-026).
+    const numberInput = page.locator("[data-quantity-number]");
+    await focusWithTab(page, numberInput);
+    await expect(numberInput).toBeFocused();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("abc");
+    await page.keyboard.press("Enter");
+    await expect(numberInput).toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator("[data-quantity-error]")).toHaveText(
+      COPY.pl.invalidQuantity,
+    );
+    await expect(numberInput).toBeFocused();
+    expect(posts).toHaveLength(1);
+
+    // Valid quantity commit (Polish): `2` servings.
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("2");
+    await page.keyboard.press("Enter");
+
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]).toEqual({
+      foodObjectId: 22,
+      quantity: { value: 2, unit: "serving" },
+      pageIndex: 0,
+    });
+    // A valid recalculation keeps the initiating number-field focus
+    // (REQ-048); the results heading is not a focus target here.
+    await waitForInteractionState(page, "results");
+    await expect(numberInput).toBeFocused();
+
+    // Unit change (Polish): ArrowDown on the Unit selector commits 100 g.
+    const unitSelect = page.locator("[data-quantity-unit]");
+    await focusWithTab(page, unitSelect);
+    await expect(unitSelect).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => posts.length).toBe(3);
+    expect(posts[2]).toEqual({
+      foodObjectId: 22,
+      quantity: { value: 100, unit: "g" },
+      pageIndex: 0,
+    });
+
+    await waitForInteractionState(page, "results");
+    await expect(numberInput).toHaveValue("100");
+    await expect(unitSelect).toHaveValue("g");
+    // The initiating unit selector keeps focus through the recalculation
+    // (REQ-048).
+    await expect(unitSelect).toBeFocused();
+
+    // MORE! paging (Polish): Space activates the button; one next-page
+    // POST with the unchanged 100 g input.
+    const moreButton = page.locator("[data-more-button]");
+    await focusWithTab(page, moreButton);
+    await expect(moreButton).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect.poll(() => posts.length).toBe(4);
+    expect(posts[3]).toEqual({
+      foodObjectId: 22,
+      quantity: { value: 100, unit: "g" },
+      pageIndex: 1,
+    });
+    await waitForInteractionState(page, "results");
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await expect(heading).toBeFocused();
+
+    // Interface Language selection (Polish → English): ArrowDown on the
+    // focused selector switches the active language in place without a
+    // request; the retained Search Query text is not translated
+    // (REQ-059).
+    const languageControl = page.getByRole("combobox", {
+      name: COPY.pl.languageControl,
+    });
+    await focusWithTab(page, languageControl);
+    await expect(languageControl).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    // The native select re-renders its accessible name in the new
+    // language, so the value and focus assertions use the stable control
+    // selector (the same node keeps focus; task 44).
+    const languageSelect = page.locator("[data-interface-language] select");
+    await expect(languageSelect).toHaveValue("en");
+    await expect(languageSelect).toBeFocused();
+    await expect(heading).toHaveText(COPY.en.foundSubstitutions);
+    await expect(page.locator("#food-search")).toHaveValue(COPY.pl.wingsName);
+    await expect(
+      page.getByRole("combobox", { name: COPY.en.search }),
+    ).toHaveAttribute("placeholder", COPY.en.searchPlaceholder);
+    await expect(
+      page.getByRole("button", { name: COPY.en.moreButton }),
+    ).toBeVisible();
+    expect(posts).toHaveLength(4);
+
+    // Shift+Tab returns focus to the retained MORE! control, now labeled
+    // in English.
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      page.getByRole("button", { name: COPY.en.moreButton }),
+    ).toBeFocused();
   });
 });
