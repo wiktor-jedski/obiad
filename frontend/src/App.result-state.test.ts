@@ -46,6 +46,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import App from "./App.svelte";
+import axe from "axe-core";
 import {
   interactionState,
   type SelectedFoodObject,
@@ -91,6 +92,42 @@ class HappyDomRequest {
 async function settle(): Promise<void> {
   await tick();
   await new Promise((resolve) => setTimeout(resolve, 25));
+}
+
+/**
+ * The WCAG 2.1 Level A and AA axe rule tags (task 48, ISSUE-015).
+ */
+const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] as const;
+
+/**
+ * Runs the pinned axe-core engine against the happy-dom document with only
+ * the WCAG 2.1 Level A and AA rule tags (task 48, ISSUE-015): definite
+ * violations fail the test, incomplete checks are recorded on the console
+ * for manual review without failing, and the optional axe best-practice
+ * rules are never enforced (P15-G2). ISSUE-015 keeps the zero-result
+ * surface a component seam, so this is the only axe scan that runs on the
+ * production `zeroResults` state; every other scanned state is driven on
+ * the real stack. The happy-dom document mirrors the production page shell
+ * (index.html: `lang="en"`, `<title>Obiad</title>`).
+ */
+async function expectZeroResultWcagAAndAaClean(label: string): Promise<void> {
+  document.title = "Obiad";
+  document.documentElement.lang = "en";
+  const results = await axe.run(document, {
+    runOnly: { type: "tag", values: [...AXE_TAGS] },
+  });
+  if (results.incomplete.length > 0) {
+    console.log(
+      `[axe] zero-result (${label}) incomplete checks for manual review: ` +
+        results.incomplete
+          .map((result) => `${result.id} (${result.nodes.length} node(s))`)
+          .join(", "),
+    );
+  }
+  expect(
+    results.violations.map((violation) => violation.id),
+    `zero-result (${label}): no definite WCAG 2.1 Level A or AA violation`,
+  ).toEqual([]);
 }
 
 describe("the root result-state composition", () => {
@@ -209,6 +246,10 @@ describe("the root result-state composition", () => {
         document.querySelector("[data-quantity-static-unit]")?.textContent,
       ).toBe("g");
 
+      // Task 48 (ISSUE-015, P15-G2): the English zero-result component
+      // surface reports no definite WCAG 2.1 Level A or AA axe violation.
+      await expectZeroResultWcagAAndAaClean("en");
+
       // The zero-result surface follows the active Interface Language
       // dictionary (ARCH-003): switching to Polish re-renders the exact
       // Polish message and every visible and accessibility string in place
@@ -274,6 +315,11 @@ describe("the root result-state composition", () => {
         postUrls,
         "the language change in zeroResults performs no additional fetch",
       ).toHaveLength(1);
+
+      // Task 48 (ISSUE-015, P15-G2, P15-G7): the Polish zero-result
+      // component surface also reports no definite WCAG 2.1 Level A or AA
+      // axe violation.
+      await expectZeroResultWcagAAndAaClean("pl");
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;
