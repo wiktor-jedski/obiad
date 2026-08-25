@@ -416,6 +416,23 @@ const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] as const;
  * rules are never enforced (P15-G2).
  */
 async function expectWcagAAndAaClean(page: Page, state: string): Promise<void> {
+  // The Phase 16 card motion (task 50, task 51, ARCH-021, REQ-052,
+  // REQ-053, ISSUE-016) animates result cards for up to 540 ms after a
+  // successful page renders; the axe color-contrast check must observe
+  // fully settled cards, so wait for every rendered result card to reach
+  // full opacity with no running animation before the scan. Cards that
+  // are not mid-transition (or no cards at all) pass immediately.
+  await page.waitForFunction(() => {
+    const cards = Array.from(document.querySelectorAll("[data-result-card]"));
+    return (
+      cards.length === 0 ||
+      cards.every(
+        (card) =>
+          getComputedStyle(card).opacity === "1" &&
+          card.getAnimations().length === 0,
+      )
+    );
+  });
   const results = await new AxeBuilder({ page })
     .withTags([...AXE_TAGS])
     .analyze();
@@ -645,6 +662,21 @@ async function selectPizzaAndWaitForResults(
   await option.click();
   await waitForInteractionState(page, "results");
   await expect(page.locator("[data-result-card]")).toHaveCount(3);
+  // The Phase 16 entrance motion (task 50, REQ-052) runs for up to 420 ms
+  // after the page renders; wait until every card reaches full opacity so
+  // the accessibility scans and surface snapshots observe the settled
+  // result state rather than a mid-fade presentation (ISSUE-015).
+  await expect
+    .poll(async () =>
+      page
+        .locator("[data-result-card]")
+        .evaluateAll((elements) =>
+          elements.every(
+            (element) => getComputedStyle(element).opacity === "1",
+          ),
+        ),
+    )
+    .toBe(true);
 }
 
 /**

@@ -5,6 +5,7 @@
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
+  import { resultCardTransition } from "../resultCardMotion";
   import {
     createRetainedPageQuery,
     createSubstitutionSearchQuery,
@@ -18,6 +19,33 @@
    * REQ-061, REQ-062, REQ-083, ISSUE-008, ISSUE-010, ISSUE-011,
    * ISSUE-013) with the ISSUE-010 editable selected-food summary and
    * quantity recalculation (task 34, ARCH-018, REQ-027, REQ-028).
+   *
+   * Task 50 applies the ARCH-021 entrance motion over task 49: the
+   * keyed completed card set passes the 0-based `rank` and the
+   * `firstPage` membership (`pageIndex === 0`) to each Result Card, whose
+   * root runs the reusable opacity-only transition (REQ-052, REQ-054,
+   * ISSUE-016). The foodObjectId keys keep retained cards mounted and
+   * motionless through a valid Food Quantity recalculation, so a new
+   * successful first page is the only path that starts the staggered
+   * entrance. The stable localized results heading sits outside the keyed
+   * card set; focus moves to it when the successful response renders and
+   * motion starts, without waiting for the last intro (REQ-083).
+   *
+   * Task 51 completes the keyed replacement over task 50 (REQ-053): each
+   * rank has one stable grid slot. When a successful later-page response
+   * replaces the keyed card in each slot, every current card runs its 120 ms
+   * opacity outro together and each replacement card starts its 220 ms intro
+   * 120 ms later — after the last current-card outro completes — followed by
+   * the 100 ms rank intervals. The outgoing and incoming cards occupy the
+   * same grid cell, so their temporary coexistence cannot create a second
+   * row or move the result layout. In reduced-motion mode every outro and
+   * intro has zero duration and delay, so the complete replacement page
+   * appears together in one animation frame (REQ-054). The stable results
+   * heading stays outside the keyed card set and remains mounted; focus
+   * moves to it when the successful response renders and the replacement
+   * motion starts, without waiting for the replacement intros to finish
+   * (REQ-083). The selected-food summary, the heading, and the MORE! control
+   * are not part of the keyed card set and are never animated (ISSUE-016).
    *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
@@ -376,10 +404,11 @@
 {/if}
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
   <!--
-    Result-card region (task 30, task 37, task 45; ARCH-001, ARCH-002,
-    ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037,
-    REQ-041, REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-081,
-    REQ-083, ISSUE-008, ISSUE-011): the successful page response renders
+    Result-card region (task 30, task 37, task 45, task 50; ARCH-001, ARCH-002,
+    ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-021, ARCH-022, REQ-036,
+    REQ-037, REQ-041, REQ-042, REQ-047, REQ-052, REQ-053, REQ-054,
+    REQ-058, REQ-061, REQ-062, REQ-081, REQ-083, ISSUE-008, ISSUE-011,
+    ISSUE-016): the successful page response renders
     zero-to-three display-ready Substitutes in ranked order at `24px` below
     the selected-input region. The layout has one card column below 1024px
     and three equal columns from 1024px. Each card uses the active
@@ -423,12 +452,27 @@
     </h2>
     {#if substitutionSearch.data !== undefined}
       <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {#each substitutionSearch.data.items as item (item.foodObjectId)}
-          <ResultCard
-            {item}
-            language={$interfaceLanguage}
-            pending={recalculating}
-          />
+        {#each substitutionSearch.data.items as item, index}
+          <div data-result-card-slot class="grid">
+            {#key item.foodObjectId}
+              <div
+                data-result-card-motion
+                class="col-start-1 row-start-1 grid"
+                out:resultCardTransition={{
+                  rank: index,
+                  firstPage: interaction.pageIndex === 0,
+                }}
+              >
+                <ResultCard
+                  {item}
+                  language={$interfaceLanguage}
+                  pending={recalculating}
+                  rank={index}
+                  firstPage={interaction.pageIndex === 0}
+                />
+              </div>
+            {/key}
+          </div>
         {/each}
       </div>
     {/if}

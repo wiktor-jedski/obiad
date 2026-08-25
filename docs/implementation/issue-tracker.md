@@ -296,3 +296,19 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - The supported deterministic catalog cannot produce zero eligible Substitutes, as recorded in ISSUE-003. Task 46 therefore uses `App.result-state.test.ts` to drive a successful zero-item response through the production query and `zeroResults` interaction transition and to verify localized focus and successful-result live-region silence in English and Polish. Do not add a database fixture, production eligibility exception, or real-stack Playwright zero-result scenario. All reachable nonzero new-Search and MORE! focus transitions remain real-stack Playwright coverage.
+
+## ISSUE-016: Phase 16 card-motion implementation boundary
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-25. Use one opacity-only card transition with the default Svelte fade easing. Only Result Cards participate. The selected-food summary, result heading, and MORE! control stay outside the keyed transition set.
+- Resolved with the project owner on 2026-08-25. Start all current-card outros together and complete each outro after 120 ms. Start no replacement-card intro until every current-card outro completes. In reduced-motion mode, replace the complete card set in one animation frame with no mixed old-and-new page.
+- Resolved with the project owner on 2026-08-25. Do not animate retained Result Cards after a successful Food Quantity recalculation. Apply entrance motion to new-Search results and keyed replacement motion to successful MORE! results.
+- Resolved with the project owner on 2026-08-25. Move focus to the stable result heading when the successful response renders and card motion starts. Do not delay focus until the last intro finishes.
+
+### Testing coverage deviations
+
+- Resolved with the project owner on 2026-08-25. Add no happy-dom or `@testing-library/svelte` scenario for Phase 16. Those environments do not supply the browser animation-frame scheduling, Svelte transition-event timing, or emulated `prefers-reduced-motion` media feature that the phase must verify. Real-stack Playwright scenario `result-card-motion.spec.ts` supplies the required normal-motion and reduced-motion evidence. `bun test` remains regression coverage for existing component behavior.
