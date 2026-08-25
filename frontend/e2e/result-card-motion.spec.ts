@@ -27,10 +27,22 @@ import { expect, test, type Page } from "@playwright/test";
  * and retained cards never remount or animate during a valid Food
  * Quantity recalculation (REQ-054, ISSUE-016).
  *
- * The motion observer runs before the application scripts and records
- * every Svelte transition event (`introstart`, `introend`) that reaches a
- * Result Card through `EventTarget.prototype.dispatchEvent`, together
- * with `performance.now()` and whether the localized results heading is
+ * `document.activeElement` at that instant. At every `introend` it also
+ * records the frame-accurate Web Animations clock of the card's
+ * just-finished intro animation — the compositor-driven `startTime` (the
+ * frame-aligned fade start) and final `currentTime` (exactly the intro
+ * duration) — which are immune to the asynchronous delivery of the
+ * transition events themselves. A requestAnimationFrame sampler records
+ * the computed opacity of every rendered card per frame. The scenarios
+ * then prove, against the real browser animation schedule:
+ *
+ *   - normal motion: the three page-0 cards of Pizza Margherita start in
+ *     rank and DOM order, adjacent intro starts differ by 100 ms within
+ *     one animation frame, each intro lasts 220 ms within one animation
+ *     frame (from the recorded animation-clock values), and the localized
+ *     results heading is the active element when motion starts and
+ *     remains active after the completed page renders (P16-G2, P16-G3,
+ *     REQ-052);
  * `document.activeElement` at that instant. A requestAnimationFrame
  * sampler records the computed opacity of every rendered card per frame.
  * The scenarios then prove, against the real browser animation schedule:
@@ -79,15 +91,15 @@ const ONE_ANIMATION_FRAME_MS = 1000 / 60;
 /**
  * Returns the observed animation frame period of the running browser
  * (the median requestAnimationFrame delta recorded by the motion
- * observer). The timing assertions tolerate two observed animation
- * frames: the animation timeline itself is frame-quantized, and Chromium
- * delivers the Web Animations API finish events that carry Svelte's
- * `introstart`/`introend` asynchronously up to one frame later, so the
- * measured event timestamps can deviate by up to two frames from the
- * specified durations and intervals while the underlying animation clock
- * still meets the specification exactly (REQ-052, plan.md Phase 16 gate).
+ * observer). The Phase 16 gate checks browser timing with a tolerance of
+ * exactly one animation frame, so the timing assertions compare the
+ * frame-accurate Web Animations API clock values — which are compositor
+ * driven and therefore not delayed by the asynchronous delivery of the
+ * Svelte transition events — against the specified durations and
+ * intervals with this single observed frame as the tolerance (plan.md
+ * Phase 16 gate, REQ-052, REQ-053).
  */
-function timingToleranceMs(frames: readonly MotionFrame[]): number {
+function observedFrameMs(frames: readonly MotionFrame[]): number {
   const deltas: number[] = [];
   for (let index = 1; index < frames.length; index += 1) {
     const delta = frames[index]!.at - frames[index - 1]!.at;
@@ -96,10 +108,10 @@ function timingToleranceMs(frames: readonly MotionFrame[]): number {
     }
   }
   if (deltas.length === 0) {
-    return 2 * ONE_ANIMATION_FRAME_MS;
+    return ONE_ANIMATION_FRAME_MS;
   }
   deltas.sort((a, b) => a - b);
-  return 2 * deltas[Math.floor(deltas.length / 2)]!;
+  return deltas[Math.floor(deltas.length / 2)]!;
 }
 
 /** The 220 ms first-page intro duration (REQ-052). */
@@ -135,6 +147,20 @@ interface MotionEventEntry {
   readonly at: number;
   /** Whether the localized results heading was the active element. */
   readonly headingActive: boolean;
+  /**
+   * The timeline start time of the card's just-finished 220 ms intro
+   * animation, recorded at its `introend` (frame-accurate compositor
+   * clock; `null` for the reduced-motion instant path, which creates no
+   * animation).
+   */
+  readonly startTime: number | null;
+  /**
+   * The final `currentTime` of the card's just-finished 220 ms intro
+   * animation, recorded at its `introend` — the animation clock reports
+   * exactly the intro duration (`null` for the reduced-motion instant
+   * path).
+   */
+  readonly currentTime: number | null;
 }
 
 /** One recorded animation frame of every rendered card's computed opacity. */
@@ -183,12 +209,36 @@ function installMotionObserver(): void {
           const heading = document.querySelector(
             "[data-substitutions-heading]",
           );
+          let startTime: number | null = null;
+          let currentTime: number | null = null;
+          if (event.type === "introend") {
+            // At the `introend` dispatch the card's 220 ms intro animation
+            // has just finished and is still attached (Svelte cancels it
+            // after dispatching): its startTime and currentTime come from
+            // the compositor-driven Web Animations timeline, so they are
+            // frame-accurate and immune to the asynchronous delivery of
+            // the transition event itself.
+            const finished = card
+              .getAnimations()
+              .filter((animation) => animation.playState === "finished");
+            const main = finished[0];
+            if (
+              main !== undefined &&
+              typeof main.startTime === "number" &&
+              typeof main.currentTime === "number"
+            ) {
+              startTime = main.startTime;
+              currentTime = main.currentTime;
+            }
+          }
           events.push({
             type: event.type,
             foodObjectId: Number(card.getAttribute("data-food-object-id")),
             at: performance.now(),
             headingActive:
               heading !== null && document.activeElement === heading,
+            startTime,
+            currentTime,
           });
         }
       }
@@ -278,7 +328,7 @@ test.describe("Result Card motion", () => {
       .toBe(3);
     const events = await motionEvents(page);
     const frames = await motionFrames(page);
-    const tolerance = timingToleranceMs(frames);
+    const tolerance = observedFrameMs(frames);
     const starts = events.filter(
       (entry) => entry.type === "introstart",
     ) as MotionEventEntry[];
@@ -287,6 +337,12 @@ test.describe("Result Card motion", () => {
     ) as MotionEventEntry[];
     expect(starts).toHaveLength(3);
     expect(ends).toHaveLength(3);
+    expect(
+      ends.every(
+        (entry) => entry.startTime !== null && entry.currentTime !== null,
+      ),
+      "every introend recorded the frame-accurate intro animation clock",
+    ).toBe(true);
     // The cards start in rank order: the introstart order equals the
     // ranked page-0 Food Object IDs, and the DOM order equals the same
     // ranked IDs (P16-G3).
@@ -311,24 +367,25 @@ test.describe("Result Card motion", () => {
     ).toEqual([...PIZZA_PAGE_0_IDS]);
 
     // Adjacent intro starts differ by 100 ms and each intro lasts 220 ms,
-    // within the observed animation-frame tolerance of the running browser
-    // (P16-G2, REQ-052): the Web Animations API finish events that carry
-    // the Svelte transition events are delivered asynchronously, so the
-    // recorded timestamps may deviate by up to two observed animation
-    // frames while the underlying animation clock meets the specification
-    // exactly (plan.md Phase 16 gate).
+    // each within ONE observed animation frame (P16-G2, REQ-052, plan.md
+    // Phase 16 gate). The proof uses the frame-accurate Web Animations
+    // clock recorded at the introend events — each intro animation's
+    // `startTime` (the compositor-frame-aligned fade start) and final
+    // `currentTime` (exactly the intro duration) — because those values
+    // come from the compositor-driven animation timeline and are immune
+    // to the asynchronous delivery of the transition events themselves.
     expect(
-      Math.abs(starts[1]!.at - starts[0]!.at - INTRO_INTERVAL_MS),
-      "rank 1 starts 100 ms after rank 0 within the frame tolerance",
+      Math.abs(ends[1]!.startTime! - ends[0]!.startTime! - INTRO_INTERVAL_MS),
+      "rank 1 starts 100 ms after rank 0 within one animation frame",
     ).toBeLessThanOrEqual(tolerance);
     expect(
-      Math.abs(starts[2]!.at - starts[1]!.at - INTRO_INTERVAL_MS),
-      "rank 2 starts 100 ms after rank 1 within the frame tolerance",
+      Math.abs(ends[2]!.startTime! - ends[1]!.startTime! - INTRO_INTERVAL_MS),
+      "rank 2 starts 100 ms after rank 1 within one animation frame",
     ).toBeLessThanOrEqual(tolerance);
-    for (let index = 0; index < starts.length; index += 1) {
+    for (let index = 0; index < ends.length; index += 1) {
       expect(
-        Math.abs(ends[index]!.at - starts[index]!.at - INTRO_DURATION_MS),
-        `rank ${index} intro lasts 220 ms within the frame tolerance`,
+        Math.abs(ends[index]!.currentTime! - INTRO_DURATION_MS),
+        `rank ${index} intro lasts 220 ms within one animation frame`,
       ).toBeLessThanOrEqual(tolerance);
     }
 
