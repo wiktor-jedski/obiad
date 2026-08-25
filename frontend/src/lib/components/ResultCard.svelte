@@ -7,11 +7,13 @@
     getDictionary,
   } from "../i18n";
   import type { InterfaceLanguage } from "../i18n";
+  import { resultCardTransition } from "../resultCardMotion";
 
   /**
    * Result-card component (task 29; ARCH-001, ARCH-003, ARCH-015,
    * ARCH-020, ARCH-022, REQ-011, REQ-036, REQ-037, REQ-038, REQ-039,
-   * REQ-040, REQ-081, ISSUE-008).
+   * REQ-040, REQ-081, ISSUE-008; task 50, ARCH-021, REQ-052, REQ-054,
+   * ISSUE-016).
    *
    * The component consumes one generated display-ready `SubstituteItem`
    * and the active Interface Language. It renders the approved card field
@@ -26,7 +28,15 @@
    * decimal place when the Interface Language changes (REQ-058). Matched
    * Quantity stays whole with only `g` or `ml` (REQ-038) and similarity stays
    * a whole percentage. There is no Serving equivalent, card action, paging
-   * control, animation, or persisted display value.
+   * control, or persisted display value.
+   *
+   * Task 50 applies the reusable ARCH-021 entrance motion to the card
+   * root: the `in:resultCardTransition|global` directive fades the card
+   * in over 220 ms, starting 100 ms after the prior ranked card (rank
+   * zero has no delay), when a completed first page renders (REQ-052).
+   * Reduced-motion mode and non-first-page cards use the instant
+   * configuration, and a retained card whose key stays in the keyed
+   * result set is never remounted or animated (REQ-054, ISSUE-016).
    *
    * The supported image-key map is empty (ISSUE-008): an absent key, one
    * of the four seeded opaque keys, and every other unmapped key resolve to
@@ -55,9 +65,28 @@
      * aria-hidden `16px` spinner is shown in that content area (REQ-081).
      */
     pending?: boolean;
+    /**
+     * The card's 0-based rank within its completed result page (task 50,
+     * ARCH-021, REQ-052): rank zero has no delay, and each later ranked
+     * card starts 100 ms after the prior one.
+     */
+    rank?: number;
+    /**
+     * Whether the card belongs to a completed first page (task 50,
+     * ARCH-021, REQ-052): only first-page cards use the staggered 220 ms
+     * entrance; cards of later pages keep their motionless appearance
+     * until the keyed MORE! replacement sequence (task 51, REQ-053).
+     */
+    firstPage?: boolean;
   }
 
-  let { item, language, pending = false }: Props = $props();
+  let {
+    item,
+    language,
+    pending = false,
+    rank = 0,
+    firstPage = false,
+  }: Props = $props();
 
   /** The active-language dictionary for the card's visible labels. */
   const dictionary = $derived(getDictionary(language));
@@ -85,6 +114,7 @@
 <article
   data-result-card
   data-food-object-id={item.foodObjectId}
+  in:resultCardTransition|global={{ rank, firstPage }}
   class="relative overflow-hidden rounded-2xl border border-solid border-dark-secondary bg-dark-surface"
 >
   <img

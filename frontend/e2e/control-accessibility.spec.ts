@@ -645,6 +645,21 @@ async function selectPizzaAndWaitForResults(
   await option.click();
   await waitForInteractionState(page, "results");
   await expect(page.locator("[data-result-card]")).toHaveCount(3);
+  // The Phase 16 entrance motion (task 50, REQ-052) runs for up to 420 ms
+  // after the page renders; wait until every card reaches full opacity so
+  // the accessibility scans and surface snapshots observe the settled
+  // result state rather than a mid-fade presentation (ISSUE-015).
+  await expect
+    .poll(async () =>
+      page
+        .locator("[data-result-card]")
+        .evaluateAll((elements) =>
+          elements.every(
+            (element) => getComputedStyle(element).opacity === "1",
+          ),
+        ),
+    )
+    .toBe(true);
 }
 
 /**
