@@ -260,6 +260,12 @@ describe("the Substitution Search lifecycle", () => {
       ).toBe("results");
       expect((search as HTMLInputElement).value).toBe("Food 6");
 
+      // Task 45 (REQ-083): after a successful result page renders, focus
+      // moves to the localized results heading, so Search no longer keeps
+      // focus after completion (REQ-064 is superseded). Refocusing Search —
+      // like a real pointer or keyboard activation — restores the focused
+      // suggestion intent before typing the next draft query.
+      await fireEvent.focus(search);
       await fireEvent.input(search, { target: { value: "olive" } });
       await settle();
       expect(
