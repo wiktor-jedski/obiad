@@ -550,7 +550,7 @@ Phases 9 and 13.
 - Complete ARCH-003 and ARCH-012.
 - Add all interface text to both typed dictionaries.
 - Add all validation and retry text to both dictionaries.
-- Add all accessible names and announcements to both dictionaries.
+- Add all accessible names and the existing loading, validation, and failure announcements to both dictionaries.
 - Keep current result IDs, order, and page after a language change.
 - Update visible Food Object names locally.
 - Remove focus from the Search field.
@@ -575,11 +575,11 @@ Run `bun test` and `bun run test:e2e` from `frontend/`. Change the Interface Lan
 
 Read the Phase 14 diff. Record REQ-055, REQ-058, and REQ-059 as verified before Phase 15 tasks are generated.
 
-## Phase 15 — Result announcements and control access
+## Phase 15 — Result focus and control access
 
 **Goal**
 
-Make each completed interaction state operable and understandable with assistive technology.
+Make each completed interaction state operable and perceivable with assistive technology.
 
 **Depends on**
 
@@ -587,8 +587,10 @@ Phase 14.
 
 **Implement**
 
-- Add the localized status region for result counts.
-- Add status text for zero results and failures.
+- Move focus to the localized results heading after every successful new Search or MORE! page with one or more result cards.
+- Move focus to the localized zero-result message after a successful zero-result new Search.
+- Add no successful-result count or result-status live region.
+- Keep the existing loading, validation, and failure announcements.
 - Give each interactive control a localized accessible name.
 - Give each interactive control a visible focus indication.
 - Use the semantic disabled state where the control is disabled.
@@ -597,18 +599,20 @@ Phase 14.
 
 **Requirements that become testable**
 
-- [REQ-067](../requirements/requirements.md#req-067--result-announcement)
 - [REQ-068](../requirements/requirements.md#req-068--accessible-controls)
+- [REQ-083](../requirements/requirements.md#req-083--successful-result-page-focus)
+- [REQ-084](../requirements/requirements.md#req-084--zero-result-focus)
+- [REQ-085](../requirements/requirements.md#req-085--no-successful-result-live-announcement)
 
-Recheck REQ-018, REQ-019, REQ-064, REQ-065, and REQ-066.
+Recheck REQ-018, REQ-019, REQ-026, REQ-050, and REQ-051.
 
 **Phase gate**
 
-Run `bun run test:e2e` from `frontend/`. Run the accessibility scan and the keyboard-only flow. Check focus and the status region for each result state. Run each check in English and Polish.
+Run `bun run test:e2e` from `frontend/`. Run the accessibility scan and the keyboard-only flow. Check focus on the localized results heading after a new Search, an intermediate MORE! page, and the last page. Check focus on the localized zero-result message after a zero-result response. Verify successful result states create no result count or result-status live-region update. Verify the existing loading, validation, and failure announcements remain unchanged. Run each check in English and Polish.
 
 **Review stop**
 
-Read the Phase 15 diff. Record REQ-067 and REQ-068 as verified before Phase 16 tasks are generated.
+Read the Phase 15 diff. Record REQ-068, REQ-083, REQ-084, and REQ-085 as verified before Phase 16 tasks are generated.
 
 ## Phase 16 — Result card motion
 
