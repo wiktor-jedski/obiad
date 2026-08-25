@@ -24,11 +24,13 @@ import { expect, test, type Page } from "@playwright/test";
  * active styling. Enter on the third option starts exactly one
  * generated-client `POST /api/v1/substitutes/search` with that option's
  * returned default quantity and page index `0` — the identical selection
- * transition a pointer click uses (REQ-020) — and loads its page-0 result
- * with the Search field still focused (REQ-064). Typing a draft query over
- * those results keeps the committed selected input and cards visible,
- * keeps the Search field at its result-state position, and overlays five
- * suggestions above the result surface without a second POST. Escape
+ * transition a pointer click uses (REQ-020) — and moves focus to the
+ * localized results heading after its page-0 result renders (REQ-083),
+ * replacing the superseded Search-focus success path (REQ-064). Typing a
+ * draft query over those results keeps the committed selected input and
+ * cards visible, keeps the Search field at its result-state position, and
+ * overlays five suggestions above the result surface without a second
+ * POST. Escape
  * retains the Search Query text and Search focus with the list closed and
  * zero Substitution Search requests; typing a new query reopens exactly
  * five options. Tab closes the list, moves focus natively to the next
@@ -279,8 +281,8 @@ test.describe("suggestion keyboard control", () => {
     // Enter selects the active option through the same selection transition
     // a pointer click uses: exactly one generated-client POST with the third
     // option's Food Object ID, unchanged one-serving default, and page 0.
-    // The page-0 result loads with Search still focused (REQ-019, REQ-020,
-    // REQ-022, REQ-023, REQ-024, REQ-064).
+    // The page-0 result renders and moves focus to the localized results
+    // heading (REQ-019, REQ-020, REQ-022, REQ-023, REQ-024, REQ-083).
     await search.press("Enter");
 
     await expect(page.getByRole("listbox")).toHaveCount(0);
@@ -306,13 +308,16 @@ test.describe("suggestion keyboard control", () => {
 
     // The page-0 result loaded: the read-only Substitution Input retains
     // the selected localized name and default quantity, the result region
-    // renders the result cards, and Search keeps focus (REQ-064).
+    // renders the result cards, and programmatic focus moves to the
+    // localized results heading (REQ-083).
     await expect(selectedInput(page)).toContainText(COPY.en.selectedFood);
     await expect(selectedInput(page)).toContainText(
       "Polish chicken soup · 1 serving",
     );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
-    await expect(search).toBeFocused();
+    await expect(
+      page.locator("[data-substitutions-heading]"),
+    ).toBeFocused();
 
     // Drafting a later query does not discard or move the committed result.
     // The fresh panel continuously extends Search and overlays the

@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Real-stack MORE! result-paging scenario (task 37, task 38; ARCH-001,
- * ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020,
- * ARCH-022, REQ-041, REQ-042, REQ-043, REQ-045, REQ-064, REQ-065,
- * REQ-066, REQ-082, ISSUE-011).
+ * Real-stack MORE! result-paging scenario (task 37, task 38, task 45;
+ * ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019,
+ * ARCH-020, ARCH-022, REQ-041, REQ-042, REQ-043, REQ-045, REQ-082,
+ * REQ-083, ISSUE-011).
  *
  * This scenario runs against the self-cleaning real stack behind `bun run
  * test:e2e`: disposable loopback PostgreSQL 17, fixed Fiber at
@@ -23,22 +23,25 @@ import { expect, test, type Page } from "@playwright/test";
  *   replace all three page-0 cards (ranks 4 through 6) instead of appending,
  *   match the backend ranking, remain unique across observed pages, and show
  *   no card transition or animation (REQ-041, REQ-042, P11-G7).
- * - Intermediate activations leave MORE! as `document.activeElement`
- *   (REQ-065).
+ * - After every successful page with one or more result cards — a new
+ *   Search, an intermediate MORE! page, or the last page — the localized
+ *   results heading is `document.activeElement` (REQ-083); the superseded
+ *   Search-focus (REQ-064) and MORE!-focus (REQ-065) success paths are
+ *   removed.
  * - Selecting a new Food Object from page 2 resets `pageIndex` to 0, sends
- *   `pageIndex: 0`, renders that input's ranks 1 through 3, and retains
- *   Search focus (REQ-045, REQ-064, P11-G9).
+ *   `pageIndex: 0`, renders that input's ranks 1 through 3, and moves
+ *   focus to the localized results heading (REQ-045, REQ-083, P11-G9).
  * - Traversing all real pages for a seeded Pizza-family input (Pizza
  *   Margherita, 36 eligible substitutes) reaches a full three-card last
  *   page (page 11); MORE! is omitted on the last page (`hasMore: false`)
  *   and programmatic focus moves to the stable results heading (REQ-043,
- *   REQ-066, P11-G6, P11-G9).
+ *   REQ-083, P11-G6, P11-G9).
  * - All 36 Food Object IDs across the complete Pizza Margherita search
  *   are unique (REQ-042, P11-G8).
  * - Traversing all real pages for a seeded no-family input (Chicken
  *   breast in Polish, 37 eligible substitutes) reaches a partial
  *   one-card last page (page 12); MORE! is omitted and programmatic focus
- *   moves to the stable results heading (REQ-043, REQ-066, P11-G6, P11-G9).
+ *   moves to the stable results heading (REQ-043, REQ-083, P11-G6, P11-G9).
  * - All 37 Food Object IDs across the complete Chicken breast search are
  *   unique (REQ-042, P11-G8).
  * - Valid Food Quantity edits on later and last pages continue to request
@@ -187,7 +190,7 @@ async function renderedCardIDs(page: Page): Promise<number[]> {
 }
 
 test.describe("MORE! result paging", () => {
-  test("traversing all 12 pages of Pizza Margherita (full three-card last page) proves the pending gray non-operable MORE! state, replacement without animation, MORE! focus on intermediate pages, results heading focus on the last page with MORE! omitted, unique IDs across all pages, new-search reset from page 2, and valid quantity edit on the last page", async ({
+  test("traversing all 12 pages of Pizza Margherita (full three-card last page) proves the pending gray non-operable MORE! state, replacement without animation, results heading focus after every successful page with MORE! omitted on the last page, unique IDs across all pages, new-search reset from page 2, and valid quantity edit on the last page", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -322,12 +325,16 @@ test.describe("MORE! result paging", () => {
     const page2IDs = await renderedCardIDs(page);
     expect(page2IDs).toEqual([...PIZZA_ALL_PAGES[2]!]);
 
-    // REQ-065: Intermediate success leaves MORE! as document.activeElement
-    await expect(moreButton).toBeFocused();
+    // REQ-083: After the successful intermediate page-2 response renders,
+    // programmatic focus moves to the stable localized results heading.
+    await expect(
+      page.locator("[data-substitutions-heading]"),
+    ).toBeFocused();
 
-    // P11-G9 / REQ-045 / REQ-064: A new suggestion selection from page 2 commits
-    // page 0, starts request with pageIndex: 0, renders ranks 1-3 of the new food,
-    // and keeps focus on the Search field.
+    // P11-G9 / REQ-045 / REQ-083: A new suggestion selection from page 2
+    // commits page 0, starts the request with pageIndex: 0, renders ranks
+    // 1-3 of the new food, and moves focus to the localized results
+    // heading after the successful page renders (REQ-083).
     const searchInput = page.getByPlaceholder(COPY.en.searchPlaceholder);
     await searchInput.fill("chicken");
     const chickenOption = page.locator("#food-suggestion-option-5");
@@ -347,8 +354,11 @@ test.describe("MORE! result paging", () => {
       .toEqual([...CHICKEN_ALL_PAGES[0]!]);
     expect(await renderedCardIDs(page)).toEqual([...CHICKEN_ALL_PAGES[0]!]);
 
-    // Search field retains focus (REQ-064)
-    await expect(searchInput).toBeFocused();
+    // REQ-083: The localized results heading is the active element after
+    // the successful new Search renders its result page.
+    await expect(
+      page.locator("[data-substitutions-heading]"),
+    ).toBeFocused();
 
     // Now re-select Pizza Margherita to traverse all 12 pages from page 0 to page 11
     await searchInput.fill("margherita");
@@ -376,11 +386,14 @@ test.describe("MORE! result paging", () => {
       expect(currentIDs.length).toBe(3);
       allPizzaRenderedIDs.push(...currentIDs);
 
-      // REQ-065: MORE! is document.activeElement on intermediate pages
-      await expect(btn).toBeFocused();
+      // REQ-083: The localized results heading is document.activeElement
+      // after each successful intermediate MORE! page renders.
+      await expect(
+        page.locator("[data-substitutions-heading]"),
+      ).toBeFocused();
     }
 
-    // P11-G6 / REQ-043 / REQ-066 / P11-G9: Click MORE! to advance to page 11 (full 3-card last page)
+    // P11-G6 / REQ-043 / REQ-083 / P11-G9: Click MORE! to advance to page 11 (full 3-card last page)
     const btnToLastPage = page.locator("[data-more-button]");
     await expect(btnToLastPage).toBeVisible();
     await btnToLastPage.click();
@@ -395,7 +408,8 @@ test.describe("MORE! result paging", () => {
     // REQ-043 / P11-G6: Last page shows all remaining API IDs and omits MORE! control
     await expect(page.locator("[data-more-button]")).toHaveCount(0);
 
-    // REQ-066 / P11-G9: Programmatic focus moves to the stable results heading on last page
+    // REQ-083 / P11-G9: Programmatic focus moves to the stable results
+    // heading on the full three-card last page.
     const heading = page.locator("[data-substitutions-heading]");
     await expect(heading).toBeVisible();
     await expect(heading).toHaveText(COPY.en.foundSubstitutions);
@@ -427,7 +441,7 @@ test.describe("MORE! result paging", () => {
     await expect(page.locator("[data-more-button]")).toHaveCount(0);
   });
 
-  test("traversing all 13 pages of Chicken breast in Polish (partial one-card last page) proves unique IDs across all pages, MORE! focus on intermediate pages, results heading focus on the partial last page with MORE! omitted, and valid quantity edit on the partial last page", async ({
+  test("traversing all 13 pages of Chicken breast in Polish (partial one-card last page) proves unique IDs across all pages, results heading focus after every successful page with MORE! omitted on the partial last page, and valid quantity edit on the partial last page", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
@@ -462,11 +476,14 @@ test.describe("MORE! result paging", () => {
       expect(currentIDs.length).toBe(3);
       allChickenRenderedIDs.push(...currentIDs);
 
-      // REQ-065: MORE! is document.activeElement on intermediate pages
-      await expect(moreBtn).toBeFocused();
+      // REQ-083: The localized results heading is document.activeElement
+      // after each successful intermediate MORE! page renders.
+      await expect(
+        page.locator("[data-substitutions-heading]"),
+      ).toBeFocused();
     }
 
-    // P11-G6 / REQ-043 / REQ-066 / P11-G9: Click MORE! to advance to page 12 (partial 1-card last page)
+    // P11-G6 / REQ-043 / REQ-083 / P11-G9: Click MORE! to advance to page 12 (partial 1-card last page)
     const btnToLastPage = page.locator("[data-more-button]");
     await expect(btnToLastPage).toBeVisible();
     await btnToLastPage.click();
@@ -482,7 +499,8 @@ test.describe("MORE! result paging", () => {
     await expect(page.locator("[data-more-button]")).toHaveCount(0);
     await expect(page.locator("[data-result-card]")).toHaveCount(1);
 
-    // REQ-066 / P11-G9: Programmatic focus moves to the stable results heading on partial last page
+    // REQ-083 / P11-G9: Programmatic focus moves to the stable results
+    // heading on the partial one-card last page.
     const heading = page.locator("[data-substitutions-heading]");
     await expect(heading).toBeVisible();
     await expect(heading).toHaveText(COPY.pl.foundSubstitutions);
