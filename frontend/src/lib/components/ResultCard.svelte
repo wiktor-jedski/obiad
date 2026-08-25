@@ -12,7 +12,7 @@
   /**
    * Result-card component (task 29; ARCH-001, ARCH-003, ARCH-015,
    * ARCH-020, ARCH-022, REQ-011, REQ-036, REQ-037, REQ-038, REQ-039,
-   * REQ-040, REQ-081, ISSUE-008; task 50, ARCH-021, REQ-052, REQ-054,
+   * REQ-040, REQ-081, ISSUE-008; task 50, task 51, ARCH-021, REQ-052, REQ-053, REQ-054,
    * ISSUE-016).
    *
    * The component consumes one generated display-ready `SubstituteItem`
@@ -34,9 +34,16 @@
    * root: the `in:resultCardTransition|global` directive fades the card
    * in over 220 ms, starting 100 ms after the prior ranked card (rank
    * zero has no delay), when a completed first page renders (REQ-052).
-   * Reduced-motion mode and non-first-page cards use the instant
-   * configuration, and a retained card whose key stays in the keyed
-   * result set is never remounted or animated (REQ-054, ISSUE-016).
+   * Reduced-motion mode uses the instant configuration, and a retained
+   * card whose key stays in the keyed result set is never remounted or
+   * animated (REQ-054, ISSUE-016).
+   *
+   * Task 51 completes the keyed replacement over the same transition:
+   * the `out:resultCardTransition|global` directive fades every current
+   * card out together for 120 ms when a successful later-page response
+   * replaces the keyed card set, and each replacement card starts its
+   * 220 ms intro 120 ms later — after the last current-card outro
+   * completes — followed by the 100 ms rank intervals (REQ-053).
    *
    * The supported image-key map is empty (ISSUE-008): an absent key, one
    * of the four seeded opaque keys, and every other unmapped key resolve to
@@ -73,9 +80,10 @@
     rank?: number;
     /**
      * Whether the card belongs to a completed first page (task 50,
-     * ARCH-021, REQ-052): only first-page cards use the staggered 220 ms
-     * entrance; cards of later pages keep their motionless appearance
-     * until the keyed MORE! replacement sequence (task 51, REQ-053).
+     * ARCH-021, REQ-052): first-page cards use the plain staggered
+     * 220 ms entrance; cards of later pages delay their intro by the
+     * full 120 ms outro duration of the keyed MORE! replacement
+     * sequence (task 51, REQ-053).
      */
     firstPage?: boolean;
   }
@@ -115,6 +123,7 @@
   data-result-card
   data-food-object-id={item.foodObjectId}
   in:resultCardTransition|global={{ rank, firstPage }}
+  out:resultCardTransition|global={{ rank, firstPage }}
   class="relative overflow-hidden rounded-2xl border border-solid border-dark-secondary bg-dark-surface"
 >
   <img
