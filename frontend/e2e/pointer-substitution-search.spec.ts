@@ -2,10 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Real-stack pointer-selection and new-search transition scenario
- * (task 28; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010, ARCH-011,
- * ARCH-019, ARCH-020, ARCH-022, REQ-020, REQ-022, REQ-023, REQ-024,
- * REQ-064, REQ-080, ISSUE-005, ISSUE-008; P07-G8, P07-G9, P07-G10,
- * P07-G11, P07-G17, P07-G18, P07-G19).
+ * (task 28, task 45; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010,
+ * ARCH-011, ARCH-019, ARCH-020, ARCH-022, REQ-020, REQ-022, REQ-023,
+ * REQ-024, REQ-080, REQ-083, ISSUE-005, ISSUE-008; P07-G8, P07-G9,
+ * P07-G10, P07-G11, P07-G17, P07-G18, P07-G19).
  *
  * `bun run test:e2e` runs these tests against the complete disposable stack
  * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
@@ -22,9 +22,11 @@ import { expect, test, type Page } from "@playwright/test";
  * `100 ml`, and update the visible selected Food Object value when the
  * Interface Language changes. One controlled response fetched from real
  * Fiber and PostgreSQL stays pending at the browser boundary while no
- * spinner is rendered below Search; fulfillment leaves the Search field as
- * `document.activeElement` (REQ-064, REQ-080). One adversarial network
- * reconnect while results are visible proves
+ * spinner is rendered below Search; after fulfillment the localized
+ * results heading becomes `document.activeElement` once the result page
+ * renders (REQ-083), replacing the superseded Search-focus success path
+ * (REQ-064). One adversarial network reconnect while results are visible
+ * proves
  * the disabled TanStack Query's `refetchOnReconnect` path: exactly one
  * Substitution Search POST remains per selection (ARCH-019, REQ-022, task 28
  * repair; the remount half of the lifecycle coverage lives in the
@@ -340,7 +342,7 @@ test.describe("pointer substitution search", () => {
     ).toBe(1);
   });
 
-  test("a controlled response fetched from real Fiber and PostgreSQL stays pending without a spinner below Search; fulfillment leaves Search focused", async ({
+  test("a controlled response fetched from real Fiber and PostgreSQL stays pending without a spinner below Search; fulfillment moves focus to the localized results heading", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -387,14 +389,18 @@ test.describe("pointer substitution search", () => {
     // interval (task 28).
     await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
-    // Fulfillment completes the transition to results and leaves the Search
-    // field as the active element (REQ-064, P07-G18, P07-G19).
+    // Fulfillment completes the transition to results; the localized
+    // results heading is the active element after the result page renders
+    // (REQ-083, P07-G18, P07-G19), replacing the superseded Search-focus
+    // success path (REQ-064).
     releaseFirst();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
     );
-    await expect(search).toBeFocused();
+    await expect(
+      page.locator("[data-substitutions-heading]"),
+    ).toBeFocused();
     await expect(page.locator("[data-selected-input]")).toContainText(
       "Polish chicken soup · 1 serving",
     );
@@ -442,7 +448,12 @@ test.describe("pointer substitution search", () => {
       "data-interaction-state",
       "results",
     );
-    await expect(search).toBeFocused();
+    // The successful result page moved focus to the localized results
+    // heading (REQ-083); the reconnect starts no second request and does
+    // not change that focus.
+    await expect(
+      page.locator("[data-substitutions-heading]"),
+    ).toBeFocused();
   });
 
   test("the Pizza Margherita flow sends 1 serving and updates its visible selected value when the language changes", async ({

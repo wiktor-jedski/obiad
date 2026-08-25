@@ -11,11 +11,11 @@
     substitutionSearchLock,
   } from "../substitutionSearch";
   /**
-   * Result-state composition (task 30, task 37, task 38, task 41;
-   * ARCH-001, ARCH-002, ARCH-003, ARCH-011, ARCH-018, ARCH-019,
-   * ARCH-020, ARCH-022, REQ-003, REQ-036, REQ-037, REQ-041, REQ-042,
-   * REQ-043, REQ-044, REQ-045, REQ-047, REQ-050, REQ-058, REQ-061,
-   * REQ-062, REQ-065, REQ-066, ISSUE-008, ISSUE-010, ISSUE-011,
+   * Result-state composition (task 30, task 37, task 38, task 41,
+   * task 45; ARCH-001, ARCH-002, ARCH-003, ARCH-011, ARCH-018,
+   * ARCH-019, ARCH-020, ARCH-022, REQ-003, REQ-036, REQ-037, REQ-041,
+   * REQ-042, REQ-043, REQ-044, REQ-045, REQ-047, REQ-050, REQ-058,
+   * REQ-061, REQ-062, REQ-083, ISSUE-008, ISSUE-010, ISSUE-011,
    * ISSUE-013) with the ISSUE-010 editable selected-food summary and
    * quantity recalculation (task 34, ARCH-018, REQ-027, REQ-028).
    *
@@ -54,19 +54,22 @@
    * REQ-058).
    *
    * Task 37 and Task 38 complete MORE! result paging (REQ-041, REQ-043,
-   * REQ-045, REQ-065, REQ-066, REQ-082). Whenever a later page exists
+   * REQ-045, REQ-082). Whenever a later page exists
    * (`hasMore: true`), one visible and accessibly named `MORE!` button is
    * rendered after the result grid. While a next-page request is pending
    * (`loadingMore`), the focused control keeps its localized label, becomes
    * gray and `aria-disabled`, and its guarded handler accepts no additional
    * activation (REQ-082). On intermediate success (`hasMore: true`), the
-   * requested page's cards replace the previous cards and focus stays on
-   * the MORE! button (REQ-041, REQ-065). On final-page success
-   * (`hasMore: false`), the
-   * remaining one to three cards are rendered, MORE! is omitted, and
-   * programmatic focus moves to the stable results heading (REQ-043,
-   * REQ-066). When the user selects a new Food Object from any page, the
-   * interaction state commits page 0 (REQ-045).
+   * requested page's cards replace the previous cards. On final-page
+   * success (`hasMore: false`), the remaining one to three cards are
+   * rendered and MORE! is omitted. Task 45 (Phase 15, REQ-083) moves
+   * programmatic focus to the stable localized results heading after every
+   * successful page with one or more result cards — a new Search, an
+   * intermediate MORE! page, or the last page — replacing the superseded
+   * Search-focus (REQ-064), MORE!-focus (REQ-065), and last-page-only
+   * heading-focus (REQ-066) success paths. When the user selects a new
+   * Food Object from any page, the interaction state commits page 0
+   * (REQ-045).
    *
    * Task 41 completes the failed new-Search slice (REQ-050, ISSUE-013).
    * When the current `loadingNew` generated-client request reaches its
@@ -108,7 +111,7 @@
   const interaction = $derived($interactionState);
   /** The active dictionary for the localized zero-result message (ARCH-003). */
   const dictionary = $derived(getDictionary($interfaceLanguage));
-  /** Reference to the stable results heading for last-page focus (REQ-066). */
+  /** Reference to the stable results heading for successful-result focus (REQ-083). */
   let headingElement: HTMLHeadingElement | null = $state(null);
   /**
    * The primitive pieces of the committed Substitution Search input
@@ -216,18 +219,23 @@
   );
 
   /**
-   * Result transition (task 28, task 37, task 38, task 41; ARCH-002):
-   * the current response transitions the union to `results` when the page
-   * contains items and to `zeroResults` when it is empty. A subsequent
-   * page response arriving while the state is `loadingMore` transitions
-   * the union back to `results` (REQ-041). When that subsequent page is
-   * the last page (`hasMore: false`), focus moves to the stable results
-   * heading (REQ-066). From `newSearchFailure` (task 41), a success
-   * completes a retry started through a changed valid Food Quantity
-   * commit: the pending interval keeps the failure state and its retry
-   * message, and the response transitions the union to `results` or
-   * `zeroResults`. The response data itself stays in TanStack Query; the
-   * store receives only the outcome.
+   * Result transition (task 28, task 37, task 38, task 41, task 45;
+   * ARCH-002, REQ-083): the current response transitions the union to
+   * `results` when the page contains items and to `zeroResults` when it
+   * is empty. A subsequent page response arriving while the state is
+   * `loadingMore` transitions the union back to `results` (REQ-041).
+   * After a successful page with one or more result cards — a new
+   * Search, an intermediate MORE! page, or the last page — programmatic
+   * focus moves to the stable localized results heading (REQ-083),
+   * replacing the superseded Search-focus (REQ-064), MORE!-focus
+   * (REQ-065), and last-page-only heading-focus (REQ-066) success paths.
+   * The zero-result transition (REQ-084) stays a success outcome without
+   * a focus move in this task. From `newSearchFailure` (task 41), a
+   * success completes a retry started through a changed valid Food
+   * Quantity commit: the pending interval keeps the failure state and
+   * its retry message, and the response transitions the union to
+   * `results` or `zeroResults`. The response data itself stays in
+   * TanStack Query; the store receives only the outcome.
    */
   $effect(() => {
     const data = substitutionSearch.data;
@@ -238,10 +246,9 @@
       data !== undefined &&
       !substitutionSearch.isPlaceholderData
     ) {
-      const wasLoadingMore = interaction.name === "loadingMore";
-      const isLastPage = !data.hasMore;
-      interactionState.applySearchResult(data.items.length > 0);
-      if (wasLoadingMore && isLastPage) {
+      const hasItems = data.items.length > 0;
+      interactionState.applySearchResult(hasItems);
+      if (hasItems) {
         tick().then(() => {
           headingElement?.focus();
         });
@@ -349,10 +356,10 @@
 {/if}
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
   <!--
-    Result-card region (task 30, task 37; ARCH-001, ARCH-002, ARCH-003,
-    ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037, REQ-041,
-    REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-065, REQ-081,
-    ISSUE-008, ISSUE-011): the successful page response renders exactly its
+    Result-card region (task 30, task 37, task 45; ARCH-001, ARCH-002,
+    ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037,
+    REQ-041, REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-081,
+    REQ-083, ISSUE-008, ISSUE-011): the successful page response renders
     zero-to-three display-ready Substitutes in ranked order at `24px` below
     the selected-input region. The layout has one card column below 1024px
     and three equal columns from 1024px. Each card uses the active
@@ -368,8 +375,10 @@
     next-page request is pending (`loadingMore`), the current cards remain
     visible and the focused control keeps its localized label with a gray,
     `aria-disabled` non-operable presentation (REQ-082). On intermediate
-    success, the requested page's cards replace the previous cards and
-    focus stays on the MORE! button (REQ-041, REQ-065).
+    success, the requested page's cards replace the previous cards, and
+    task 45 (REQ-083) moves programmatic focus to the stable localized
+    results heading — after a successful new Search, an intermediate MORE!
+    page, or the last page (REQ-041, REQ-083).
 
     Task 42 retains this region through a MORE! failure (REQ-051,
     ISSUE-013): after the terminal error of the current next-page request,
