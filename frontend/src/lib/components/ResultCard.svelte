@@ -30,20 +30,23 @@
    * a whole percentage. There is no Serving equivalent, card action, paging
    * control, or persisted display value.
    *
-   * Task 50 applies the reusable ARCH-021 entrance motion to the card
-   * root: the `in:resultCardTransition|global` directive fades the card
-   * in over 220 ms, starting 100 ms after the prior ranked card (rank
-   * zero has no delay), when a completed first page renders (REQ-052).
-   * Reduced-motion mode uses the instant configuration, and a retained
-   * card whose key stays in the keyed result set is never remounted or
-   * animated (REQ-054, ISSUE-016).
+   * Task 50 applies the reusable ARCH-021 entrance motion to the card root:
+   * the global `in:resultCardTransition|global` directive fades the card in
+   * over 220 ms, starting 100 ms after the prior ranked card (rank zero has
+   * no delay), when a completed first page and its parent result region
+   * render together (REQ-052). Reduced-motion mode uses the instant
+   * configuration, and a retained card whose key stays in the keyed result
+   * set is never remounted or animated (REQ-054, ISSUE-016).
    *
-   * Task 51 completes the keyed replacement over the same transition:
-   * the `out:resultCardTransition|global` directive fades every current
-   * card out together for 120 ms when a successful later-page response
-   * replaces the keyed card set, and each replacement card starts its
-   * 220 ms intro 120 ms later — after the last current-card outro
-   * completes — followed by the 100 ms rank intervals (REQ-053).
+   * Task 51 completes the keyed replacement with the card's stable rank-slot
+   * wrapper. Its local `out:resultCardTransition` fades every current card
+   * out together for 120 ms when a successful later-page response replaces
+   * the keyed card. The local wrapper transition does not retain a
+   * superseded parent result region during a new Search; the old cards leave
+   * with that region before the new result region reveals its cards. Each
+   * replacement card starts its 220 ms intro 120 ms later — after the last
+   * current-card outro completes — followed by the 100 ms rank intervals
+   * (REQ-053).
    *
    * The supported image-key map is empty (ISSUE-008): an absent key, one
    * of the four seeded opaque keys, and every other unmapped key resolve to
@@ -122,8 +125,8 @@
 <article
   data-result-card
   data-food-object-id={item.foodObjectId}
+  data-result-card-rank={rank}
   in:resultCardTransition|global={{ rank, firstPage }}
-  out:resultCardTransition|global={{ rank, firstPage }}
   class="relative overflow-hidden rounded-2xl border border-solid border-dark-secondary bg-dark-surface"
 >
   <img

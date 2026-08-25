@@ -185,12 +185,15 @@ interface MotionEventEntry {
   readonly currentTime: number | null;
 }
 
-/** One recorded animation frame of every rendered card's computed opacity. */
+/** One recorded animation frame of every rendered card's visual state. */
 interface MotionFrame {
   readonly at: number;
   readonly cards: ReadonlyArray<{
     readonly id: number;
+    readonly rank: number;
     readonly opacity: number;
+    readonly left: number;
+    readonly top: number;
   }>;
 }
 
@@ -219,15 +222,15 @@ declare global {
 
 /**
  * Installs the motion observer before the application scripts run
- * (task 50, task 51, ARCH-022): it intercepts every Svelte transition
- * event dispatched to a Result Card — Svelte dispatches `introstart`,
- * `introend`, `outrostart`, and `outroend` as non-bubbling CustomEvents on
- * the card element, so the observer patches `dispatchEvent` instead of
- * listening on the document — and records `performance.now()` and the
- * results-heading focus state for each event. A `requestAnimationFrame`
- * sampler records the computed opacity of every rendered card per frame
- * until all cards of a page are fully visible, proving same-frame
- * visibility and the absence of intermediate opacity.
+ * (task 50, task 51, ARCH-022). Svelte dispatches `introstart`, `introend`,
+ * `outrostart`, and `outroend` as non-bubbling CustomEvents on the
+ * transition target: the card for an intro and its stable rank-slot wrapper
+ * for an outro. The observer patches `dispatchEvent`, resolves either target
+ * to its card, and records `performance.now()` and the results-heading focus
+ * state. A `requestAnimationFrame` sampler records each rendered card's
+ * effective card-and-wrapper opacity per frame until all cards of a page are
+ * fully visible, proving same-frame visibility and the absence of
+ * intermediate opacity.
  */
 function installMotionObserver(): void {
   const events: MotionEventEntry[] = [];
@@ -242,7 +245,9 @@ function installMotionObserver(): void {
     ) {
       const target = this;
       if (target instanceof Element) {
-        const card = target.closest("[data-result-card]");
+        const card = target.matches("[data-result-card]")
+          ? target
+          : target.querySelector("[data-result-card]");
         if (card !== null) {
           const heading = document.querySelector(
             "[data-substitutions-heading]",
@@ -250,13 +255,14 @@ function installMotionObserver(): void {
           let startTime: number | null = null;
           let currentTime: number | null = null;
           if (event.type === "introend" || event.type === "outroend") {
-            // At the `introend` or `outroend` dispatch the card's just
-            // finished intro or outro animation is still attached (Svelte
-            // cancels the intro after dispatching): its startTime and
-            // currentTime come from the compositor-driven Web Animations
-            // timeline, so they are frame-accurate and immune to the
-            // asynchronous delivery of the transition event itself.
-            const finished = card
+            // At the `introend` or `outroend` dispatch the transition
+            // target's just-finished animation is still attached (Svelte
+            // cancels it after dispatching): its startTime and currentTime
+            // come from the compositor-driven Web Animations timeline, so
+            // they are frame-accurate and immune to asynchronous event
+            // delivery. Intro events target the card; outro events target
+            // its stable rank-slot motion wrapper.
+            const finished = target
               .getAnimations()
               .filter((animation) => animation.playState === "finished");
             const main = finished[0];
@@ -294,10 +300,22 @@ function installMotionObserver(): void {
     }
     const cards = Array.from(
       document.querySelectorAll("[data-result-card]"),
-    ).map((element) => ({
-      id: Number(element.getAttribute("data-food-object-id")),
-      opacity: Number.parseFloat(getComputedStyle(element).opacity),
-    }));
+    ).map((element) => {
+      const bounds = element.getBoundingClientRect();
+      const motionWrapper = element.closest("[data-result-card-motion]");
+      const wrapperOpacity =
+        motionWrapper === null
+          ? 1
+          : Number.parseFloat(getComputedStyle(motionWrapper).opacity);
+      return {
+        id: Number(element.getAttribute("data-food-object-id")),
+        rank: Number(element.getAttribute("data-result-card-rank")),
+        opacity:
+          Number.parseFloat(getComputedStyle(element).opacity) * wrapperOpacity,
+        left: bounds.left + window.scrollX,
+        top: bounds.top + window.scrollY,
+      };
+    });
     frames.push({ at: performance.now(), cards });
     if (
       !continuous &&
@@ -345,6 +363,61 @@ function countEvents(
   type: MotionEventEntry["type"],
 ): number {
   return entries.filter((entry) => entry.type === type).length;
+}
+
+/** One settled rank slot used to detect viewport movement during replacement. */
+interface CardSlot {
+  readonly left: number;
+  readonly top: number;
+}
+
+/** Returns the document slots occupied by the settled ranked cards. */
+async function cardSlots(page: Page): Promise<readonly CardSlot[]> {
+  return page.locator("[data-result-card]").evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left + window.scrollX,
+        top: bounds.top + window.scrollY,
+      };
+    }),
+  );
+}
+
+/**
+ * Proves that every rendered card remains in its settled rank slot while
+ * opacity changes. Empty frames are valid between the outgoing and incoming
+ * card sets.
+ */
+function expectCardsToStayInPlace(
+  frames: readonly MotionFrame[],
+  slots: readonly CardSlot[],
+  scenario: string,
+): void {
+  const framesWithCards = frames.filter((frame) => frame.cards.length > 0);
+  expect(
+    framesWithCards.length,
+    `${scenario}: the sampler observed rendered replacement cards`,
+  ).toBeGreaterThan(0);
+  expect(
+    framesWithCards.some((frame) =>
+      frame.cards.some((card) => card.opacity < 1),
+    ),
+    `${scenario}: the sampler observed the opacity reveal`,
+  ).toBe(true);
+  for (const frame of framesWithCards) {
+    for (const card of frame.cards) {
+      const slot = slots[card.rank]!;
+      expect(
+        Math.abs(card.left - slot.left),
+        `${scenario}: rank ${card.rank} does not shift horizontally`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(card.top - slot.top),
+        `${scenario}: rank ${card.rank} does not shift vertically`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }
 }
 
 /**
@@ -596,6 +669,37 @@ test.describe("Result Card motion", () => {
       "the retained page-0 cards keep their order after the recalculation",
     ).toEqual([...PIZZA_PAGE_0_IDS]);
   });
+  test("a new keyboard search removes the settled cards and reveals the replacement cards in the same viewport slots without layout movement", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    await page.addInitScript(installMotionObserver);
+    await page.goto("/");
+
+    await selectFoodObject(page, "margherita", 1);
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await expect
+      .poll(async () => countEvents(await motionEvents(page), "introend"))
+      .toBe(3);
+    const slots = await cardSlots(page);
+    await page.evaluate(() => window.__restartMotionFrames?.(true));
+
+    const searchInput = page.getByPlaceholder(COPY.en.searchPlaceholder);
+    await searchInput.fill("chicken");
+    await expect(page.locator("#food-suggestion-option-5")).toBeVisible();
+    await searchInput.press("Enter");
+    await expect
+      .poll(async () => countEvents(await motionEvents(page), "introend"))
+      .toBe(6);
+    await page.evaluate(() => window.__stopMotionFrames?.());
+
+    expectCardsToStayInPlace(
+      await motionFrames(page),
+      slots,
+      "new keyboard search",
+    );
+  });
+
   test("a successful MORE! response starts every current-card outro together for 120 ms, delays every replacement intro until the last outro ends, keeps the 220 ms intro with 100 ms rank intervals and DOM rank order, and keeps the stable results heading mounted and focused through the replacement (P16-G2, P16-G3, REQ-053)", async ({
     page,
   }) => {
@@ -616,6 +720,8 @@ test.describe("Result Card motion", () => {
     const firstPageEventCount = (await motionEvents(page)).length;
     const firstPageFrames = await motionFrames(page);
     const tolerance = observedFrameMs(firstPageFrames);
+    const slots = await cardSlots(page);
+    await page.evaluate(() => window.__restartMotionFrames?.(true));
 
     // Drive one real MORE! request: the successful page-1 response
     // replaces the keyed card set, so the replacement motion follows.
@@ -625,6 +731,12 @@ test.describe("Result Card motion", () => {
     await expect
       .poll(async () => countEvents(await motionEvents(page), "introend"))
       .toBe(6);
+    await page.evaluate(() => window.__stopMotionFrames?.());
+    expectCardsToStayInPlace(
+      await motionFrames(page),
+      slots,
+      "MORE! replacement",
+    );
     const events = (await motionEvents(page)).slice(firstPageEventCount);
 
     // The replacement window contains exactly the three outro and three

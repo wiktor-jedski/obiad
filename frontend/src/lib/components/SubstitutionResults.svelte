@@ -5,6 +5,7 @@
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
+  import { resultCardTransition } from "../resultCardMotion";
   import {
     createRetainedPageQuery,
     createSubstitutionSearchQuery,
@@ -30,20 +31,21 @@
    * card set; focus moves to it when the successful response renders and
    * motion starts, without waiting for the last intro (REQ-083).
    *
-   * Task 51 completes the keyed replacement over task 50 (REQ-053): when
-   * a successful later-page response replaces the keyed card set, every
-   * current card runs its 120 ms opacity outro together through the same
-   * reusable transition, and each replacement card starts its 220 ms
-   * intro 120 ms later — after the last current-card outro completes —
-   * followed by the 100 ms rank intervals. In reduced-motion mode every
-   * outro and intro has zero duration and delay, so the complete
-   * replacement page appears together in one animation frame (REQ-054).
-   * The stable results heading stays outside the keyed card set and
-   * remains mounted; focus moves to it when the successful response
-   * renders and the replacement motion starts, without waiting for the
-   * replacement intros to finish (REQ-083). The selected-food summary,
-   * the heading, and the MORE! control are not part of the keyed card
-   * set and are never animated (ISSUE-016).
+   * Task 51 completes the keyed replacement over task 50 (REQ-053): each
+   * rank has one stable grid slot. When a successful later-page response
+   * replaces the keyed card in each slot, every current card runs its 120 ms
+   * opacity outro together and each replacement card starts its 220 ms intro
+   * 120 ms later — after the last current-card outro completes — followed by
+   * the 100 ms rank intervals. The outgoing and incoming cards occupy the
+   * same grid cell, so their temporary coexistence cannot create a second
+   * row or move the result layout. In reduced-motion mode every outro and
+   * intro has zero duration and delay, so the complete replacement page
+   * appears together in one animation frame (REQ-054). The stable results
+   * heading stays outside the keyed card set and remains mounted; focus
+   * moves to it when the successful response renders and the replacement
+   * motion starts, without waiting for the replacement intros to finish
+   * (REQ-083). The selected-food summary, the heading, and the MORE! control
+   * are not part of the keyed card set and are never animated (ISSUE-016).
    *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
@@ -450,14 +452,27 @@
     </h2>
     {#if substitutionSearch.data !== undefined}
       <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {#each substitutionSearch.data.items as item, index (item.foodObjectId)}
-          <ResultCard
-            {item}
-            language={$interfaceLanguage}
-            pending={recalculating}
-            rank={index}
-            firstPage={interaction.pageIndex === 0}
-          />
+        {#each substitutionSearch.data.items as item, index}
+          <div data-result-card-slot class="grid">
+            {#key item.foodObjectId}
+              <div
+                data-result-card-motion
+                class="col-start-1 row-start-1 grid"
+                out:resultCardTransition={{
+                  rank: index,
+                  firstPage: interaction.pageIndex === 0,
+                }}
+              >
+                <ResultCard
+                  {item}
+                  language={$interfaceLanguage}
+                  pending={recalculating}
+                  rank={index}
+                  firstPage={interaction.pageIndex === 0}
+                />
+              </div>
+            {/key}
+          </div>
         {/each}
       </div>
     {/if}
