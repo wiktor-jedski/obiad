@@ -28,14 +28,14 @@
  *      owned build output, proxying same-origin `/api` to Fiber;
  *   9. installs the pinned Playwright Chromium when missing;
  *  10. runs the real-stack Playwright suite on the normal stack — every
- *      scenario except the serial database-outage scenario — whose status
+ *      scenario except the serial database-outage scenarios — whose status
  *      becomes part of the exit status;
  *  11. hands the fixed loopback listener to a separate outage stack
- *      (ARCH-022): a second disposable PostgreSQL container and a second
- *      Fiber process, then runs only the serial
- *      `substitution-request-failures.spec.ts` scenario, which stops that
- *      stack's own PostgreSQL container mid-test while the normal stack's
- *      PostgreSQL, credentials, and preview stay untouched;
+ *      (ARCH-022) per serial database-outage suite: each suite gets a
+ *      second disposable PostgreSQL container and a second Fiber process,
+ *      then runs only that suite's scenario, which stops its own stack's
+ *      PostgreSQL container mid-test while the normal stack's PostgreSQL,
+ *      credentials, and preview stay untouched;
  *  12. cleans up every owned process group (including in-flight step and
  *      bounded command children), container, temporary credential file,
  *      generated output, build output, and test artifact through one
@@ -105,6 +105,25 @@ const PREVIEW_PORT = 4173;
 const PREVIEW_ORIGIN = `http://127.0.0.1:${PREVIEW_PORT}`;
 /** The pinned disposable PostgreSQL 17 image (AGENTS.md, ISSUE-006). */
 const POSTGRES_IMAGE = "postgres:17-alpine";
+
+/**
+ * The serial database-outage Playwright suites (ARCH-022). Each suite runs
+ * on its own separate outage stack — a disposable PostgreSQL container and
+ * a Fiber process — because each suite stops its own stack's PostgreSQL
+ * mid-test to reach the real backend outage. The `grep` value matches the
+ * suite's Playwright titles and is passed straight to
+ * `playwright test --grep`.
+ */
+const OUTAGE_SUITES = [
+  {
+    grep: "Substitution request failures",
+    label: "Substitution request failures",
+  },
+  {
+    grep: "Control accessibility failure states",
+    label: "Control accessibility failure states",
+  },
+] as const;
 
 const PROCESS_START_TIMEOUT_MS = 60_000;
 const POSTGRES_START_TIMEOUT_MS = 60_000;
@@ -942,6 +961,156 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
   return false;
 }
 
+/**
+ * Runs one serial database-outage Playwright suite against its own outage
+ * stack (ARCH-022): a fresh disposable loopback-only PostgreSQL 17
+ * container, the local deployment setup with ephemeral credentials, and a
+ * second Fiber process taking over the fixed loopback listener after the
+ * normal suite completed. The suite stops that stack's PostgreSQL
+ * container itself through the name handed over in
+ * `OBIAD_E2E_OUTAGE_CONTAINER`; the normal stack's PostgreSQL,
+ * credentials, and preview stay untouched. The outage Fiber is stopped
+ * again before the function returns so the listener can be handed to the
+ * next outage suite (or to final cleanup).
+ *
+ * @param resources - the owned process-group, container, and output registry
+ * @param options - the owned build outputs, the suite's Playwright `--grep`
+ *   value, and its log label
+ * @returns the Playwright suite exit status
+ */
+async function runOutageSuite(
+  resources: OwnedResources,
+  options: {
+    tempDir: string;
+    serverBinary: string;
+    browserClientBundle: string;
+    grep: string;
+    label: string;
+  },
+): Promise<number> {
+  const outageContainerName = `obiad-e2e-outage-postgres-${process.pid}-${randomHex(4)}`;
+  resources.containers.push(outageContainerName);
+  const outagePostgresPassword = randomHex(24);
+  const outageDockerRun = await runBounded(
+    resources,
+    "docker",
+    [
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      outageContainerName,
+      "--env",
+      "POSTGRES_PASSWORD",
+      "--publish",
+      "127.0.0.1::5432",
+      POSTGRES_IMAGE,
+    ],
+    { env: { ...process.env, POSTGRES_PASSWORD: outagePostgresPassword } },
+  );
+  if (outageDockerRun.status !== 0) {
+    throw new Error(
+      `failed to start the outage PostgreSQL container (docker status ${outageDockerRun.status ?? "timeout"}${outageDockerRun.timedOut ? ", timed out" : ""})`,
+    );
+  }
+  assertRunning();
+  log(`started outage PostgreSQL container ${outageContainerName}`);
+  await waitForPostgresReady(resources, outageContainerName);
+  const outagePostgresPort = await dockerPublishedPort(
+    resources,
+    outageContainerName,
+  );
+  log(`outage PostgreSQL 17 is ready on loopback port ${outagePostgresPort}`);
+
+  // Seed the outage database with the same local deployment setup and a
+  // separate ephemeral credential file.
+  const outageOwnerPassword = randomHex(24);
+  const outageRuntimePassword = randomHex(24);
+  const outageCredentialFile = join(options.tempDir, "outage-database-urls");
+  log(
+    "running scripts/setup_local_database.sh for the outage stack with ephemeral credentials",
+  );
+  const setupStatus = await runStep(resources, "bash", [SETUP_SCRIPT], {
+    cwd: REPO,
+    env: {
+      ...process.env,
+      OBIAD_ADMIN_DATABASE_URL: `postgres://postgres:${outagePostgresPassword}@127.0.0.1:${outagePostgresPort}/postgres?sslmode=disable`,
+      OBIAD_OWNER_PASSWORD: outageOwnerPassword,
+      OBIAD_RUNTIME_PASSWORD: outageRuntimePassword,
+      OBIAD_CREDENTIAL_FILE: outageCredentialFile,
+    },
+  });
+  assertRunning();
+  if (setupStatus !== 0) {
+    throw new Error(
+      `outage scripts/setup_local_database.sh failed with status ${setupStatus}`,
+    );
+  }
+  const outageCredentialContent = readFileSync(outageCredentialFile, "utf8");
+  const outageRuntimeDatabaseUrl = readCredentialLine(
+    outageCredentialContent,
+    "OBIAD_RUNTIME_DATABASE_URL",
+  );
+  log("outage database setup complete; outage Fiber credential ready");
+
+  // Start the outage Fiber process on the fixed loopback listener against
+  // the outage database (the same server binary, reusing the owned build).
+  const outageFiber = spawnOwned(resources, options.serverBinary, [], {
+    cwd: BACKEND,
+    env: {
+      ...process.env,
+      OBIAD_RUNTIME_DATABASE_URL: outageRuntimeDatabaseUrl,
+    },
+  });
+  if (outageFiber.pid === undefined) {
+    throw new Error(
+      `failed to spawn the outage Fiber server ${options.serverBinary}`,
+    );
+  }
+  outageFiber.once("exit", () =>
+    deregisterGroupWhenGone(resources, outageFiber),
+  );
+  log(`started outage Fiber process (pid ${outageFiber.pid}) on ${FIBER_ADDR}`);
+  await waitForService(
+    `http://${FIBER_ADDR}/health`,
+    fiberReady,
+    () => processAlive(resources, outageFiber),
+    "outage Fiber GET /health",
+  );
+  log(
+    'outage Fiber is healthy: GET /health returns 200 with exactly {"status":"ready"}',
+  );
+
+  // Run only this serial outage-stack suite; it stops its outage PostgreSQL
+  // container itself through the name handed over in the environment, while
+  // every normal-stack resource stays untouched.
+  log(
+    `running the serial database-outage Playwright scenario: ${options.label}`,
+  );
+  const suiteStatus = await runStep(
+    resources,
+    "bun",
+    ["x", "playwright", "test", "--grep", options.grep],
+    {
+      cwd: FRONTEND,
+      env: {
+        ...process.env,
+        OBIAD_E2E_BROWSER_CLIENT_BUNDLE: options.browserClientBundle,
+        OBIAD_E2E_OUTAGE_CONTAINER: outageContainerName,
+      },
+    },
+  );
+  assertRunning();
+
+  // Hand the fixed loopback listener back before the next outage suite (or
+  // final cleanup): stop this suite's outage Fiber.
+  log(`stopping the outage Fiber after the ${options.label} suite`);
+  if (outageFiber.pid !== undefined) {
+    await stopProcessGroup(resources, outageFiber.pid);
+  }
+  return suiteStatus;
+}
+
 async function runStack(resources: OwnedResources): Promise<number> {
   assertRunning();
   await preflight(resources);
@@ -1184,7 +1353,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
       "playwright",
       "test",
       "--grep-invert",
-      "Substitution request failures",
+      "Substitution request failures|Control accessibility failure states",
     ],
     {
       cwd: FRONTEND,
@@ -1196,127 +1365,33 @@ async function runStack(resources: OwnedResources): Promise<number> {
   );
   assertRunning();
 
-  // 11. Serial database-outage suite (ARCH-022). The outage stack owns a
+  // 11. Serial database-outage suites (ARCH-022). Each outage suite owns a
   // second disposable PostgreSQL container and a second Fiber process so
-  // the failure scenario can stop only its own database. Both server
-  // processes bind the fixed loopback listener, so the normal Fiber is
-  // stopped here and the outage Fiber takes over the listener after the
-  // normal suite completed; the normal stack's PostgreSQL, credentials,
-  // and preview stay untouched, and the failure scenario runs serially on
-  // the separate outage stack.
+  // the suite can stop only its own database. Both server processes bind
+  // the fixed loopback listener, so the normal Fiber is stopped here and
+  // each outage Fiber takes over the listener after the normal suite
+  // completed; the normal stack's PostgreSQL, credentials, and preview
+  // stay untouched, and each outage suite runs serially on its own
+  // separate outage stack.
   log("stopping the normal-stack Fiber for the outage-stack handoff");
   if (fiber.pid !== undefined) {
     await stopProcessGroup(resources, fiber.pid);
   }
 
-  const outageContainerName = `obiad-e2e-outage-postgres-${process.pid}-${randomHex(4)}`;
-  resources.containers.push(outageContainerName);
-  const outagePostgresPassword = randomHex(24);
-  const outageDockerRun = await runBounded(
-    resources,
-    "docker",
-    [
-      "run",
-      "--detach",
-      "--rm",
-      "--name",
-      outageContainerName,
-      "--env",
-      "POSTGRES_PASSWORD",
-      "--publish",
-      "127.0.0.1::5432",
-      POSTGRES_IMAGE,
-    ],
-    { env: { ...process.env, POSTGRES_PASSWORD: outagePostgresPassword } },
-  );
-  if (outageDockerRun.status !== 0) {
-    throw new Error(
-      `failed to start the outage PostgreSQL container (docker status ${outageDockerRun.status ?? "timeout"}${outageDockerRun.timedOut ? ", timed out" : ""})`,
-    );
+  let outageStatus = 0;
+  for (const outageSpec of OUTAGE_SUITES) {
+    const suiteStatus = await runOutageSuite(resources, {
+      tempDir,
+      serverBinary,
+      browserClientBundle,
+      grep: outageSpec.grep,
+      label: outageSpec.label,
+    });
+    assertRunning();
+    if (suiteStatus !== 0) {
+      outageStatus = suiteStatus;
+    }
   }
-  assertRunning();
-  log(`started outage PostgreSQL container ${outageContainerName}`);
-  await waitForPostgresReady(resources, outageContainerName);
-  const outagePostgresPort = await dockerPublishedPort(
-    resources,
-    outageContainerName,
-  );
-  log(`outage PostgreSQL 17 is ready on loopback port ${outagePostgresPort}`);
-
-  // Seed the outage database with the same local deployment setup and a
-  // separate ephemeral credential file.
-  const outageOwnerPassword = randomHex(24);
-  const outageRuntimePassword = randomHex(24);
-  const outageCredentialFile = join(tempDir, "outage-database-urls");
-  log(
-    "running scripts/setup_local_database.sh for the outage stack with ephemeral credentials",
-  );
-  status = await runStep(resources, "bash", [SETUP_SCRIPT], {
-    cwd: REPO,
-    env: {
-      ...process.env,
-      OBIAD_ADMIN_DATABASE_URL: `postgres://postgres:${outagePostgresPassword}@127.0.0.1:${outagePostgresPort}/postgres?sslmode=disable`,
-      OBIAD_OWNER_PASSWORD: outageOwnerPassword,
-      OBIAD_RUNTIME_PASSWORD: outageRuntimePassword,
-      OBIAD_CREDENTIAL_FILE: outageCredentialFile,
-    },
-  });
-  assertRunning();
-  if (status !== 0) {
-    throw new Error(
-      `outage scripts/setup_local_database.sh failed with status ${status}`,
-    );
-  }
-  const outageCredentialContent = readFileSync(outageCredentialFile, "utf8");
-  const outageRuntimeDatabaseUrl = readCredentialLine(
-    outageCredentialContent,
-    "OBIAD_RUNTIME_DATABASE_URL",
-  );
-  log("outage database setup complete; outage Fiber credential ready");
-
-  // Start the outage Fiber process on the fixed loopback listener against
-  // the outage database (the same server binary, reusing the owned build).
-  const outageFiber = spawnOwned(resources, serverBinary, [], {
-    cwd: BACKEND,
-    env: {
-      ...process.env,
-      OBIAD_RUNTIME_DATABASE_URL: outageRuntimeDatabaseUrl,
-    },
-  });
-  if (outageFiber.pid === undefined) {
-    throw new Error(`failed to spawn the outage Fiber server ${serverBinary}`);
-  }
-  outageFiber.once("exit", () =>
-    deregisterGroupWhenGone(resources, outageFiber),
-  );
-  log(`started outage Fiber process (pid ${outageFiber.pid}) on ${FIBER_ADDR}`);
-  await waitForService(
-    `http://${FIBER_ADDR}/health`,
-    fiberReady,
-    () => processAlive(resources, outageFiber),
-    "outage Fiber GET /health",
-  );
-  log(
-    'outage Fiber is healthy: GET /health returns 200 with exactly {"status":"ready"}',
-  );
-
-  // Run only the serial outage-stack scenario; it stops the outage
-  // PostgreSQL container itself through the name handed over in the
-  // environment, while every normal-stack resource stays untouched.
-  log("running the serial database-outage Playwright scenario");
-  const outageStatus = await runStep(
-    resources,
-    "bun",
-    ["x", "playwright", "test", "--grep", "Substitution request failures"],
-    {
-      cwd: FRONTEND,
-      env: {
-        ...process.env,
-        OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle,
-        OBIAD_E2E_OUTAGE_CONTAINER: outageContainerName,
-      },
-    },
-  );
 
   return normalStatus !== 0 ? normalStatus : outageStatus;
 }
