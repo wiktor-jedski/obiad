@@ -108,8 +108,17 @@
     >
       {`${item.matchedQuantity.value} ${item.matchedQuantity.unit}`}
     </p>
+    <!--
+    The card calories row (task 35, REQ-078) carries the localized
+    `Calories` / `Kalorie` accessible name through `aria-label`. The
+    explicit `group` role keeps that association without the implicit
+    paragraph role, whose `aria-label` is prohibited (axe
+    aria-prohibited-attr, task 48, ISSUE-015); the visible centered value
+    and layout are unchanged.
+  -->
     <p
       data-result-card-calories
+      role="group"
       aria-label={dictionary.caloriesLabel()}
       class="text-center font-data text-sm text-dark-text-primary"
     >

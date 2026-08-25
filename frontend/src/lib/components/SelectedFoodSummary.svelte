@@ -140,6 +140,26 @@
       recalculating ||
       interaction.name === "moreFailure",
   );
+  /**
+   * Whether the locked quantity editor can be removed from the tab order
+   * (task 48, REQ-068): the initial new Search, a pending MORE! page, and
+   * the MORE! failure transition lock the editor while focus stays on the
+   * initiating control (Search or the retained MORE! control), so the
+   * number field and unit selector present the native `disabled` state.
+   * A screen reader and the tab order skip them entirely, and the guarded
+   * handlers still discard dispatched activation (REQ-048, ARCH-019).
+   */
+  const removableLock = $derived(locked && !recalculating);
+  /**
+   * Whether the locked quantity editor retains focus (task 48, REQ-068):
+   * a pending valid recalculation is initiated by the editor itself —
+   * Enter keeps number-field focus and a unit selection keeps selector
+   * focus — so the controls stay focusable but non-operable with
+   * `aria-disabled` plus the native `readonly` and `tabindex="-1"`
+   * guards. Pointer, keyboard, blur, and dispatched activation remain
+   * blocked by the guarded handlers (REQ-048, ARCH-019).
+   */
+  const focusRetainingLock = $derived(locked && recalculating);
   const inputMacros = $derived(data?.inputMacronutrients);
   /** The response's input calories at the committed quantity, when present. */
   const inputCalories = $derived(data?.inputCalories);
@@ -296,8 +316,9 @@
         aria-describedby={interaction.quantityInvalid
           ? QUANTITY_ERROR_ID
           : undefined}
-        aria-disabled={locked ? "true" : undefined}
-        readonly={locked || undefined}
+        disabled={removableLock || undefined}
+        aria-disabled={focusRetainingLock ? "true" : undefined}
+        readonly={focusRetainingLock || undefined}
         oninput={onNumberInput}
         onkeydown={onNumberKeydown}
         class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none"
@@ -310,8 +331,9 @@
           id="quantity-unit"
           data-quantity-unit
           value={interaction.draftUnit}
-          aria-disabled={locked ? "true" : undefined}
-          tabindex={locked ? -1 : undefined}
+          disabled={removableLock || undefined}
+          aria-disabled={focusRetainingLock ? "true" : undefined}
+          tabindex={focusRetainingLock ? -1 : undefined}
           onchange={onUnitChange}
           class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none"
         >
@@ -344,8 +366,17 @@
         </span>
       {/if}
     </div>
+    <!--
+    The calories row (task 35, REQ-078) carries the localized `Calories` /
+    `Kalorie` accessible name through `aria-label`. The explicit `group`
+    role keeps that association without the implicit paragraph role, whose
+    `aria-label` is prohibited (axe aria-prohibited-attr, task 48,
+    ISSUE-015) — the same named-group pattern the one-unit static
+    presentation uses; the visible centered value and layout are unchanged.
+  -->
     <p
       data-input-calories
+      role="group"
       aria-label={dictionary.caloriesLabel()}
       class="text-center font-data text-sm text-dark-text-primary"
     >

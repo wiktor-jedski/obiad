@@ -283,3 +283,16 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - The supported deterministic catalog cannot produce zero eligible Substitutes, as recorded in ISSUE-003. For `P14-G4`, extend `App.result-state.test.ts` to change language in the production `zeroResults` state and assert zero cards, retained state, exact English and Polish visible and accessibility text, and no additional fetch. Do not add a database fixture, a production eligibility rule, or a catalog exception. All reachable page, validation, and failure transitions remain real-stack Playwright coverage.
+
+## ISSUE-015: Phase 15 accessibility verification boundary
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-25. Use `@axe-core/playwright` with the WCAG 2.1 Level A and AA rule tags. Fail the test for each definite violation. Report incomplete checks for manual review without failing the automated test. Do not enforce the optional axe best-practice rules.
+
+### Testing coverage deviations
+
+- The supported deterministic catalog cannot produce zero eligible Substitutes, as recorded in ISSUE-003. Task 46 therefore uses `App.result-state.test.ts` to drive a successful zero-item response through the production query and `zeroResults` interaction transition and to verify localized focus and successful-result live-region silence in English and Polish. Do not add a database fixture, production eligibility exception, or real-stack Playwright zero-result scenario. All reachable nonzero new-Search and MORE! focus transitions remain real-stack Playwright coverage.
