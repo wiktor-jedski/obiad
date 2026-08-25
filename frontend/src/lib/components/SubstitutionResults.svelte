@@ -114,6 +114,14 @@
   /** Reference to the stable results heading for successful-result focus (REQ-083). */
   let headingElement: HTMLHeadingElement | null = $state(null);
   /**
+   * Reference to the stable localized zero-result message (task 46,
+   * REQ-084): after a successful page-0 response renders zero cards, the
+   * message becomes the programmatically focusable active element. It is
+   * stable across the active-language re-render (task 44), so focus stays
+   * on the message in place.
+   */
+  let zeroResultMessageElement: HTMLParagraphElement | null = $state(null);
+  /**
    * The primitive pieces of the committed Substitution Search input
    * (task 34, ISSUE-010). They are derived separately so the committed
    * input object below stays identity-stable across unrelated interaction
@@ -219,22 +227,23 @@
   );
 
   /**
-   * Result transition (task 28, task 37, task 38, task 41, task 45;
-   * ARCH-002, REQ-083): the current response transitions the union to
-   * `results` when the page contains items and to `zeroResults` when it
-   * is empty. A subsequent page response arriving while the state is
-   * `loadingMore` transitions the union back to `results` (REQ-041).
-   * After a successful page with one or more result cards — a new
-   * Search, an intermediate MORE! page, or the last page — programmatic
-   * focus moves to the stable localized results heading (REQ-083),
-   * replacing the superseded Search-focus (REQ-064), MORE!-focus
-   * (REQ-065), and last-page-only heading-focus (REQ-066) success paths.
-   * The zero-result transition (REQ-084) stays a success outcome without
-   * a focus move in this task. From `newSearchFailure` (task 41), a
-   * success completes a retry started through a changed valid Food
-   * Quantity commit: the pending interval keeps the failure state and
-   * its retry message, and the response transitions the union to
-   * `results` or `zeroResults`. The response data itself stays in
+   * Result transition (task 28, task 37, task 38, task 41, task 45,
+   * task 46; ARCH-002, REQ-083, REQ-084): the current response
+   * transitions the union to `results` when the page contains items and
+   * to `zeroResults` when it is empty. A subsequent page response
+   * arriving while the state is `loadingMore` transitions the union back
+   * to `results` (REQ-041). After a successful page with one or more
+   * result cards — a new Search, an intermediate MORE! page, or the last
+   * page — programmatic focus moves to the stable localized results
+   * heading (REQ-083), replacing the superseded Search-focus (REQ-064),
+   * MORE!-focus (REQ-065), and last-page-only heading-focus (REQ-066)
+   * success paths. A successful empty page-0 response transitions the
+   * union to `zeroResults` and moves focus to the stable localized
+   * zero-result message (task 46, REQ-084). From `newSearchFailure`
+   * (task 41), a success completes a retry started through a changed
+   * valid Food Quantity commit: the pending interval keeps the failure
+   * state and its retry message, and the response transitions the union
+   * to `results` or `zeroResults`. The response data itself stays in
    * TanStack Query; the store receives only the outcome.
    */
   $effect(() => {
@@ -251,6 +260,17 @@
       if (hasItems) {
         tick().then(() => {
           headingElement?.focus();
+        });
+      }
+      if (!hasItems) {
+        // A successful empty page-0 response renders the zero-result
+        // state: focus moves to the stable localized zero-result message
+        // (task 46, REQ-084). The message carries no live-region
+        // semantics, so no result-status announcement is emitted
+        // (REQ-085). The heading branch above is mutually exclusive: a
+        // MORE! response always contains items.
+        tick().then(() => {
+          zeroResultMessageElement?.focus();
         });
       }
     }
@@ -432,12 +452,23 @@
 {/if}
 {#if interaction.name === "zeroResults"}
   <!--
-    Zero-result region (task 30; REQ-044, ISSUE-008): a successful empty
-    page-0 response replaces the result area with exactly the localized
-    result message and no cards.
+    Zero-result region (task 30, task 46; REQ-044, REQ-084, REQ-085,
+    ISSUE-008): a successful empty page-0 response replaces the result
+    area with exactly the localized result message and no cards. The
+    message is the stable programmatically focusable active element after
+    the zero-result state renders: `tabindex="-1"` makes it focusable
+    without adding it to the tab order, the `bind:this` reference keeps
+    its identity across the active-language re-render (task 44), and the
+    message carries no live-region semantics, so no result count or
+    result-status announcement is emitted.
   -->
   <div data-zero-result-region class="mt-6">
-    <p class="text-base text-dark-text-primary">
+    <p
+      bind:this={zeroResultMessageElement}
+      tabindex="-1"
+      data-zero-result-message
+      class="text-base text-dark-text-primary focus:outline-none"
+    >
       {dictionary.zeroResultsMessage()}
     </p>
   </div>
