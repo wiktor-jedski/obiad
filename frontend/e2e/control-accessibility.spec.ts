@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
+import { AxeBuilder } from "@axe-core/playwright";
 
 /**
  * Real-stack accessible-name scenario (task 47; ARCH-001, ARCH-003,
@@ -143,11 +144,14 @@ async function useBrowserLanguages(
  * pattern, P12-G1). The real Fiber response still passes through
  * `route.continue()`, so the pending interaction states (`loadingNew`,
  * `loadingMore`) stay observable deterministically without fabricating a
- * response (ARCH-022).
+ * response (ARCH-022). The returned `count` reads how many posts the gate
+ * has observed so a scenario can prove a blocked activation starts no
+ * second request (REQ-048).
  */
 function gateSubstitutePosts(page: Page): {
   waitForPosts: (count: number) => Promise<void>;
   releasePost: (index: number) => void;
+  count: () => number;
 } {
   const gates: Array<{ release: () => void; promise: Promise<void> }> = [];
   let postCount = 0;
@@ -168,6 +172,7 @@ function gateSubstitutePosts(page: Page): {
     releasePost: (index) => {
       gates[index]?.release();
     },
+    count: () => postCount,
   };
 }
 
@@ -256,6 +261,239 @@ async function waitForInteractionState(
     "data-interaction-state",
     name,
   );
+}
+/** The Primary focus treatment color (style.md inputs contract). */
+const PRIMARY_RGB = "rgb(74, 222, 128)"; // #4ADE80
+/** The resting Secondary border color of the Search-style inputs. */
+const SECONDARY_RGB = "rgb(134, 239, 172)"; // #86EFAC
+/** The Text-On-Bright color on the Primary active option (ISSUE-008). */
+const TEXT_ON_BRIGHT_RGB = "rgb(10, 15, 10)"; // #0A0F0A
+/** Gray background of a pending non-operable MORE! control (REQ-082). */
+const DISABLED_MORE_BACKGROUND_COLOR = "oklch(0.446 0.03 256.802)";
+/** Gray text of a pending non-operable MORE! control (REQ-082). */
+const DISABLED_MORE_TEXT_COLOR = "oklch(0.872 0.01 258.338)";
+/** The WCAG 2.1 Level A and AA axe rule tags (ISSUE-015). */
+const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] as const;
+
+/**
+ * Runs the pinned axe-core engine through `@axe-core/playwright` with only
+ * the WCAG 2.1 Level A and AA rule tags (task 48, ISSUE-015): definite
+ * violations fail the test; incomplete checks are recorded on the console
+ * for manual review without failing, and the optional axe best-practice
+ * rules are never enforced (P15-G2).
+ */
+async function expectWcagAAndAaClean(page: Page, state: string): Promise<void> {
+  const results = await new AxeBuilder({ page })
+    .withTags([...AXE_TAGS])
+    .analyze();
+  if (results.incomplete.length > 0) {
+    console.log(`[axe] ${state}: incomplete checks for manual review:`);
+    for (const result of results.incomplete) {
+      console.log(
+        `[axe]   ${result.id}: ${result.help} (${result.nodes.length} node(s))`,
+      );
+    }
+  }
+  expect(
+    results.violations,
+    `${state}: no definite WCAG 2.1 Level A or AA violation`,
+  ).toEqual([]);
+}
+
+/** The focus- and color-relevant presentation of one rendered control. */
+interface ControlPresentation {
+  readonly borderTopColor: string;
+  readonly backgroundColor: string;
+  readonly color: string;
+  readonly outlineStyle: string;
+  readonly outlineWidth: string;
+  readonly outlineColor: string;
+  readonly outlineOffset: string;
+}
+
+/** The viewport geometry of one rendered page region. */
+interface RegionGeometry {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** One complete captured surface: every rendered control and page region. */
+interface SurfaceSnapshot {
+  readonly controls: Readonly<Record<string, ControlPresentation>>;
+  readonly regions: Readonly<Record<string, RegionGeometry>>;
+}
+
+/**
+ * The stable selectors of every interactive control task 47 names
+ * (REQ-068). `quantityUnit` renders only when the selected Food Object
+ * allows two units; `moreButton` renders only after a successful result
+ * page with a later page.
+ */
+const CONTROL_SELECTORS = {
+  search: "#food-search",
+  language: "[data-interface-language] select",
+  quantityNumber: "[data-quantity-number]",
+  quantityUnit: "[data-quantity-unit]",
+  moreButton: "[data-more-button]",
+} as const;
+
+/** The stable page regions whose geometry must not change on focus. */
+const REGION_SELECTORS = [
+  "[data-search-region]",
+  "[data-selected-input]",
+  "[data-result-region]",
+  "[data-interface-language]",
+] as const;
+
+/**
+ * Captures the current presentation of every rendered control and the
+ * geometry of every page region, so a test can prove that focusing a
+ * control changes exactly its own focus indicator and nothing else
+ * (REQ-068, P15-G2: no non-focus layout or color change).
+ */
+async function captureSurface(page: Page): Promise<SurfaceSnapshot> {
+  return page.evaluate(
+    ({ controlSelectors, regionSelectors }) => {
+      const controls: Record<string, ControlPresentation> = {};
+      for (const [name, selector] of Object.entries(controlSelectors)) {
+        const element = document.querySelector(selector);
+        if (element === null) {
+          continue;
+        }
+        const style = getComputedStyle(element);
+        controls[name] = {
+          borderTopColor: style.borderTopColor,
+          backgroundColor: style.backgroundColor,
+          color: style.color,
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+          outlineColor: style.outlineColor,
+          outlineOffset: style.outlineOffset,
+        };
+      }
+      const regions: Record<string, RegionGeometry> = {};
+      for (const selector of regionSelectors) {
+        const element = document.querySelector(selector);
+        if (element === null) {
+          continue;
+        }
+        // Document-relative geometry: the browser's native
+        // scroll-into-view on keyboard focus changes viewport-relative
+        // coordinates without changing the layout itself.
+        const rect = element.getBoundingClientRect();
+        regions[selector] = {
+          x: rect.x + window.scrollX,
+          y: rect.y + window.scrollY,
+          width: rect.width,
+          height: rect.height,
+        };
+      }
+      return { controls, regions };
+    },
+    { controlSelectors: CONTROL_SELECTORS, regionSelectors: REGION_SELECTORS },
+  );
+}
+
+/** Proves that one keyboard focus move from `fromControl` to `toControl`
+ * changed exactly the two involved presentations: the previously focused
+ * control loses its focus indicator, the newly focused control shows its
+ * focus indicator, every other control keeps its exact colors and
+ * outline, and every page region keeps its geometry — the "no non-focus
+ * layout or color change" proof (REQ-068, P15-G2). When `fromControl` is
+ * omitted the move starts from a state with no interactive control
+ * focused (for example the programmatically focused results heading), so
+ * only `toControl` changes.
+ */
+function expectFocusMove(
+  before: SurfaceSnapshot,
+  after: SurfaceSnapshot,
+  toControl: keyof typeof CONTROL_SELECTORS,
+  fromControl?: keyof typeof CONTROL_SELECTORS,
+): void {
+  if (fromControl !== undefined) {
+    expect(
+      after.controls[fromControl],
+      `${fromControl} loses its focus indicator`,
+    ).not.toEqual(before.controls[fromControl]);
+  }
+  for (const [name, presentation] of Object.entries(after.controls)) {
+    if (name === fromControl || name === toControl) {
+      continue;
+    }
+    expect(
+      presentation,
+      `${name} keeps its exact presentation during the ${fromControl ?? "no-control"} → ${toControl} focus move`,
+    ).toEqual(before.controls[name]);
+  }
+  expect(
+    after.controls[toControl],
+    `${toControl} changes its presentation (the focus indicator)`,
+  ).not.toEqual(before.controls[toControl]);
+  expect(
+    after.regions,
+    "page regions keep their geometry during the focus move",
+  ).toEqual(before.regions);
+}
+
+/**
+ * Moves keyboard focus to the given control by pressing Tab until the
+ * browser places focus on it. A bounded loop is deterministic despite the
+ * native autofocus quirk that skips the autofocused Search field on the
+ * first Tab and routes the wrap through the document body.
+ */
+async function focusWithTab(
+  page: Page,
+  target: ReturnType<Page["locator"]>,
+): Promise<void> {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const reached = await target.evaluate(
+      (element) => element === document.activeElement,
+    );
+    if (reached) {
+      return;
+    }
+    await page.keyboard.press("Tab");
+  }
+  throw new Error("focusWithTab: target did not receive focus within 12 Tabs");
+}
+
+/** The visible keyboard focus indicator kind of one control (style.md). */
+type FocusIndicatorKind = "border" | "outline";
+
+/**
+ * Asserts that the given control currently renders its visible keyboard
+ * focus indicator (REQ-068): the Primary border without an outer
+ * highlight for the Search-style inputs (style.md "Inputs"), or the
+ * two-pixel Primary outline for the selector and MORE! controls.
+ */
+async function expectVisibleFocusIndicator(
+  page: Page,
+  controlKey: keyof typeof CONTROL_SELECTORS,
+  kind: FocusIndicatorKind,
+): Promise<void> {
+  const element = page.locator(CONTROL_SELECTORS[controlKey]);
+  if (kind === "border") {
+    await expect(
+      element,
+      `${controlKey} shows the Primary focus border`,
+    ).toHaveCSS("border-top-color", PRIMARY_RGB);
+    await expect(
+      element,
+      `${controlKey} has no outer focus highlight`,
+    ).toHaveCSS("outline-style", "none");
+  } else {
+    await expect(
+      element,
+      `${controlKey} shows the solid focus outline`,
+    ).toHaveCSS("outline-style", "solid");
+    await expect(element).toHaveCSS("outline-width", "2px");
+    // The retrying assertion also waits out the MORE! control's 200ms
+    // `transition-colors` (Tailwind v4 includes `outline-color`).
+    await expect(element).toHaveCSS("outline-color", PRIMARY_RGB);
+    await expect(element).toHaveCSS("outline-offset", "2px");
+  }
 }
 
 /**
@@ -460,6 +698,471 @@ test.describe("Control accessibility", () => {
   }
 });
 
+test.describe("Control focus indication", () => {
+  for (const [seedKey, lang, copy] of [
+    ["en", "en-US", COPY.en],
+    ["pl", "pl-PL", COPY.pl],
+  ] as const) {
+    test(`[${lang}] the empty state shows a visible keyboard focus indicator on Search and the Interface Language selector with no layout or non-focus color change (REQ-068, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await waitForInteractionState(page, "empty");
+
+      // Search carries the autofocus and renders its visible Primary
+      // border indicator without an outer highlight (style.md inputs).
+      const search = page.getByRole("combobox", { name: copy.search });
+      await expect(search).toBeFocused();
+      await expectVisibleFocusIndicator(page, "search", "border");
+      const baseline = await captureSurface(page);
+
+      // Keyboard Tab moves focus to the Interface Language selector,
+      // whose two-pixel Primary outline is its visible indicator; Search
+      // loses its indicator and every page region keeps its geometry
+      // (REQ-068, P15-G2: no non-focus layout or color change).
+      const languageControl = page.getByRole("combobox", {
+        name: copy.languageControl,
+      });
+      await focusWithTab(page, languageControl);
+      await expect(languageControl).toBeFocused();
+      expect(
+        await languageControl.evaluate((element) =>
+          element.matches(":focus-visible"),
+        ),
+      ).toBe(true);
+      await expectVisibleFocusIndicator(page, "language", "outline");
+      const languageFocused = await captureSurface(page);
+      expectFocusMove(baseline, languageFocused, "language", "search");
+
+      // Tab wraps back to Search (through the document body), restoring
+      // its visible keyboard focus border; the selector reverts.
+      await focusWithTab(page, search);
+      await expect(search).toBeFocused();
+      expect(
+        await search.evaluate((element) => element.matches(":focus-visible")),
+      ).toBe(true);
+      await expectVisibleFocusIndicator(page, "search", "border");
+      const searchFocused = await captureSurface(page);
+      expectFocusMove(languageFocused, searchFocused, "search", "language");
+    });
+
+    test(`[${lang}] the open suggestion panel keeps Search's visible focus border and the active option's visible active styling (REQ-018, REQ-068)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.chickenQuery);
+      const panel = page.getByRole("listbox", { name: copy.listbox });
+      await expect(panel).toBeVisible();
+      await expect(search).toBeFocused();
+      expect(
+        await search.evaluate((element) => element.matches(":focus-visible")),
+      ).toBe(true);
+      await expectVisibleFocusIndicator(page, "search", "border");
+
+      // The keyboard-active option renders its visible active styling
+      // (Primary with Text-On-Bright, REQ-018/REQ-019) as the
+      // active-descendant indication of the combobox pattern.
+      const firstOption = panel.getByRole("option").first();
+      await expect(firstOption).toHaveCSS("background-color", PRIMARY_RGB);
+      await expect(firstOption).toHaveCSS("color", TEXT_ON_BRIGHT_RGB);
+
+      const baseline = await captureSurface(page);
+
+      // Tab closes the panel through the native blur, moves focus to the
+      // Interface Language selector, reverts Search, and changes no page
+      // geometry.
+      await page.keyboard.press("Tab");
+      const languageControl = page.getByRole("combobox", {
+        name: copy.languageControl,
+      });
+      await expect(languageControl).toBeFocused();
+      await expectVisibleFocusIndicator(page, "language", "outline");
+      await expect(search).toHaveCSS("border-top-color", SECONDARY_RGB);
+      const after = await captureSurface(page);
+      expect(after.regions).toEqual(baseline.regions);
+      expect(after.controls.language).not.toEqual(baseline.controls.language);
+      await expect(panel).toHaveCount(0);
+    });
+
+    test(`[${lang}] every operable result-state control — Quantity number, Unit, MORE!, and the Interface Language selector — shows its visible keyboard focus indicator with no layout or non-focus color change (REQ-068, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await selectPizzaAndWaitForResults(page, copy);
+
+      // The successful page moved focus to the localized results heading
+      // (REQ-083), so the baseline has no interactive control focused.
+      const baseline = await captureSurface(page);
+
+      // Each keyboard Tab stop renders the control's visible focus
+      // indicator while every other control keeps its exact colors and
+      // every page region its geometry (REQ-068, P15-G2). The native
+      // autofocus quirk skips Search on the first Tab and routes the
+      // wrap through the document body, so focusWithTab presses Tab
+      // until the browser places focus on the intended stop.
+      const stops = [
+        ["search", undefined],
+        ["quantityNumber", "search"],
+        ["quantityUnit", "quantityNumber"],
+        ["moreButton", "quantityUnit"],
+        ["language", "moreButton"],
+        ["search", "language"],
+      ] as const;
+      let before = baseline;
+      for (const [toControl, fromControl] of stops) {
+        await focusWithTab(page, page.locator(CONTROL_SELECTORS[toControl]));
+        const element = page.locator(CONTROL_SELECTORS[toControl]);
+        await expect(element).toBeFocused();
+        expect(
+          await element.evaluate((node) => node.matches(":focus-visible")),
+          `${toControl} matches :focus-visible after keyboard focus`,
+        ).toBe(true);
+        await expectVisibleFocusIndicator(
+          page,
+          toControl,
+          toControl === "search" ||
+            toControl === "quantityNumber" ||
+            toControl === "quantityUnit"
+            ? "border"
+            : "outline",
+        );
+        // The MORE! control's 200ms color transition (Tailwind
+        // `transition-colors`) settles before the surface capture so the
+        // proof compares transition-stable presentations.
+        await page.waitForTimeout(250);
+        const after = await captureSurface(page);
+        expectFocusMove(
+          before,
+          after,
+          toControl,
+          fromControl as keyof typeof CONTROL_SELECTORS | undefined,
+        );
+        before = after;
+      }
+    });
+
+    test(`[${lang}] quantity validation keeps the focused Quantity number's visible focus indicator and changes no region geometry (REQ-026, REQ-068)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await selectPizzaAndWaitForResults(page, copy);
+
+      const baseline = await captureSurface(page);
+      const number = page.getByRole("textbox", { name: copy.quantity });
+      await number.fill("abc");
+      await number.press("Enter");
+      await expect(number).toBeFocused();
+      expect(
+        await number.evaluate((element) => element.matches(":focus-visible")),
+      ).toBe(true);
+      await expectVisibleFocusIndicator(page, "quantityNumber", "border");
+      await expect(page.locator("[data-quantity-error]")).toHaveText(
+        copy.invalidQuantity,
+      );
+
+      // The invalid commit keeps the focused number field's visible
+      // indicator and changes no other control's presentation. The polite
+      // error message legitimately extends the selected-input region
+      // (REQ-026), so the comparison covers every control plus the
+      // Search and language regions, whose geometry is stable.
+      const after = await captureSurface(page);
+      for (const name of [
+        "search",
+        "quantityUnit",
+        "moreButton",
+        "language",
+      ] as const) {
+        expect(after.controls[name]).toEqual(baseline.controls[name]);
+      }
+      expect(after.regions["[data-search-region]"]).toEqual(
+        baseline.regions["[data-search-region]"],
+      );
+      expect(after.regions["[data-interface-language]"]).toEqual(
+        baseline.regions["[data-interface-language]"],
+      );
+      expect(after.controls.quantityNumber).not.toEqual(
+        baseline.controls.quantityNumber,
+      );
+    });
+  }
+});
+
+test.describe("Control disabled presentation", () => {
+  for (const [seedKey, lang, copy] of [
+    ["en", "en-US", COPY.en],
+    ["pl", "pl-PL", COPY.pl],
+  ] as const) {
+    test(`[${lang}] the pending new Search natively disables the Quantity editor (removed from the tab order) while Search keeps focus and repeated activation starts no request (REQ-048, REQ-068)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      await waitForInteractionState(page, "loadingNew");
+
+      const numberInput = page.locator("[data-quantity-number]");
+      const unitSelect = page.locator("[data-quantity-unit]");
+
+      // The editor can be removed from the tab order in this transition
+      // (Search is the initiating focus-retaining control), so the
+      // controls expose the native disabled state and no aria-disabled.
+      await expect(numberInput).toBeDisabled();
+      await expect(numberInput).toHaveAttribute("disabled", "");
+      await expect(numberInput).not.toHaveAttribute("aria-disabled", "true");
+      await expect(unitSelect).toBeDisabled();
+      await expect(unitSelect).toHaveAttribute("disabled", "");
+      await expect(unitSelect).not.toHaveAttribute("aria-disabled", "true");
+
+      // Search keeps the established focus (REQ-020, REQ-022).
+      await expect(search).toBeFocused();
+
+      // Guarded dispatched and keyboard activation starts no second
+      // request and keeps Search focused (REQ-048).
+      await numberInput.dispatchEvent("click");
+      await numberInput.dispatchEvent("keydown", { key: "Enter" });
+      await unitSelect.dispatchEvent("change");
+      await page.locator("[data-quantity-editor]").dispatchEvent("focusout");
+      await numberInput.press("Enter");
+      await page.waitForTimeout(300);
+      expect(gates.count()).toBe(1);
+      await expect(search).toBeFocused();
+
+      // A pointer click on the native-disabled editor is discarded: the
+      // disabled control is non-operable, so the click starts no second
+      // request (the browser's native focus loss to the document body is
+      // the disabled control refusing focus).
+      await unitSelect.click({ force: true });
+      await page.waitForTimeout(300);
+      expect(gates.count()).toBe(1);
+
+      // The disabled editor leaves the tab order: Tab from Search reaches
+      // the Interface Language selector, never the editor.
+      await search.focus();
+      await page.keyboard.press("Tab");
+      await expect(
+        page.getByRole("combobox", { name: copy.languageControl }),
+      ).toBeFocused();
+
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+    });
+
+    test(`[${lang}] a pending valid recalculation keeps the initiating Quantity editor focusable but non-operable with aria-disabled, and repeated activation starts no request (REQ-048, REQ-068)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+
+      // A valid recalculation commit keeps number-field focus — the
+      // established focus-retaining path — so the editor stays focusable
+      // and non-operable with aria-disabled plus the native
+      // readonly/tabindex guards instead of the native disabled state
+      // (REQ-048, REQ-068).
+      const numberInput = page.locator("[data-quantity-number]");
+      const unitSelect = page.locator("[data-quantity-unit]");
+      await numberInput.fill("2");
+      await numberInput.press("Enter");
+      await gates.waitForPosts(2);
+      await expect(numberInput).toBeFocused();
+      await expect(numberInput).toHaveAttribute("aria-disabled", "true");
+      await expect(numberInput).not.toHaveAttribute("disabled");
+      await expect(numberInput).toHaveAttribute("readonly", "");
+      await expect(unitSelect).toHaveAttribute("aria-disabled", "true");
+      await expect(unitSelect).toHaveAttribute("tabindex", "-1");
+      await expect(unitSelect).not.toHaveAttribute("disabled");
+      const moreButton = page.locator("[data-more-button]");
+      await expect(moreButton).toHaveAttribute("aria-disabled", "true");
+
+      // Guarded pointer, keyboard, blur, and dispatched activation start
+      // no second request and keep the initiating focus (REQ-048).
+      await numberInput.press("Enter");
+      await numberInput.dispatchEvent("keydown", { key: "Enter" });
+      await unitSelect.dispatchEvent("change");
+      await page.locator("[data-quantity-editor]").dispatchEvent("focusout");
+      await moreButton.dispatchEvent("click");
+      await page.waitForTimeout(300);
+      expect(gates.count()).toBe(2);
+      await expect(numberInput).toBeFocused();
+
+      gates.releasePost(1);
+      await waitForInteractionState(page, "results");
+      await expect(numberInput).toBeEnabled();
+      await expect(unitSelect).toBeEnabled();
+      await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+    });
+
+    test(`[${lang}] the pending MORE! page keeps the initiating MORE! control focused and aria-disabled with its gray presentation while the Quantity editor is natively disabled (REQ-082, REQ-068)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+
+      const moreButton = page.locator("[data-more-button]");
+      await moreButton.click();
+      await gates.waitForPosts(2);
+      await waitForInteractionState(page, "loadingMore");
+
+      // MORE! is the focus-retaining non-operable control: it keeps its
+      // localized label, its gray non-operable colors, and aria-disabled
+      // (REQ-082), while the Quantity editor leaves the tab order with
+      // the native disabled state (REQ-068).
+      await expect(moreButton).toBeFocused();
+      await expect(moreButton).toHaveAttribute("aria-disabled", "true");
+      await expect(moreButton).toHaveCSS(
+        "background-color",
+        DISABLED_MORE_BACKGROUND_COLOR,
+      );
+      await expect(moreButton).toHaveCSS("color", DISABLED_MORE_TEXT_COLOR);
+      const numberInput = page.locator("[data-quantity-number]");
+      const unitSelect = page.locator("[data-quantity-unit]");
+      await expect(numberInput).toBeDisabled();
+      await expect(numberInput).toHaveAttribute("disabled", "");
+      await expect(numberInput).not.toHaveAttribute("aria-disabled", "true");
+      await expect(unitSelect).toBeDisabled();
+      await expect(unitSelect).toHaveAttribute("disabled", "");
+      await expect(unitSelect).not.toHaveAttribute("aria-disabled", "true");
+
+      // Guarded pointer, keyboard, blur, and dispatched activation start
+      // no second request and keep MORE! focused (REQ-048, REQ-082).
+      await moreButton.click({ force: true });
+      await moreButton.press("Enter");
+      await moreButton.dispatchEvent("click");
+      await numberInput.dispatchEvent("keydown", { key: "Enter" });
+      await unitSelect.dispatchEvent("change");
+      await page.waitForTimeout(300);
+      expect(gates.count()).toBe(2);
+      await expect(moreButton).toBeFocused();
+
+      gates.releasePost(1);
+      await waitForInteractionState(page, "results");
+      await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+      await expect(numberInput).toBeEnabled();
+      await expect(unitSelect).toBeEnabled();
+    });
+  }
+});
+
+test.describe("WCAG 2.1 accessibility scan", () => {
+  for (const [seedKey, lang, copy] of [
+    ["en", "en-US", COPY.en],
+    ["pl", "pl-PL", COPY.pl],
+  ] as const) {
+    test(`[${lang}] the empty state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await waitForInteractionState(page, "empty");
+      await expectWcagAAndAaClean(page, `empty (${lang})`);
+    });
+
+    test(`[${lang}] the open suggestion panel state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.chickenQuery);
+      await expect(
+        page.getByRole("listbox", { name: copy.listbox }),
+      ).toBeVisible();
+      await expectWcagAAndAaClean(page, `suggestions-open (${lang})`);
+    });
+
+    test(`[${lang}] the pending new-Search state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      await waitForInteractionState(page, "loadingNew");
+      await expectWcagAAndAaClean(page, `loadingNew (${lang})`);
+      gates.releasePost(0);
+    });
+
+    test(`[${lang}] the result state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await selectPizzaAndWaitForResults(page, copy);
+      await expectWcagAAndAaClean(page, `results (${lang})`);
+    });
+
+    test(`[${lang}] the quantity-validation state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await selectPizzaAndWaitForResults(page, copy);
+      const number = page.getByRole("textbox", { name: copy.quantity });
+      await number.fill("abc");
+      await number.press("Enter");
+      await expect(page.locator("[data-quantity-error]")).toHaveText(
+        copy.invalidQuantity,
+      );
+      await expectWcagAAndAaClean(page, `quantity-validation (${lang})`);
+    });
+
+    test(`[${lang}] the pending MORE! state reports no definite WCAG 2.1 Level A or AA axe violation (ISSUE-015, P15-G2, P15-G7)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+      const moreButton = page.locator("[data-more-button]");
+      await moreButton.click();
+      await gates.waitForPosts(2);
+      await waitForInteractionState(page, "loadingMore");
+      await expectWcagAAndAaClean(page, `loadingMore (${lang})`);
+      gates.releasePost(1);
+    });
+  }
+});
+
 test.describe("Control accessibility failure states", () => {
   /**
    * Prepares one successful Pizza Margherita page-0 result (three cards)
@@ -603,6 +1306,14 @@ test.describe("Control accessibility failure states", () => {
     ]);
     await expect(englishNewPage.getByRole("button")).toHaveCount(0);
     await expect(englishNewPage.locator("[data-result-card]")).toHaveCount(0);
+    // The retained quantity editor stays operable in newSearchFailure —
+    // the retry path is a fresh suggestion selection or a valid quantity
+    // commit (REQ-050) — and the failure surface has no definite WCAG
+    // 2.1 Level A or AA axe violation (ISSUE-015, P15-G2).
+    await expect(
+      englishNewPage.locator("[data-quantity-number]"),
+    ).toBeEnabled();
+    await expectWcagAAndAaClean(englishNewPage, "newSearchFailure (en)");
 
     await polishNewPage.locator(`#${optionId(CHICKEN_FOOD_OBJECT_ID)}`).click();
     await waitForInteractionState(polishNewPage, "newSearchFailure");
@@ -618,6 +1329,7 @@ test.describe("Control accessibility failure states", () => {
       ["group", COPY.pl.unit],
     ]);
     await expect(polishNewPage.getByRole("button")).toHaveCount(0);
+    await expectWcagAAndAaClean(polishNewPage, "newSearchFailure (pl)");
 
     // moreFailure (REQ-051): activating the retained MORE! control fails,
     // and the retained failure surface resolves every rendered control by
@@ -633,6 +1345,24 @@ test.describe("Control accessibility failure states", () => {
       englishMorePage.getByRole("button", { name: COPY.en.moreButton }),
     ).toHaveAttribute("aria-disabled", "false");
     await expect(englishMorePage.locator("[data-result-card]")).toHaveCount(3);
+    // The quantity editor stays non-operable in moreFailure with the
+    // native disabled state — the retry path is the retained MORE!
+    // control or a fresh suggestion selection (REQ-051, REQ-068) — and
+    // the failure surface has no definite WCAG 2.1 Level A or AA axe
+    // violation (ISSUE-015, P15-G2).
+    await expect(
+      englishMorePage.locator("[data-quantity-number]"),
+    ).toBeDisabled();
+    await expect(
+      englishMorePage.locator("[data-quantity-number]"),
+    ).toHaveAttribute("disabled", "");
+    await expect(
+      englishMorePage.locator("[data-quantity-unit]"),
+    ).toBeDisabled();
+    await expect(
+      englishMorePage.locator("[data-quantity-unit]"),
+    ).toHaveAttribute("disabled", "");
+    await expectWcagAAndAaClean(englishMorePage, "moreFailure (en)");
 
     await polishMorePage
       .getByRole("button", { name: COPY.pl.moreButton })
@@ -643,5 +1373,6 @@ test.describe("Control accessibility failure states", () => {
       polishMorePage.getByRole("button", { name: COPY.pl.moreButton }),
     ).toHaveAttribute("aria-disabled", "false");
     await expect(polishMorePage.locator("[data-result-card]")).toHaveCount(3);
+    await expectWcagAAndAaClean(polishMorePage, "moreFailure (pl)");
   });
 });
