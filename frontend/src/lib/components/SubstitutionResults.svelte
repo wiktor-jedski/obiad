@@ -19,6 +19,17 @@
    * ISSUE-013) with the ISSUE-010 editable selected-food summary and
    * quantity recalculation (task 34, ARCH-018, REQ-027, REQ-028).
    *
+   * Task 50 applies the ARCH-021 entrance motion over task 49: the
+   * keyed completed card set passes the 0-based `rank` and the
+   * `firstPage` membership (`pageIndex === 0`) to each Result Card, whose
+   * root runs the reusable opacity-only transition (REQ-052, REQ-054,
+   * ISSUE-016). The foodObjectId keys keep retained cards mounted and
+   * motionless through a valid Food Quantity recalculation, so a new
+   * successful first page is the only path that starts the staggered
+   * entrance. The stable localized results heading sits outside the keyed
+   * card set; focus moves to it when the successful response renders and
+   * motion starts, without waiting for the last intro (REQ-083).
+   *
    * The root application composes the Phase 7 surfaces; this component —
    * rendered inside the root's QueryClientProvider — owns the Substitution
    * Search query and renders the selected-input, result-card, and
@@ -376,7 +387,7 @@
 {/if}
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
   <!--
-    Result-card region (task 30, task 37, task 45; ARCH-001, ARCH-002,
+    Result-card region (task 30, task 37, task 45, task 50; ARCH-001, ARCH-002,
     ARCH-003, ARCH-011, ARCH-018, ARCH-020, ARCH-022, REQ-036, REQ-037,
     REQ-041, REQ-042, REQ-047, REQ-058, REQ-061, REQ-062, REQ-081,
     REQ-083, ISSUE-008, ISSUE-011): the successful page response renders
@@ -423,11 +434,13 @@
     </h2>
     {#if substitutionSearch.data !== undefined}
       <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {#each substitutionSearch.data.items as item (item.foodObjectId)}
+        {#each substitutionSearch.data.items as item, index (item.foodObjectId)}
           <ResultCard
             {item}
             language={$interfaceLanguage}
             pending={recalculating}
+            rank={index}
+            firstPage={interaction.pageIndex === 0}
           />
         {/each}
       </div>
