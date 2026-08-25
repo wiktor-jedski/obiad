@@ -300,9 +300,7 @@ test.describe("result state", () => {
       "data-interaction-state",
       "results",
     );
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
   });
   test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and active-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({

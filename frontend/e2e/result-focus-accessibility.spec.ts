@@ -365,10 +365,7 @@ test.describe("Result focus and accessibility", () => {
       next.slice(snapshot.length),
       "full last page (English)",
     );
-    expectNoResultLiveAnnouncements(
-      next,
-      "whole English flow (REQ-085)",
-    );
+    expectNoResultLiveAnnouncements(next, "whole English flow (REQ-085)");
   });
 
   test("after every successful Polish result page — a new Search, an intermediate MORE! page, and the partial one-card last page — the localized results heading becomes document.activeElement only after the response renders, with no result-count or result-status live-region insertion or update (P15-G3, P15-G7, REQ-083, REQ-085)", async ({
@@ -484,9 +481,6 @@ test.describe("Result focus and accessibility", () => {
       next.slice(snapshot.length),
       "partial last page (Polish)",
     );
-    expectNoResultLiveAnnouncements(
-      next,
-      "whole Polish flow (REQ-085)",
-    );
+    expectNoResultLiveAnnouncements(next, "whole Polish flow (REQ-085)");
   });
 });

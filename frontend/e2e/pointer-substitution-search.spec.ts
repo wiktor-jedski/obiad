@@ -398,9 +398,7 @@ test.describe("pointer substitution search", () => {
       "data-interaction-state",
       "results",
     );
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
     await expect(page.locator("[data-selected-input]")).toContainText(
       "Polish chicken soup · 1 serving",
     );
@@ -451,9 +449,7 @@ test.describe("pointer substitution search", () => {
     // The successful result page moved focus to the localized results
     // heading (REQ-083); the reconnect starts no second request and does
     // not change that focus.
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
   });
 
   test("the Pizza Margherita flow sends 1 serving and updates its visible selected value when the language changes", async ({

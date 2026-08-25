@@ -315,9 +315,7 @@ test.describe("suggestion keyboard control", () => {
       "Polish chicken soup · 1 serving",
     );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
 
     // Drafting a later query does not discard or move the committed result.
     // The fresh panel continuously extends Search and overlays the

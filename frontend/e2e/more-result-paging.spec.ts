@@ -327,9 +327,7 @@ test.describe("MORE! result paging", () => {
 
     // REQ-083: After the successful intermediate page-2 response renders,
     // programmatic focus moves to the stable localized results heading.
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
 
     // P11-G9 / REQ-045 / REQ-083: A new suggestion selection from page 2
     // commits page 0, starts the request with pageIndex: 0, renders ranks
@@ -356,9 +354,7 @@ test.describe("MORE! result paging", () => {
 
     // REQ-083: The localized results heading is the active element after
     // the successful new Search renders its result page.
-    await expect(
-      page.locator("[data-substitutions-heading]"),
-    ).toBeFocused();
+    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
 
     // Now re-select Pizza Margherita to traverse all 12 pages from page 0 to page 11
     await searchInput.fill("margherita");
@@ -388,9 +384,7 @@ test.describe("MORE! result paging", () => {
 
       // REQ-083: The localized results heading is document.activeElement
       // after each successful intermediate MORE! page renders.
-      await expect(
-        page.locator("[data-substitutions-heading]"),
-      ).toBeFocused();
+      await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
     }
 
     // P11-G6 / REQ-043 / REQ-083 / P11-G9: Click MORE! to advance to page 11 (full 3-card last page)
@@ -478,9 +472,7 @@ test.describe("MORE! result paging", () => {
 
       // REQ-083: The localized results heading is document.activeElement
       // after each successful intermediate MORE! page renders.
-      await expect(
-        page.locator("[data-substitutions-heading]"),
-      ).toBeFocused();
+      await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
     }
 
     // P11-G6 / REQ-043 / REQ-083 / P11-G9: Click MORE! to advance to page 12 (partial 1-card last page)
