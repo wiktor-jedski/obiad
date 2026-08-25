@@ -1,4 +1,13 @@
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { dirname } from "node:path";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { AxeBuilder } from "@axe-core/playwright";
+
+/**
+ * Real-stack accessible-name scenario (task 47; ARCH-001, ARCH-003,
+ * ARCH-010, ARCH-011, ARCH-020, ARCH-022, REQ-068; P15-G7).
+ *
 import { expect, test, type Page } from "@playwright/test";
 import { AxeBuilder } from "@axe-core/playwright";
 
@@ -696,6 +705,334 @@ const EDITOR_CONTROLS = (copy: (typeof COPY)[keyof typeof COPY]) =>
 const RESULT_CONTROLS = (copy: (typeof COPY)[keyof typeof COPY]) =>
   [...EDITOR_CONTROLS(copy), ["button", copy.moreButton]] as const;
 
+// ---- P17-G5: WCAG 2.1 AA presentation audit helpers (task 53, REQ-069) ----
+
+/** Where the P17-G5 review PNGs are mirrored so they survive the launcher cleanup. */
+const REVIEW_COPY_DIR = "/tmp/obiad-task53-control-accessibility";
+
+/**
+ * One sRGB color with an optional alpha channel. Channels are 0..255 and
+ * alpha is 0..1; every sampled presentation color is opaque in practice.
+ */
+interface SRGB {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+}
+
+/**
+ * Parses one computed color string: `rgb()`, `rgba()`, `oklch()`, or
+ * `transparent`. Tailwind v4 emits the default gray palette as `oklch()`
+ * (the pinned `DISABLED_MORE_*` constants above), while the style.md hex
+ * tokens compute to `rgb()`, so the parser accepts both serializations.
+ */
+function parseComputedColor(value: string): SRGB {
+  const trimmed = value.trim();
+  if (trimmed === "transparent") {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+  // The style.md hex tokens compute to `rgb()` / `rgba()`.
+  const rgb = trimmed.match(/^rgba?\(([^)]+)\)$/);
+  if (rgb !== null) {
+    const parts = rgb[1].split(/[ ,/]+/).map((part) => Number.parseFloat(part));
+    return {
+      r: parts[0] ?? 0,
+      g: parts[1] ?? 0,
+      b: parts[2] ?? 0,
+      a: parts.length > 3 ? (parts[3] ?? 1) : 1,
+    };
+  }
+  // Tailwind v4 emits its default gray palette as `oklch()` (the pinned
+  // Tailwind v4 emits its default gray palette as `oklch()` (the pinned
+  // `DISABLED_MORE_*` constants above), so the parser accepts the oklch
+  // serialization of the computed disabled colors.
+  const oklch = trimmed.match(/^oklch\(([^)]+)\)$/);
+  if (oklch !== null) {
+    const parts = oklch[1]
+      .split(/[ ,/]+/)
+      .map((part) => Number.parseFloat(part));
+    const lightness = parts[0] ?? 0;
+    const chroma = parts[1] ?? 0;
+    const hue = parts[2] ?? 0;
+    const alpha = parts.length > 3 ? (parts[3] ?? 1) : 1;
+    const a = chroma * Math.cos((hue * Math.PI) / 180);
+    const b = chroma * Math.sin((hue * Math.PI) / 180);
+    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
+    const l = l_ ** 3;
+    const m = m_ ** 3;
+    const s = s_ ** 3;
+    const rLin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+    const encode = (v: number): number => {
+      const c = Math.min(1, Math.max(0, v));
+      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+    };
+    return {
+      r: encode(rLin) * 255,
+      g: encode(gLin) * 255,
+      b: encode(bLin) * 255,
+      a: alpha,
+    };
+  }
+  // Chromium serializes colors interpolated during a CSS transition in
+  // the default interpolation space (`oklab(...)`): the MORE! control's
+  // 200ms `transition-colors` produces such values mid-flight. The audit
+  // samples settled presentations only, but the parser accepts the
+  // serialization so a stray mid-transition sample fails with a readable
+  // contrast message instead of a parse error.
+  const oklab = trimmed.match(/^oklab\(([^)]+)\)$/);
+  if (oklab !== null) {
+    const parts = oklab[1]
+      .split(/[ ,/]+/)
+      .map((part) => Number.parseFloat(part));
+    const lightness = parts[0] ?? 0;
+    const a = parts[1] ?? 0;
+    const b = parts[2] ?? 0;
+    const alpha = parts.length > 3 ? (parts[3] ?? 1) : 1;
+    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
+    const l = l_ ** 3;
+    const m = m_ ** 3;
+    const s = s_ ** 3;
+    const rLin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+    const encode = (v: number): number => {
+      const c = Math.min(1, Math.max(0, v));
+      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+    };
+    return {
+      r: encode(rLin) * 255,
+      g: encode(gLin) * 255,
+      b: encode(bLin) * 255,
+      a: alpha,
+    };
+  }
+  throw new Error(`unparsed computed color: ${value}`);
+}
+
+/** Composites one foreground color with `alpha` over one opaque background. */
+function compositeOver(fg: SRGB, bg: SRGB, alpha: number): SRGB {
+  return {
+    r: fg.r * alpha + bg.r * (1 - alpha),
+    g: fg.g * alpha + bg.g * (1 - alpha),
+    b: fg.b * alpha + bg.b * (1 - alpha),
+    a: 1,
+  };
+}
+
+/** The WCAG 2.1 relative luminance of one opaque sRGB color. */
+function relativeLuminance(color: SRGB): number {
+  const toLinear = (channel: number): number => {
+    const s = channel / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * toLinear(color.r) +
+    0.7152 * toLinear(color.g) +
+    0.0722 * toLinear(color.b)
+  );
+}
+
+/** The WCAG 2.1 contrast ratio of two opaque sRGB colors. */
+function contrastRatio(a: SRGB, b: SRGB): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Serializes one sRGB color for the failure message. */
+function serializeColor(color: SRGB): string {
+  return `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
+}
+
+/** The foreground kind the audit samples from one element. */
+type ContrastKind = "text" | "border" | "border-bottom" | "outline";
+
+/** One browser-side sample: the effective foreground and backdrop colors. */
+interface EffectiveColors {
+  readonly foreground: string;
+  readonly ownBackground: string;
+  readonly backdrop: string;
+  readonly opacity: string;
+}
+
+/**
+ * Samples the painted colors of one presentation in the real browser
+ * (P17-G5, REQ-069): the element's own computed foreground color (its
+ * text, border, or outline), its own background when opaque, the opaque
+ * backdrop painted behind the element (the nearest ancestor background —
+ * the body carries the page Background token), and the element's opacity.
+ * The backdrop walk always starts at the parent: the element's own
+ * background is returned separately because an element's opacity
+ * composites its whole painted group (own background plus foreground)
+ * over the backdrop behind it.
+ */
+async function sampleEffectiveColors(
+  page: Page,
+  selector: string,
+  kind: ContrastKind,
+  pseudo?: string,
+): Promise<EffectiveColors> {
+  return page.evaluate(
+    ({ selector, kind, pseudo }) => {
+      const element = document.querySelector(selector);
+      if (element === null) {
+        throw new Error(`sampleEffectiveColors: no element for ${selector}`);
+      }
+      const style = getComputedStyle(element);
+      const foreground =
+        pseudo !== undefined
+          ? getComputedStyle(element, pseudo).color
+          : kind === "text"
+            ? style.color
+            : kind === "border"
+              ? style.borderTopColor
+              : kind === "border-bottom"
+                ? style.borderBottomColor
+                : style.outlineColor;
+      const ownBackground = style.backgroundColor;
+      let node: Element | null = element.parentElement;
+      let backdrop = "rgb(255, 255, 255)";
+      while (node !== null) {
+        const candidate = getComputedStyle(node).backgroundColor;
+        if (candidate !== "rgba(0, 0, 0, 0)" && candidate !== "transparent") {
+          backdrop = candidate;
+          break;
+        }
+        node = node.parentElement;
+      }
+      return { foreground, ownBackground, backdrop, opacity: style.opacity };
+    },
+    { selector, kind, pseudo },
+  );
+}
+
+/** One contrast check: the sampled effective colors and their WCAG ratio. */
+interface PresentationContrast {
+  readonly contrast: number;
+  readonly foreground: string;
+  readonly background: string;
+}
+
+/**
+ * Computes the WCAG 2.1 AA contrast of one rendered presentation from the
+ * browser's computed styles. The element's opacity composites its whole
+ * painted group (foreground plus its own background) over the backdrop, so
+ * both effective colors mix toward the backdrop — the exact rendering the
+ * axe color-contrast check observes (P17-G5, REQ-069).
+ */
+async function samplePresentation(
+  page: Page,
+  selector: string,
+  kind: ContrastKind,
+  pseudo?: string,
+): Promise<PresentationContrast> {
+  const { foreground, ownBackground, backdrop, opacity } =
+    await sampleEffectiveColors(page, selector, kind, pseudo);
+  const behind = parseComputedColor(backdrop);
+  const own = parseComputedColor(ownBackground);
+  const alpha = Number.parseFloat(opacity);
+  let fg = parseComputedColor(foreground);
+  if (fg.a < 1) {
+    fg = compositeOver(fg, own.a > 0 ? own : behind, fg.a);
+  }
+  let effectiveForeground: SRGB;
+  let effectiveBackground: SRGB;
+  if (alpha === 1) {
+    effectiveForeground = fg;
+    effectiveBackground =
+      kind === "outline" ? behind : own.a > 0 ? own : behind;
+  } else {
+    // The element's opacity composites its whole painted group over the
+    // backdrop behind it, so the effective foreground and background
+    // both mix toward that backdrop (the exact rendering axe observes).
+    effectiveForeground = compositeOver(fg, behind, alpha);
+    effectiveBackground =
+      kind === "outline" || own.a === 0
+        ? behind
+        : compositeOver(own, behind, alpha);
+  }
+  return {
+    contrast: contrastRatio(effectiveForeground, effectiveBackground),
+    foreground: serializeColor(effectiveForeground),
+    background: serializeColor(effectiveBackground),
+  };
+}
+
+/** One checked presentation of the audit. */
+interface ContrastTarget {
+  /** Stable selector of the element whose presentation is checked. */
+  readonly selector: string;
+  /** Which painted foreground to sample: text, border, or outline. */
+  readonly kind: ContrastKind;
+  /** The WCAG 2.1 AA limit: 4.5 for normal text, 3 for graphics. */
+  readonly minimum: number;
+  /** Human-readable description of the checked presentation. */
+  readonly where: string;
+  /** Optional pseudo-element carrying the visible text (the placeholder). */
+  readonly pseudo?: string;
+}
+
+/**
+ * Proves one or more rendered presentations against the WCAG 2.1 AA
+ * limits from the browser's computed colors (P17-G5, REQ-069): normal
+ * text reaches 4.5:1 and interface graphics (borders, focus indicators,
+ * spinner arcs) reach 3:1 against their effective backdrops.
+ */
+async function expectContrastTargets(
+  page: Page,
+  targets: readonly ContrastTarget[],
+): Promise<void> {
+  for (const target of targets) {
+    const sample = await samplePresentation(
+      page,
+      target.selector,
+      target.kind,
+      target.pseudo,
+    );
+    expect(
+      sample.contrast,
+      `${target.where}: ${sample.foreground} on ${sample.background} reaches ${target.minimum}:1 (WCAG 2.1 AA, REQ-069)`,
+    ).toBeGreaterThanOrEqual(target.minimum);
+  }
+}
+
+/**
+ * Records one full-page PNG of the current checked state as non-gating
+ * review evidence (P17-G5, REQ-069) and mirrors it outside the
+ * launcher-managed test-results directory so the exact attachment
+ * survives the launcher cleanup for visual inspection.
+ */
+async function attachReviewSurface(
+  page: Page,
+  testInfo: TestInfo,
+  name: string,
+): Promise<void> {
+  const screenshotName = `control-accessibility-${name}.png`;
+  const screenshotPath = testInfo.outputPath(screenshotName);
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await testInfo.attach(screenshotName, {
+    path: screenshotPath,
+    contentType: "image/png",
+  });
+  const mirror = `${REVIEW_COPY_DIR}/${screenshotName}`;
+  if (!existsSync(dirname(mirror))) {
+    mkdirSync(dirname(mirror), { recursive: true });
+  }
+  cpSync(screenshotPath, mirror);
+  console.log(
+    `[control-accessibility] review attachment ${screenshotName}: ${screenshotPath} (mirrored to ${mirror})`,
+  );
+}
+
 test.describe("Control accessibility", () => {
   for (const [seedKey, lang, copy] of [
     ["en", "en-US", COPY.en],
@@ -1325,6 +1662,468 @@ test.describe("WCAG 2.1 accessibility scan", () => {
       await expectWcagAAndAaClean(page, `loadingMore (${lang})`);
       gates.releasePost(1);
     });
+
+    test(`[${lang}] the hovered MORE! control state reports no definite WCAG 2.1 Level A or AA axe violation (P17-G5, REQ-069)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await selectPizzaAndWaitForResults(page, copy);
+      // The hover presentation switches the control to the Secondary
+      // background (style.md Primary hover); let the 200ms
+      // `transition-colors` settle so the scan observes the final
+      // hovered colors.
+      const moreButton = page.locator("[data-more-button]");
+      await moreButton.hover();
+      await page.waitForTimeout(250);
+      await expectWcagAAndAaClean(page, `results-hover (${lang})`);
+    });
+
+    test(`[${lang}] the locked suggestion panel state reports no definite WCAG 2.1 Level A or AA axe violation (P17-G5, REQ-069)`, async ({
+      page,
+    }) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      await waitForInteractionState(page, "loadingNew");
+      // While the new-Search request stays pending, drafting a fresh
+      // query opens the suggestion panel with every option aria-disabled
+      // (ARCH-011, ARCH-019, REQ-048); the locked panel is a real
+      // aria-disabled presentation of the audit (task 53, REQ-069).
+      await search.fill(copy.chickenQuery);
+      await expect(
+        page.getByRole("listbox", { name: copy.listbox }),
+      ).toBeVisible();
+      await expectWcagAAndAaClean(page, `locked-suggestion (${lang})`);
+      gates.releasePost(0);
+    });
+  }
+});
+
+test.describe("Control presentation contrast audit", () => {
+  for (const [seedKey, lang, copy] of [
+    ["en", "en-US", COPY.en],
+    ["pl", "pl-PL", COPY.pl],
+  ] as const) {
+    test(`[${lang}] the default empty and open-suggestion presentations meet the WCAG 2.1 AA text and interface-graphics limits with review attachments (P17-G5, REQ-069)`, async ({
+      page,
+    }, testInfo) => {
+      await useBrowserLanguages(page, [lang]);
+      await page.goto("/");
+      await waitForInteractionState(page, "empty");
+
+      // The empty state (P17-G5, REQ-069): Search carries the autofocus,
+      // so its visible border is the Primary keyboard-focus indicator and
+      // the visible field text is the muted placeholder on the Surface;
+      // the Interface Language selector text and its chevron sit on the
+      // page Background. Normal text reaches 4.5:1 and the focus
+      // indicator reaches 3:1.
+      await expectContrastTargets(page, [
+        {
+          selector: "#food-search",
+          kind: "text",
+          pseudo: "::placeholder",
+          minimum: 4.5,
+          where: "Search placeholder text",
+        },
+        {
+          selector: "#food-search",
+          kind: "border",
+          minimum: 3,
+          where: "Search keyboard-focus border",
+        },
+        {
+          selector: "[data-interface-language] select",
+          kind: "text",
+          minimum: 4.5,
+          where: "Interface Language selector text",
+        },
+        {
+          selector: "[data-interface-language] span",
+          kind: "text",
+          minimum: 4.5,
+          where: "Interface Language chevron",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-empty`);
+
+      // Keyboard focus moves to the Interface Language selector: Search
+      // reverts to its resting Secondary border and the selector shows
+      // its two-pixel Primary outline, both interface graphics on the
+      // page Background (3:1).
+      const languageControl = page.getByRole("combobox", {
+        name: copy.languageControl,
+      });
+      await focusWithTab(page, languageControl);
+      await expect(languageControl).toBeFocused();
+      await expectContrastTargets(page, [
+        {
+          selector: "#food-search",
+          kind: "border",
+          minimum: 3,
+          where: "Search resting border",
+        },
+        {
+          selector: "[data-interface-language] select",
+          kind: "outline",
+          minimum: 3,
+          where: "Interface Language focus outline",
+        },
+      ]);
+
+      // The open suggestion panel: the typed query and every option text
+      // reach 4.5:1 on the Surface, the active option's
+      // Text-On-Bright/Primary pair reaches 4.5:1, and the panel border
+      // reaches 3:1.
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.chickenQuery);
+      await expect(
+        page.getByRole("listbox", { name: copy.listbox }),
+      ).toBeVisible();
+      await expectContrastTargets(page, [
+        {
+          selector: "#food-search",
+          kind: "text",
+          minimum: 4.5,
+          where: "typed Search Query text",
+        },
+        {
+          selector: `#${optionId(SEEDED_SUGGESTIONS[seedKey][0].foodObjectId)}`,
+          kind: "text",
+          minimum: 4.5,
+          where: "active suggestion option text",
+        },
+        {
+          selector: `#${optionId(SEEDED_SUGGESTIONS[seedKey][1].foodObjectId)}`,
+          kind: "text",
+          minimum: 4.5,
+          where: "resting suggestion option text",
+        },
+        {
+          selector: "[role='listbox']",
+          kind: "border",
+          minimum: 3,
+          where: "suggestion panel border",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-open-suggestion`);
+    });
+
+    test(`[${lang}] the pending new-Search, locked-suggestion, and card-loading presentations meet the WCAG 2.1 AA limits with review attachments (P17-G5, REQ-069)`, async ({
+      page,
+    }, testInfo) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      await waitForInteractionState(page, "loadingNew");
+
+      // The pending new Search (REQ-081, P17-G5): the selected-input
+      // region hides its non-image content behind one centered spinner,
+      // so the visible loading presentation is the summary border and
+      // the spinner's Primary and Secondary arcs on the Surface (3:1).
+      await expectContrastTargets(page, [
+        {
+          selector: "#food-search",
+          kind: "text",
+          pseudo: "::placeholder",
+          minimum: 4.5,
+          where: "Search placeholder during loading",
+        },
+        {
+          selector: "[data-selected-input]",
+          kind: "border",
+          minimum: 3,
+          where: "selected-input region border",
+        },
+        {
+          selector: "[data-card-spinner]",
+          kind: "border",
+          minimum: 3,
+          where: "card-loading spinner Primary arc",
+        },
+        {
+          selector: "[data-card-spinner]",
+          kind: "border-bottom",
+          minimum: 3,
+          where: "card-loading spinner Secondary arc",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-loading-new`);
+
+      // The aria-disabled suggestion panel (task 53, REQ-069): while the
+      // new-Search request stays pending, drafting a fresh query opens
+      // the panel with every option aria-disabled at 60% opacity
+      // (ARCH-011, REQ-048). The locked rows are inactive UI components
+      // (WCAG 1.4.3/1.4.11 exemption), and the audit proves the specified
+      // dimmed presentation; the effective text colors still reach the
+      // normal-text limit either way.
+      await search.fill(copy.chickenQuery);
+      await expect(
+        page.getByRole("listbox", { name: copy.listbox }),
+      ).toBeVisible();
+      const lockedActive = page.locator(
+        `#${optionId(SEEDED_SUGGESTIONS[seedKey][0].foodObjectId)}`,
+      );
+      const lockedResting = page.locator(
+        `#${optionId(SEEDED_SUGGESTIONS[seedKey][1].foodObjectId)}`,
+      );
+      await expect(lockedActive).toHaveAttribute("aria-disabled", "true");
+      await expect(lockedActive).toHaveCSS("opacity", "0.6");
+      await expect(lockedResting).toHaveAttribute("aria-disabled", "true");
+      await expect(lockedResting).toHaveCSS("opacity", "0.6");
+      await expectContrastTargets(page, [
+        {
+          selector: `#${optionId(SEEDED_SUGGESTIONS[seedKey][0].foodObjectId)}`,
+          kind: "text",
+          minimum: 4.5,
+          where: "locked active suggestion option text",
+        },
+        {
+          selector: `#${optionId(SEEDED_SUGGESTIONS[seedKey][1].foodObjectId)}`,
+          kind: "text",
+          minimum: 4.5,
+          where: "locked resting suggestion option text",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-locked-suggestion`);
+
+      // Release the new-Search response; a valid quantity recalculation
+      // then renders the card-loading spinners in the selected-input
+      // region and every result card (REQ-081).
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+      const number = page.locator("[data-quantity-number]");
+      await number.fill("200");
+      await number.press("Enter");
+      await gates.waitForPosts(2);
+      await expect(page.locator("[data-card-spinner]").first()).toBeVisible();
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-card-spinner]",
+          kind: "border",
+          minimum: 3,
+          where: "recalculation spinner Primary arc",
+        },
+        {
+          selector: "[data-card-spinner]",
+          kind: "border-bottom",
+          minimum: 3,
+          where: "recalculation spinner Secondary arc",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-card-loading`);
+      gates.releasePost(1);
+    });
+
+    test(`[${lang}] the result, hover, keyboard-focus, validation-error, and pending-MORE! presentations meet the WCAG 2.1 AA limits with review attachments (P17-G5, REQ-069)`, async ({
+      page,
+    }, testInfo) => {
+      await useBrowserLanguages(page, [lang]);
+      const gates = gateSubstitutePosts(page);
+      await page.goto("/");
+      const search = page.getByRole("combobox", { name: copy.search });
+      await search.fill(copy.pizzaQuery);
+      const option = page.locator(`#${optionId(PIZZA_FOOD_OBJECT_ID)}`);
+      await expect(option).toBeVisible();
+      await option.click();
+      await gates.waitForPosts(1);
+      gates.releasePost(0);
+      await waitForInteractionState(page, "results");
+      await expect(page.locator("[data-result-card]")).toHaveCount(3);
+      await expect
+        .poll(async () =>
+          page
+            .locator("[data-result-card]")
+            .evaluateAll((elements) =>
+              elements.every(
+                (element) => getComputedStyle(element).opacity === "1",
+              ),
+            ),
+        )
+        .toBe(true);
+
+      // The completed result page (P17-G5, REQ-069): every card text
+      // reaches 4.5:1 on the card Surface, the heading and the operable
+      // MORE! label reach 4.5:1, and the card, region, and MORE!-on-
+      // Primary graphics reach 3:1.
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-result-card] h3",
+          kind: "text",
+          minimum: 4.5,
+          where: "result card name",
+        },
+        {
+          selector: "[data-result-card-matched-quantity]",
+          kind: "text",
+          minimum: 4.5,
+          where: "matched quantity",
+        },
+        {
+          selector: "[data-result-card-calories]",
+          kind: "text",
+          minimum: 4.5,
+          where: "card calories",
+        },
+        {
+          selector: "[data-result-card] dt",
+          kind: "text",
+          minimum: 4.5,
+          where: "card macronutrient label",
+        },
+        {
+          selector: "[data-result-card] dd",
+          kind: "text",
+          minimum: 4.5,
+          where: "card macronutrient value",
+        },
+        {
+          selector: "[data-result-card]",
+          kind: "border",
+          minimum: 3,
+          where: "result card border",
+        },
+        {
+          selector: "[data-substitutions-heading]",
+          kind: "text",
+          minimum: 4.5,
+          where: "results heading",
+        },
+        {
+          selector: "[data-more-button]",
+          kind: "text",
+          minimum: 4.5,
+          where: "MORE! label on Primary",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-results`);
+
+      // Keyboard focus: the Quantity number input shows the Primary
+      // focus border on the Surface and the MORE! control shows its
+      // Primary outline on the page Background, both 3:1 graphics.
+      const number = page.locator("[data-quantity-number]");
+      await focusWithTab(page, number);
+      await expect(number).toBeFocused();
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-quantity-number]",
+          kind: "border",
+          minimum: 3,
+          where: "Quantity number focus border",
+        },
+      ]);
+      const moreButton = page.locator("[data-more-button]");
+      await focusWithTab(page, moreButton);
+      await expect(moreButton).toBeFocused();
+      // The MORE! control's 200ms `transition-colors` includes
+      // `outline-color`; let it settle before the sampled outline.
+      await page.waitForTimeout(250);
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-more-button]",
+          kind: "outline",
+          minimum: 3,
+          where: "MORE! keyboard-focus outline",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-keyboard-focus`);
+
+      // Hover: the MORE! control switches to the Secondary background
+      // while the Text-On-Bright label stays above the normal-text limit
+      // (style.md Primary hover).
+      await moreButton.hover();
+      await page.waitForTimeout(250);
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-more-button]",
+          kind: "text",
+          minimum: 4.5,
+          where: "MORE! label on hover",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-hover`);
+
+      // Validation error: the localized message renders in the Error
+      // token on the summary Surface and reaches 4.5:1.
+      await number.fill("abc");
+      await number.press("Enter");
+      await expect(page.locator("[data-quantity-error]")).toHaveText(
+        copy.invalidQuantity,
+      );
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-quantity-error]",
+          kind: "text",
+          minimum: 4.5,
+          where: "quantity validation error",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-validation-error`);
+
+      // Clear the invalid draft with a valid commit (the recalculation
+      // is gated and released), then activate MORE! so the pending
+      // next-page request renders the visible native-disabled Quantity
+      // editor and the gray aria-disabled MORE! control (REQ-082).
+      await number.fill("350");
+      await number.press("Enter");
+      await gates.waitForPosts(2);
+      gates.releasePost(1);
+      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+      await moreButton.click();
+      await gates.waitForPosts(3);
+      await waitForInteractionState(page, "loadingMore");
+      await expect(moreButton).toHaveAttribute("aria-disabled", "true");
+      // The MORE! control's 200ms `transition-colors` runs while it
+      // switches to the gray non-operable presentation; let it settle so
+      // the sampled computed colors are the final disabled colors.
+      await page.waitForTimeout(250);
+      await expectContrastTargets(page, [
+        {
+          selector: "[data-quantity-number]",
+          kind: "text",
+          minimum: 4.5,
+          where: "native-disabled Quantity number text",
+        },
+        {
+          selector: "[data-quantity-unit]",
+          kind: "text",
+          minimum: 4.5,
+          where: "native-disabled Unit selector text",
+        },
+        {
+          selector: "[data-input-macronutrients] dt",
+          kind: "text",
+          minimum: 4.5,
+          where: "input macronutrient label",
+        },
+        {
+          selector: "[data-more-button]",
+          kind: "text",
+          minimum: 4.5,
+          where: "aria-disabled MORE! gray label",
+        },
+        {
+          selector: "[data-more-button]",
+          kind: "border",
+          minimum: 3,
+          where: "aria-disabled MORE! gray background",
+        },
+      ]);
+      await attachReviewSurface(page, testInfo, `${seedKey}-loading-more`);
+      gates.releasePost(2);
+    });
   }
 });
 
@@ -1416,7 +2215,7 @@ test.describe("Control accessibility failure states", () => {
 
   test("after the outage, the new-Search and MORE! failure surfaces resolve every rendered control by its exact English or Polish accessible name with one role and no duplicates (REQ-050, REQ-051, REQ-068)", async ({
     browser,
-  }) => {
+  }, testInfo) => {
     const englishContext = await browser.newContext({
       baseURL: "http://127.0.0.1:4173",
     });
@@ -1475,10 +2274,41 @@ test.describe("Control accessibility failure states", () => {
     // the retry path is a fresh suggestion selection or a valid quantity
     // commit (REQ-050) — and the failure surface has no definite WCAG
     // 2.1 Level A or AA axe violation (ISSUE-015, P15-G2).
-    await expect(
-      englishNewPage.locator("[data-quantity-number]"),
-    ).toBeEnabled();
-    await expectWcagAAndAaClean(englishNewPage, "newSearchFailure (en)");
+    // P17-G5 (REQ-069): the retained new-Search failure surface keeps the
+    // retry message and the retained summary text above the normal-text
+    // limit and the focused Search border above the graphics limit; the
+    // review attachment exposes the surface for visual inspection.
+    await expectContrastTargets(englishNewPage, [
+      {
+        selector: "[data-retry-message]",
+        kind: "text",
+        minimum: 4.5,
+        where: "new-Search failure retry message (en)",
+      },
+      {
+        selector: "[data-selected-name]",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained selected name (en)",
+      },
+      {
+        selector: "[data-quantity-static-unit]",
+        kind: "text",
+        minimum: 4.5,
+        where: "static unit presentation (en)",
+      },
+      {
+        selector: "#food-search",
+        kind: "border",
+        minimum: 3,
+        where: "focused Search border (en)",
+      },
+    ]);
+    await attachReviewSurface(
+      englishNewPage,
+      testInfo,
+      "en-new-search-failure",
+    );
 
     await polishNewPage.locator(`#${optionId(CHICKEN_FOOD_OBJECT_ID)}`).click();
     await waitForInteractionState(polishNewPage, "newSearchFailure");
@@ -1493,8 +2323,36 @@ test.describe("Control accessibility failure states", () => {
       ["textbox", COPY.pl.quantity],
       ["group", COPY.pl.unit],
     ]);
-    await expect(polishNewPage.getByRole("button")).toHaveCount(0);
-    await expectWcagAAndAaClean(polishNewPage, "newSearchFailure (pl)");
+    // P17-G5 (REQ-069): the Polish failure surface keeps the retry
+    // message and the retained summary text above the normal-text limit
+    // and the focused Search border above the graphics limit.
+    await expectContrastTargets(polishNewPage, [
+      {
+        selector: "[data-retry-message]",
+        kind: "text",
+        minimum: 4.5,
+        where: "new-Search failure retry message (pl)",
+      },
+      {
+        selector: "[data-selected-name]",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained selected name (pl)",
+      },
+      {
+        selector: "[data-quantity-static-unit]",
+        kind: "text",
+        minimum: 4.5,
+        where: "static unit presentation (pl)",
+      },
+      {
+        selector: "#food-search",
+        kind: "border",
+        minimum: 3,
+        where: "focused Search border (pl)",
+      },
+    ]);
+    await attachReviewSurface(polishNewPage, testInfo, "pl-new-search-failure");
 
     // moreFailure (REQ-051): activating the retained MORE! control fails,
     // and the retained failure surface resolves every rendered control by
@@ -1524,10 +2382,31 @@ test.describe("Control accessibility failure states", () => {
     await expect(
       englishMorePage.locator("[data-quantity-unit]"),
     ).toBeDisabled();
-    await expect(
-      englishMorePage.locator("[data-quantity-unit]"),
-    ).toHaveAttribute("disabled", "");
-    await expectWcagAAndAaClean(englishMorePage, "moreFailure (en)");
+    // P17-G5 (REQ-069): the retained MORE! failure surface keeps the
+    // retry message, the retained card names, and the operable MORE!
+    // label above the normal-text limit; the review attachment exposes
+    // the surface for visual inspection.
+    await expectContrastTargets(englishMorePage, [
+      {
+        selector: "[data-retry-message]",
+        kind: "text",
+        minimum: 4.5,
+        where: "MORE! failure retry message (en)",
+      },
+      {
+        selector: "[data-result-card] h3",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained card name (en)",
+      },
+      {
+        selector: "[data-more-button]",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained operable MORE! label (en)",
+      },
+    ]);
+    await attachReviewSurface(englishMorePage, testInfo, "en-more-failure");
 
     await polishMorePage
       .getByRole("button", { name: COPY.pl.moreButton })
@@ -1537,8 +2416,30 @@ test.describe("Control accessibility failure states", () => {
     await expect(
       polishMorePage.getByRole("button", { name: COPY.pl.moreButton }),
     ).toHaveAttribute("aria-disabled", "false");
-    await expect(polishMorePage.locator("[data-result-card]")).toHaveCount(3);
-    await expectWcagAAndAaClean(polishMorePage, "moreFailure (pl)");
+    // P17-G5 (REQ-069): the Polish MORE! failure surface keeps the retry
+    // message, the retained card names, and the operable MORE! label
+    // above the normal-text limit.
+    await expectContrastTargets(polishMorePage, [
+      {
+        selector: "[data-retry-message]",
+        kind: "text",
+        minimum: 4.5,
+        where: "MORE! failure retry message (pl)",
+      },
+      {
+        selector: "[data-result-card] h3",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained card name (pl)",
+      },
+      {
+        selector: "[data-more-button]",
+        kind: "text",
+        minimum: 4.5,
+        where: "retained operable MORE! label (pl)",
+      },
+    ]);
+    await attachReviewSurface(polishMorePage, testInfo, "pl-more-failure");
   });
 });
 test.describe("Control keyboard-only flow", () => {

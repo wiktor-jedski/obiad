@@ -5,8 +5,8 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 /**
  * Real-stack Responsive accessible presentation scenario (task 52,
- * Phase 17; ARCH-001, ARCH-020, ARCH-022, REQ-062, REQ-063, REQ-073;
- * P17-G2, P17-G3, P17-G4).
+ * task 53; Phase 17; ARCH-001, ARCH-020, ARCH-022, REQ-062, REQ-063,
+ * REQ-069, REQ-073; P17-G2, P17-G3, P17-G4, P17-G6).
  *
  * `bun run test:e2e` runs this file against the complete disposable stack
  * started by `./e2e/launcher.ts`: the optimized Vite preview on the strict
@@ -20,13 +20,13 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
  * more (REQ-063).
  *
  * The "Responsive accessible presentation" describe (P17-G2, P17-G3,
- * P17-G4) runs on the normal stack with one test per ISSUE-006 viewport —
- * `320×568`, `768×1024`, and `1280×720` (REQ-073). Each test drives the
- * complete primary flow through the empty, open-suggestion, pending
- * new-Search, completed result, invalid-quantity, recalculation-loading,
- * pending-MORE!, and completed later-page surfaces and proves that
- * `document` and `body` `scrollWidth` are never more than their
- * corresponding `clientWidth` or the viewport width (REQ-063). The
+ * P17-G4, P17-G6) runs on the normal stack with one test per ISSUE-006
+ * viewport — `320×568`, `768×1024`, and `1280×720` (REQ-073). Each test
+ * drives the complete primary flow through the empty, open-suggestion,
+ * pending new-Search, completed result, invalid-quantity,
+ * recalculation-loading, pending-MORE!, and completed later-page surfaces
+ * and proves that `document` and `body` `scrollWidth` are never more than
+ * their corresponding `clientWidth` or the viewport width (REQ-063). The
  * completed result and completed later-page surfaces also prove the
  * REQ-062 column contract: one ranked card column at `320` and `768` px
  * and three equal ranked card columns at `1280` px, with the ranked cards
@@ -34,9 +34,12 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
  * gated through `page.route` so each pending surface is observable while
  * its real request is in flight — the same established real-stack gating
  * convention as `more-result-paging.spec.ts` and
- * `result-state.spec.ts` (ARCH-022). One full-page PNG per viewport is
- * attached as non-gating review evidence, mirrored outside the
- * launcher-managed test-results directory like the empty-shell scenario.
+ * `result-state.spec.ts` (ARCH-022). After every task 53 contrast change,
+ * one final full-page PNG per viewport is attached as non-gating review
+ * evidence (P17-G6, REQ-073) showing the required card columns, no
+ * clipped content, and the final passing style.md tokens; the PNG is
+ * mirrored outside the launcher-managed test-results directory like the
+ * empty-shell scenario.
  *
  * The "Responsive presentation failure surfaces" describe runs serially
  * on the separate outage stack (ARCH-022): the launcher hands the
@@ -442,8 +445,10 @@ async function runPrimaryFlow(
     .poll(async () => renderedCardIDs(page))
     .toEqual([...PIZZA_PAGE_1_IDS]);
 
-  // Surface 8: the completed later page. Let the keyed replacement motion
-  // settle, then prove the column contract and the overflow limits and
+  // record one final full-page PNG per viewport as non-gating review
+  // evidence (P17-G6, REQ-073): the attachment shows the required card
+  // columns, no clipped content, and the final passing style.md tokens
+  // after every task 53 contrast change.
   // record one full-page PNG per viewport as non-gating review evidence.
   await page.waitForTimeout(800);
   await expectCardColumns(page, vp);
