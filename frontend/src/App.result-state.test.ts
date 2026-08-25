@@ -33,6 +33,13 @@
  * region value, the quantity and unit accessible names, the macronutrient
  * labels, and the localized one-decimal values — in place to the active
  * dictionary, in English and in Polish.
+ *
+ * Task 46 extends the same scenario with the Phase 15 zero-result focus
+ * contract (P15-G4, P15-G5, P15-G7, REQ-084, REQ-085): after the
+ * successful empty page-0 response renders zero cards, the localized
+ * zero-result message is the stable programmatically focusable active
+ * element in English and Polish, and the transition inserts or updates no
+ * result-count or result-status live-region message.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -144,9 +151,30 @@ describe("the root result-state composition", () => {
       expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
       expect(document.querySelectorAll("[data-result-region]")).toHaveLength(0);
 
-      const zeroRegion = document.querySelector("[data-zero-result-region]");
-      expect(zeroRegion).not.toBeNull();
-      expect(zeroRegion?.textContent).toBe("No substitutes found");
+      // REQ-084 (task 46, P15-G4): after the successful empty page-0
+      // response renders zero cards, the localized zero-result message is
+      // the stable programmatically focusable active element.
+      const zeroMessage = document.querySelector("[data-zero-result-message]");
+      expect(zeroMessage).not.toBeNull();
+      expect(zeroMessage?.textContent).toBe("No substitutes found");
+      expect(document.activeElement).toBe(zeroMessage);
+
+      // REQ-085 (task 46, P15-G5, P15-G7): the successful zero-result
+      // transition inserts or updates no result-count or result-status
+      // live-region message. The message itself carries no live-region
+      // semantics, and the only live region in the zero-result surface is
+      // the established empty loading-status span (ISSUE-010), which holds
+      // no result message.
+      expect(zeroMessage?.hasAttribute("aria-live")).toBe(false);
+      expect(zeroMessage?.hasAttribute("role")).toBe(false);
+      const liveRegions = Array.from(
+        document.querySelectorAll(
+          '[aria-live], [role="status"], [role="alert"]',
+        ),
+      );
+      expect(liveRegions).toHaveLength(1);
+      expect(liveRegions[0]?.getAttribute("data-editor-status")).not.toBeNull();
+      expect(liveRegions[0]?.textContent).toBe("");
 
       // The complete English zero-result surface (task 44, P14-G4,
       // REQ-044, REQ-055, REQ-058): the retained selected Food Object and
@@ -196,6 +224,27 @@ describe("the root result-state composition", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("zeroResults");
+
+      // REQ-084 (task 46, P15-G4): the zero-result message stays the
+      // active element in Polish — the language change re-renders the
+      // localized text in place without replacing the stable
+      // programmatically focusable element, so the same node keeps focus.
+      expect(document.activeElement).toBe(zeroMessage);
+      expect(zeroMessage?.textContent).toBe("Nie znaleziono zamienników");
+      // REQ-085 (task 46, P15-G5, P15-G7): the language change still
+      // emits no result-count or result-status live-region message; the
+      // established loading-status span stays the only live region and
+      // remains empty.
+      const polishLiveRegions = Array.from(
+        document.querySelectorAll(
+          '[aria-live], [role="status"], [role="alert"]',
+        ),
+      );
+      expect(polishLiveRegions).toHaveLength(1);
+      expect(
+        polishLiveRegions[0]?.getAttribute("data-editor-status"),
+      ).not.toBeNull();
+      expect(polishLiveRegions[0]?.textContent).toBe("");
       expect(document.querySelector("[data-selected-name]")?.textContent).toBe(
         "Masło",
       );
