@@ -43,6 +43,15 @@
  *      nonzero when any lifecycle step failed, an owned process was
  *      unhealthy, or cleanup itself failed.
  *
+ * Behind `bun run test:performance` (task 54, Phase 18, ARCH-022) the same
+ * launcher runs in performance-only mode: steps 1 through 9 start the
+ * identical optimized real stack, but instead of the standard suite the
+ * launcher runs only the serial Search performance scenario alone with one
+ * Playwright worker (`--grep "Search performance" --workers=1`), skips the
+ * outage-stack handoff, and cleans up the same way. No standard end-to-end
+ * suite load shares the run, so the timing samples measure only the real
+ * stack (P18-G1, P18-G6).
+ *
  * Lifecycle ownership rules:
  *
  *   - Every spawned child runs in its own process group (`detached: true`)
@@ -1115,7 +1124,10 @@ async function runOutageSuite(
   return suiteStatus;
 }
 
-async function runStack(resources: OwnedResources): Promise<number> {
+async function runStack(
+  resources: OwnedResources,
+  mode: "e2e" | "performance",
+): Promise<number> {
   assertRunning();
   await preflight(resources);
   await preflightPorts();
@@ -1342,6 +1354,37 @@ async function runStack(resources: OwnedResources): Promise<number> {
     throw new Error(`playwright install chromium failed with status ${status}`);
   }
 
+  // 10p. Performance-only mode (task 54, Phase 18, ARCH-022): instead of
+  // the standard suite, run only the serial Search performance scenario,
+  // alone with one Playwright worker on the fully started optimized stack.
+  // No other test process or suite shares the runner, so the timing
+  // samples measure only the real stack (P18-G1, P18-G6, REQ-074,
+  // REQ-075); the outage-stack handoff below is skipped entirely.
+  if (mode === "performance") {
+    log("running the serial Search performance scenario on the normal stack");
+    const performanceStatus = await runStep(
+      resources,
+      "bun",
+      [
+        "x",
+        "playwright",
+        "test",
+        "--grep",
+        "Search performance",
+        "--workers=1",
+      ],
+      {
+        cwd: FRONTEND,
+        env: {
+          ...process.env,
+          OBIAD_E2E_BROWSER_CLIENT_BUNDLE: browserClientBundle,
+        },
+      },
+    );
+    assertRunning();
+    return performanceStatus;
+  }
+
   // 10. Run the real-stack Playwright suite on the normal stack; its status
   // becomes part of the exit status. The browser client bundle path reaches
   // the scenario through the environment; the scenario runs the generated
@@ -1350,7 +1393,10 @@ async function runStack(resources: OwnedResources): Promise<number> {
   // gives it a separate Fiber process and disposable PostgreSQL database.
   // The Result Card motion timing scenario is excluded as well: ARCH-022
   // requires that timing checks do not share a runner job with parallel
-  // test load, so step 10b runs it alone with one worker afterwards.
+  // test load, so step 10b runs it alone with one worker afterwards. The
+  // Search performance scenario (task 54) is excluded too: its timing
+  // samples must never share the run with standard end-to-end suite load
+  // (ARCH-022), and the performance-only mode above runs it alone.
   log("running the real-stack Playwright suite on the normal stack");
   const normalStatus = await runStep(
     resources,
@@ -1360,7 +1406,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
       "playwright",
       "test",
       "--grep-invert",
-      "Substitution request failures|Control accessibility failure states|Result Card motion|Responsive presentation failure surfaces",
+      "Substitution request failures|Control accessibility failure states|Result Card motion|Responsive presentation failure surfaces|Search performance",
     ],
     {
       cwd: FRONTEND,
@@ -1443,9 +1489,15 @@ async function main(): Promise<number> {
   process.on("SIGINT", () => requestShutdown(resources, "SIGINT"));
   process.on("SIGTERM", () => requestShutdown(resources, "SIGTERM"));
 
+  // The performance-only mode (`bun run test:performance`, task 54) is
+  // selected by the single `performance` argument; every other invocation
+  // runs the standard end-to-end suites.
+  const mode: "e2e" | "performance" =
+    process.argv[2] === "performance" ? "performance" : "e2e";
+
   let exitCode = 1;
   try {
-    exitCode = await runStack(resources);
+    exitCode = await runStack(resources, mode);
   } catch (error) {
     if (!shutdown.signal) {
       log(`error: ${error instanceof Error ? error.message : String(error)}`);
