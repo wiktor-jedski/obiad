@@ -321,3 +321,20 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Resolved with the project owner on 2026-08-25. Phase 17 adds no happy-dom or `@testing-library/svelte` component integration scenario. Those environments cannot verify Chromium breakpoints, document and body overflow geometry, hover and focus computed colors, WCAG contrast scans, or full-page screenshots. Real-stack Playwright scenarios `responsive-accessible-presentation.spec.ts` and `control-accessibility.spec.ts` supply this evidence at the three required viewport widths and across the normal and failure states. `bun test` remains regression coverage for existing component behavior.
+
+## ISSUE-018: Phase 18 performance measurement boundary
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-26. Use Pizza Margherita with its default `1 serving` as the stable seeded fixture. Run 20 measured iterations. Each iteration starts one new Search, measures its first Result Card, and then activates MORE!, so the same 20 Search iterations supply the 20 first-card samples.
+- Resolved with the project owner on 2026-08-26. Before sampling, run one complete, unmeasured new Search and MORE! flow. This flow warms the browser, optimized Vite preview, Fiber process, PostgreSQL connection, and query paths.
+- Resolved with the project owner on 2026-08-26. Measure each Search and MORE! request from `PerformanceResourceTiming.startTime` through `responseEnd`.
+- Resolved with the project owner on 2026-08-26. Measure first-card time from the browser event that submits the selected suggestion through the first animation frame in which the first ranked Result Card has a nonempty layout box and computed opacity greater than zero.
+- Resolved with the project owner on 2026-08-26. Await each measured response and rendered state before the next action so only one Substitution Search request is active.
+
+### Testing coverage deviations
+
+- Add no Go integration test or Svelte component test for this phase. Those tests cannot measure the optimized browser, Fiber, and PostgreSQL stack or the first painted Result Card. The isolated real-stack Playwright performance scenario supplies the required evidence. Existing backend, component, and end-to-end suites remain regression coverage, but they do not run in the performance job because their load would invalidate the timing samples.
