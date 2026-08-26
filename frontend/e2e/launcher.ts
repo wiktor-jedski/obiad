@@ -123,6 +123,10 @@ const OUTAGE_SUITES = [
     grep: "Control accessibility failure states",
     label: "Control accessibility failure states",
   },
+  {
+    grep: "Responsive presentation failure surfaces",
+    label: "Responsive presentation failure surfaces",
+  },
 ] as const;
 
 const PROCESS_START_TIMEOUT_MS = 60_000;
@@ -1356,7 +1360,7 @@ async function runStack(resources: OwnedResources): Promise<number> {
       "playwright",
       "test",
       "--grep-invert",
-      "Substitution request failures|Control accessibility failure states|Result Card motion",
+      "Substitution request failures|Control accessibility failure states|Result Card motion|Responsive presentation failure surfaces",
     ],
     {
       cwd: FRONTEND,
