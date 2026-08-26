@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Run repository CI checks against a disposable PostgreSQL service."""
+"""Run repository CI checks."""
 
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import shlex
@@ -107,15 +108,20 @@ def published_postgres_port(container_name: str) -> int:
     return int(port)
 
 
-def run_ci_checks() -> None:
-    """Generate code, validate planning files, and run all compile and test checks."""
+def run_frontend_checks() -> None:
+    """Install frontend dependencies and run static frontend checks."""
 
     run_checked([sys.executable, "scripts/validate_phase_plan.py"])
-    run_checked(["go", "generate", "./..."], cwd=BACKEND_ROOT)
     run_checked(["bun", "install", "--frozen-lockfile"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "typecheck"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "format:check"], cwd=FRONTEND_ROOT)
+
+
+def run_backend_checks() -> None:
+    """Generate backend code and run all backend tests."""
+
+    run_checked(["go", "generate", "./..."], cwd=BACKEND_ROOT)
 
     container_name = f"obiad-ci-postgres-{os.getpid()}-{secrets.token_hex(4)}"
     password = secrets.token_urlsafe(24)
@@ -160,11 +166,46 @@ def run_ci_checks() -> None:
         )
 
 
+def run_e2e_checks() -> None:
+    """Install frontend dependencies and run the real-stack E2E suite."""
+
+    run_checked(["bun", "install", "--frozen-lockfile"], cwd=FRONTEND_ROOT)
+    run_checked(["bun", "run", "test:e2e"], cwd=FRONTEND_ROOT)
+
+
+def run_ci_checks(
+    *, backend: bool = False, frontend: bool = False, e2e: bool = False
+) -> None:
+    """Run selected CI checks, or every check when no selection is provided."""
+
+    if not any((backend, frontend, e2e)):
+        backend = frontend = e2e = True
+
+    if frontend:
+        run_frontend_checks()
+    if backend:
+        run_backend_checks()
+    if e2e:
+        run_e2e_checks()
+
+
 def main() -> int:
     """Run CI checks and return a shell-compatible status code."""
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--backend", action="store_true", help="run backend generation and tests"
+    )
+    parser.add_argument(
+        "--frontend", action="store_true", help="run frontend static checks"
+    )
+    parser.add_argument(
+        "--e2e", action="store_true", help="run the real-stack Playwright suite"
+    )
+    args = parser.parse_args()
+
     try:
-        run_ci_checks()
+        run_ci_checks(backend=args.backend, frontend=args.frontend, e2e=args.e2e)
     except FileNotFoundError as error:
         print(f"error: required command not found: {error.filename}", file=sys.stderr)
         return 1
