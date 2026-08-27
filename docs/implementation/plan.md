@@ -2,7 +2,7 @@
 
 Implement the phases in order. Each phase adds one feature or one required technical capability.
 
-Before a phase starts, add concrete tasks for that phase to [the task list](task-list.md). Add tasks for that phase only. Stop after each phase gate. Review the phase diff before the next phase starts.
+Before a phase starts, add concrete tasks for that phase to [the task list](task-list.md). Add tasks for that phase only. Keep one phase to a reviewable one-week change, normally no more than about 5,000 changed lines. Stop after each phase gate. Review the phase diff before the next phase starts.
 
 Use the architecture in [architecture.md](../architecture/architecture.md). Use the terms in [CONTEXT.md](../../CONTEXT.md). Use real PostgreSQL and real HTTP interfaces for integration checks. Do not keep development-only unit tests.
 
@@ -778,11 +778,11 @@ Run `uv run python scripts/check_comments.py backend --extension .go --max-comme
 
 Read the Phase 20 diff. Confirm that one Python tool checks all three source extensions, ignore patterns are defined in the script, and CI runs one backend invocation plus two frontend invocations before Phase 21 tasks are generated.
 
-## Phase 21 — Browser quantity reprojection
+## Phase 21 — Quantity reprojection contract
 
 **Goal**
 
-Reproject the selected quantity and the current result values in the browser without a new HTTP request, a pending state, or a spinner.
+Define browser ownership of quantity projection before the HTTP contract changes.
 
 **Depends on**
 
@@ -790,22 +790,17 @@ Phase 20.
 
 **Implement**
 
-- Resolve IDEA-001 in the requirements, architecture, and authoritative OpenAPI document before application code changes.
-- Keep each stored Macro Profile in its existing canonical per-100 g or per-100 ml form. Do not add stored per-unit coefficients, a second nutrition representation, or a browser copy of the Food Catalog.
+- Resolve IDEA-001 in the requirements and architecture.
+- Keep each Macro Profile in one canonical per-100 g or per-100 ml form.
 - Keep exclusion, Nutritional Similarity, deterministic rank order, paging, and catalog access in the Find Substitute Page Module.
-- Remove Food Quantity from the Substitute Search request and query identity because quantity does not change eligibility, order, or the requested page.
-- Replace quantity-dependent display values in the Substitute response with the current page's calculation basis: the selected Food Object Macro Profile, base unit, exact optional Serving base quantity, and each returned Substitute's Macro Profile and base unit.
-- Keep the exact Serving base quantity in browser state for calculation only. Do not render it as a separate value.
-- Add one pure browser projection function. Use it for the initial default quantity and every later valid quantity commit.
-- Convert a Serving count to the selected Food Object base quantity. Derive input calories, equal-calorie Matched Quantities, and input and Substitute macronutrients from the returned per-100 Macro Profiles.
-- Use full calculation precision and round only the projected display values: calories and Matched Quantity to whole numbers and macronutrients to 0.1 g.
-- Keep backend-derived similarity percentages unchanged during reprojection.
-- Make a valid quantity commit synchronous and local. It must not change the Substitute query key, start or cancel a request, acquire the Substitution Search lock, enter a pending interaction state, or queue later intent.
-- Remove quantity-recalculation placeholder data, card pending props, retained-content hiding, and selected-food and result-card spinners. Keep the established new-Search and MORE! request behavior.
-- Preserve current result IDs, rank order, page, images, card identity, motion state, focus, active Interface Language, and localized text during reprojection.
-- Update generated clients, integration coverage, and browser coverage for the new transport and ownership split. Remove superseded backend display-projection and quantity-recalculation paths and tests.
+- Specify that Food Quantity does not change eligibility, order, or the requested page.
+- Specify that the backend returns the selected Food Object and current page calculation basis.
+- Specify that the browser converts Serving counts and projects input calories, Matched Quantities, and macronutrients.
+- Specify full-precision calculation and final display rounding.
+- Specify that a valid quantity commit starts no HTTP request and changes no result identity, order, page, motion, focus, or language state.
+- Do not change OpenAPI or application code.
 
-**Requirements that are revised and reverified**
+**Requirements that are revised**
 
 - [REQ-025](../requirements/requirements.md#req-025--quantity-syntax)
 - [REQ-026](../requirements/requirements.md#req-026--invalid-quantity)
@@ -822,8 +817,460 @@ Phase 20.
 
 **Phase gate**
 
-Run `python3 scripts/ci_check.py` from the repository root. Run `bun run test:e2e` from `frontend/`. Select a Food Object and record the completed initial Substitute Search request count. Commit changed valid base-unit and Serving quantities and prove that the browser starts zero additional Substitute Search requests. Verify the selected-food summary and all current cards use the returned source Macro Profiles, match known initial and changed-quantity calculation fixtures, and apply the specified final rounding. Verify result IDs, rank order, page, card identity, motion state, focus, language, and localized text do not change. Verify no selected-food or result-card spinner appears and no quantity-recalculation pending state or request lock occurs. Activate MORE! and select a new Food Object to prove that each action still starts its specified request and that the returned page uses the same browser projection function.
+Run `python3 scripts/validate_phase_plan.py` from the repository root. Trace every revised requirement to one architecture owner. Verify that the requirements and architecture agree on the request identity, returned calculation basis, browser calculations, precision, rounding, and quantity-commit invariants. Verify that OpenAPI and application code did not change.
 
 **Review stop**
 
-Read the Phase 21 diff. Record the revised requirements as verified. The implementation plan is complete.
+Read the Phase 21 diff. Approve the ownership boundary before Phase 22 tasks are generated. Do not record product requirements as verified in this documentation-only phase.
+
+## Phase 22 — Quantity-independent Substitute API
+
+**Goal**
+
+Return a quantity-independent Substitute page and project its values in the browser while the existing quantity-request lifecycle remains.
+
+**Depends on**
+
+Phase 21.
+
+**Implement**
+
+- Remove Food Quantity from the Substitute Search request and backend operation input.
+- Remove Food Quantity from backend request identity, validation, errors, and calculation paths.
+- Return the selected Food Object Macro Profile, base unit, and exact optional Serving base quantity.
+- Return each current-page Substitute Macro Profile and base unit.
+- Keep backend-derived Nutritional Similarity and deterministic rank order unchanged.
+- Remove backend-derived quantity-dependent calories, Matched Quantities, and scaled macronutrients from the response.
+- Regenerate the Go and TypeScript clients.
+- Add one pure browser projection function.
+- Convert Serving counts to selected base quantity in the projection function.
+- Derive input calories, equal-calorie Matched Quantities, and scaled macronutrients from the returned basis.
+- Round only final display values: calories and Matched Quantity to whole numbers and macronutrients to 0.1 g.
+- Adapt the current browser request completion path to use the projection function.
+- Keep the existing behavior in which a valid quantity commit can start a redundant Substitute Search request. Phase 23 removes that request lifecycle.
+- Remove superseded backend display-projection code and tests.
+
+**Requirements that become testable**
+
+- [REQ-029](../requirements/requirements.md#req-029--derived-calories)
+- [REQ-031](../requirements/requirements.md#req-031--matched-quantity)
+- [REQ-037](../requirements/requirements.md#req-037--card-data)
+- [REQ-038](../requirements/requirements.md#req-038--base-unit-matched-quantity)
+- [REQ-039](../requirements/requirements.md#req-039--display-precision)
+- [REQ-040](../requirements/requirements.md#req-040--calculation-precision)
+- [REQ-078](../requirements/requirements.md#req-078--displayed-calories)
+
+**Phase gate**
+
+Run `go generate ./...` and `go test ./...` from `backend/`. Run `bun run typecheck`, `bun run format:check`, and `bun run test:e2e` from `frontend/`. Verify that two different valid quantities request the same backend page basis. Verify known base-unit and Serving projection fixtures, equal-calorie Matched Quantities, full precision, and each final rounding boundary. Verify that result IDs, similarity values, rank order, and page do not depend on quantity.
+
+**Review stop**
+
+Read the Phase 22 diff. Record REQ-029, REQ-031, REQ-037 through REQ-040, and REQ-078 as verified before Phase 23 tasks are generated.
+
+## Phase 23 — Local quantity commits
+
+**Goal**
+
+Commit valid Food Quantity changes locally without a request, pending state, lock, or spinner.
+
+**Depends on**
+
+Phase 22.
+
+**Implement**
+
+- Remove Food Quantity from the browser Substitute Search query key.
+- Use the pure projection function for the initial default quantity and every later valid commit.
+- Make each valid quantity commit synchronous and local.
+- Start no request, cancel no request, and queue no later intent for a quantity commit.
+- Do not acquire the Substitution Search lock or enter a pending interaction state.
+- Keep the exact Serving base quantity in calculation state and do not render it separately.
+- Remove quantity-recalculation placeholder data, card pending properties, and retained-content hiding.
+- Remove selected-food and result-card spinners.
+- Remove superseded quantity-recalculation states, transitions, tests, and request failures.
+- Preserve current result IDs, rank order, page, images, card identity, motion state, focus, active Interface Language, and localized text.
+- Keep new-Search and MORE! request behavior unchanged.
+
+**Requirements that become testable**
+
+- [REQ-025](../requirements/requirements.md#req-025--quantity-syntax)
+- [REQ-026](../requirements/requirements.md#req-026--invalid-quantity)
+- [REQ-027](../requirements/requirements.md#req-027--quantity-editing)
+- [REQ-028](../requirements/requirements.md#req-028--quantity-recalculation)
+- [REQ-081](../requirements/requirements.md#req-081--single-card-loading-spinner)
+
+Reverify REQ-029, REQ-031, REQ-037 through REQ-040, and REQ-078 through the completed interaction.
+
+**Phase gate**
+
+Run `python3 scripts/ci_check.py` from the repository root. Run `bun run test:e2e` from `frontend/`. Record the completed initial Substitute Search request count. Commit changed valid base-unit and Serving quantities and prove that the browser starts zero additional Substitute Search requests. Verify known projection fixtures and final rounding. Verify that result IDs, order, page, images, card identity, motion, focus, language, and localized text do not change. Verify that no card spinner, pending state, request lock, or quantity failure state occurs.
+
+**Review stop**
+
+Read the Phase 23 diff. Record the revised quantity requirements as verified before Phase 24 tasks are generated.
+
+## Phase 24 — Production catalog repository foundation
+
+**Goal**
+
+Create the separate production-data repository and define its application boundary without adding production records.
+
+**Depends on**
+
+Phase 23.
+
+**Implement**
+
+- Change the Food Object definition in `CONTEXT.md` to one generic prepared dish with nutritional data. Remove basic foods from the definition.
+- Revise the catalog requirements and architecture to distinguish production Meal data from application-owned dummy data.
+- Keep the application domain and HTTP name Food Object.
+- Create the separate `obiad-data` repository and attach it at the root `data/` Git submodule path.
+- Use Python 3.12, `pyproject.toml`, and an uv lockfile in `obiad-data`.
+- Keep production authoring data and its acquisition, validation, calculation, and export tools in `obiad-data`.
+- Store one canonical JSON file per Ingredient and per Meal.
+- Give each record one stable opaque positive ID and one current positive revision number.
+- Use Git history instead of retaining superseded revision files.
+- Define Ingredient names, aliases, source record, Macro Profile, and optional sourced density fields.
+- Define Meal names, resolved composition, omissions, structured cooking operations, yield, optional Serving, optional source URL, Nutrition Basis, Food Family, and revision fields.
+- Define controlled enums for yield method and cooking-operation type.
+- Define the application-owned, schema-versioned aggregate catalog JSON interface.
+- Include catalog version, data-license notices, and release download location in aggregate metadata.
+- Keep raw Open Food Facts and USDA downloads in an ignored local cache.
+- Do not store source HTML, page text, source-content checksums, or generated catalog output.
+- Add no production Ingredient or Meal record.
+
+**Requirements that are revised**
+
+- [REQ-002](../requirements/requirements.md#req-002--seeded-catalog-source)
+- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
+- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
+- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
+- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
+- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
+- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
+- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
+- [REQ-070](../requirements/requirements.md#req-070--deterministic-database-setup)
+- [REQ-071](../requirements/requirements.md#req-071--catalog-coverage)
+- [REQ-072](../requirements/requirements.md#req-072--test-designed-nutrition)
+
+Add the production catalog, source attribution, recipe composition, and cooking-operation requirements needed by Phases 25 through 31.
+
+**Phase gate**
+
+Run `python3 scripts/validate_phase_plan.py` from the repository root. Initialize the submodule in a fresh checkout. Run `uv sync --frozen` from `data/`. Run the data-contract validation command against empty Ingredient and Meal directories. Verify that Obiad works with the submodule uninitialized. Verify that no production record, upstream dump, generated catalog, HTML, page text, or checksum is committed.
+
+**Review stop**
+
+Read the Phase 24 diff. Approve the repository boundary, domain terms, record contracts, catalog interface, and new requirements before Phase 25 tasks are generated.
+
+## Phase 25 — Recipe adapter vertical slice
+
+**Goal**
+
+Turn one successful agent extraction of Pierogi ruskie into one reusable website adapter.
+
+**Depends on**
+
+Phase 24.
+
+**Implement**
+
+- Define one typed `scrape_recipe(url)` adapter contract in `obiad-data`.
+- Return source URL, title, raw Ingredient lines, declared finished mass or volume, serving count, and preparation instructions.
+- Represent each absent optional field explicitly.
+- Register adapters by supported hostname and URL pattern.
+- Prefer complete schema.org Recipe JSON-LD.
+- Use documented embedded application state when JSON-LD is incomplete.
+- Use site-specific DOM selectors when structured data is insufficient.
+- Use Python Playwright when the supported page requires JavaScript rendering.
+- Return a stable structural error when no registered adapter supports the URL or an expected structure is absent.
+- Have the discovery agent extract one public Pierogi ruskie recipe and record the successful tools, queries, sections, selectors, and edge cases in a handoff.
+- Have a second agent implement the adapter from that handoff.
+- Prefer supported websites during later discovery. Add a new adapter only when supported websites have no suitable recipe.
+- Do not support authenticated, blocked, or prohibited pages.
+- Do not store the handoff's page content, HTML, source text, or checksum as production data.
+
+**Requirements that become testable**
+
+None. This phase adds production-data acquisition tooling.
+
+**Phase gate**
+
+Run the `obiad-data` adapter checks. Run `scrape_recipe` against the selected live Pierogi ruskie URL. Verify the returned title, every Ingredient line, declared yield, serving count, instruction order, and source URL against the visible page. Break one expected selector or structured-data path and verify a structural error rather than partial data. Verify that no source content or checksum is written to the repository.
+
+**Review stop**
+
+Read the Phase 25 diff. Approve the adapter interface, live extraction, failure contract, and agent handoff before Phase 26 tasks are generated.
+
+## Phase 26 — Ingredient catalog vertical slice
+
+**Goal**
+
+Resolve every Pierogi ruskie Ingredient to sourced, reusable nutrition data.
+
+**Depends on**
+
+Phase 25.
+
+**Implement**
+
+- Make canonical Ingredient nutrition use a 100 g basis.
+- Make carbohydrate mean available carbohydrate.
+- Let an agent search Open Food Facts and USDA for each exact Ingredient kind.
+- Let the agent select one representative source record. Do not aggregate brands or add automatic candidate scoring.
+- Keep brand and source product name in provenance only.
+- Store the Open Food Facts barcode or USDA record ID and source URL.
+- Use a direct available-carbohydrate value when present.
+- For USDA carbohydrate by difference, subtract dietary fibre through one recorded conversion method and reject an invalid result.
+- Define versioned documented defaults for ambiguous recipe terms such as flour or oil.
+- Store an optional `density_g_per_ml` and its source URL when a recipe needs volume-to-mass conversion.
+- Search for and store an Ingredient-specific household-unit conversion when a direct gram quantity is absent.
+- Do not use a universal density or an unstored approximation.
+- Let agent-found quantity conversions enter production automatically when required fields and numeric bounds validate.
+- Create the complete Ingredient set required by the selected Pierogi ruskie recipe.
+- Keep upstream downloads outside Git.
+
+**Requirements that become testable**
+
+None. Runtime Ingredient access remains out of scope.
+
+**Phase gate**
+
+Run the `obiad-data` validation command for the complete Pierogi ruskie Ingredient set. For every Ingredient, verify the exact kind, canonical names, stable ID, revision, source type, source record ID, source URL, available-carbohydrate method, and Macro Profile against the selected source. For every volume or household quantity, verify a stored sourced density or direct conversion. Prove that each recipe quantity converts to grams without an unstored default.
+
+**Review stop**
+
+Read the Phase 26 diff. Approve every Ingredient identity, source, conversion, density, and default rule before Phase 27 tasks are generated.
+
+## Phase 27 — Meal compiler vertical slice
+
+**Goal**
+
+Compile Pierogi ruskie from resolved Ingredients into the first deterministic production Meal catalog.
+
+**Depends on**
+
+Phase 26.
+
+**Implement**
+
+- Store the resolved Ingredient IDs and accepted gram quantities for the Meal.
+- Store the optional recipe source URL and do not use it as Meal identity.
+- Convert extracted instructions into required agent-authored structured cooking operations.
+- Link each cooking operation to applicable Ingredient IDs.
+- Do not store or publish source instruction prose.
+- Omit and record qualitative salt, dry herbs, and dry spices.
+- Require an agent estimate for fats, caloric toppings, binders, coatings, sweeteners, dairy, and retained liquids.
+- Estimate retained water and exclude explicitly discarded water.
+- Reject a Meal when retention of a potentially material Ingredient cannot be determined.
+- Sum retained Ingredient protein, available carbohydrate, and fat without cooking-retention factors.
+- Use declared finished mass when present; otherwise use summed input mass.
+- Store `declared_finished_mass` or `summed_input_mass` as the required yield-method enum.
+- Use a 100 ml Nutrition Basis only when the recipe declares finished volume. Otherwise use 100 g.
+- Derive one Serving as finished yield divided by declared serving count.
+- Store no Serving when the recipe has no serving count.
+- Export stable Food Object IDs, localized names, Macro Profiles, explicit basis units, optional Servings, optional source URLs, and Food Family membership.
+- Validate every authoring record before calculation and the complete aggregate before output.
+- Generate output in a temporary location and do not commit it.
+
+**Requirements that become testable**
+
+- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
+- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
+- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
+- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
+- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
+- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
+- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
+
+**Phase gate**
+
+Run the `obiad-data` validation and catalog-export commands two times from a clean checkout. Compare the generated files byte for byte. Independently recalculate Pierogi ruskie total macros, yield, Nutrition Basis values, and optional Serving from its Ingredient records. Verify the structured cooking-operation order and references. Verify that the output contains no Ingredient records, source prose, HTML, or checksum.
+
+**Review stop**
+
+Read the Phase 27 diff. Record the listed data requirements as verified for the Pierogi ruskie export before Phase 28 tasks are generated.
+
+## Phase 28 — External catalog loader
+
+**Goal**
+
+Load either application-owned dummy data or an external production Meal catalog through one transactional application interface.
+
+**Depends on**
+
+Phase 27.
+
+**Implement**
+
+- Replace Physical State as the quantity-basis authority with an explicit `g` or `ml` Nutrition Basis unit.
+- Store one optional source URL on each Food Object.
+- Keep runtime Ingredient access out of the PostgreSQL schema and backend.
+- Keep historical applied migrations immutable.
+- Add a migration that removes the historical embedded seed result and leaves an empty current catalog.
+- Move the current 38 rows into an application-owned dummy catalog JSON file with the same stable IDs and test-designed values.
+- Add an Obiad-owned `catalogload` command that reads the application-owned catalog JSON interface.
+- Validate schema version, complete metadata, IDs, revisions, localized names, Macro Profiles, basis units, Servings, source URLs, and Food Family references before mutation.
+- Reject duplicate IDs, invalid references, unknown fields, nonfinite values, and incomplete catalogs.
+- Replace Food Families and Food Objects in one offline transaction.
+- Serialize concurrent loaders with the existing database advisory-lock policy.
+- Leave every existing row unchanged when validation or database mutation fails.
+- Keep schema-owner writes and SELECT-only runtime access.
+- Make CI, integration checks, and normal dummy setup call `dbsetup` and then `catalogload` with the dummy catalog.
+- Do not initialize or read the production-data submodule in CI.
+
+**Requirements that become testable**
+
+- [REQ-002](../requirements/requirements.md#req-002--seeded-catalog-source)
+- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
+- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
+- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
+- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
+- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
+- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
+- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
+- [REQ-070](../requirements/requirements.md#req-070--deterministic-database-setup)
+- [REQ-071](../requirements/requirements.md#req-071--catalog-coverage)
+- [REQ-072](../requirements/requirements.md#req-072--test-designed-nutrition)
+
+**Phase gate**
+
+Run `python3 scripts/ci_check.py` from the repository root. Load the dummy catalog into a new database two times and verify identical rows and IDs. Load the one-Meal production artifact into a separate database and verify its exact exported values. Attempt catalogs with each invalid schema, reference, value, duplicate, and truncation condition and prove that existing rows remain unchanged. Verify that the runtime role cannot load or change catalog data. Verify that CI succeeds with the submodule uninitialized.
+
+**Review stop**
+
+Read the Phase 28 diff. Record the listed requirements as verified for dummy setup and the external loader before Phase 29 tasks are generated.
+
+## Phase 29 — First production Meal batch
+
+**Goal**
+
+Create at least five accepted recipe-derived Meals from the first half of the current prepared-dish targets.
+
+**Depends on**
+
+Phase 28.
+
+**Implement**
+
+- Attempt Pizza Margherita, Pizza Capricciosa, Lasagna, Pierogi ruskie, Chicken breast, Pork chop, Beef steak, Gyoza, Kebab, Gyros, Polish chicken soup, Protein shake, and Beef cheeseburger.
+- Treat each name as a discovery target, not as permission to copy current nutrition.
+- Qualify a generic target name from the selected recipe before admission.
+- Reuse supported recipe websites first.
+- Use the Phase 25 discovery, handoff, and second-agent implementation workflow for each required new website adapter.
+- Reuse existing Ingredients and documented defaults.
+- Add sourced Ingredient records, densities, and conversions only when a Meal requires them.
+- Require resolved composition, structured cooking operations, yield method, explicit Nutrition Basis, stable identity, and current revision for every accepted Meal.
+- Keep one versioned rejection record with the target and exact reason for each rejected Meal.
+- Keep product and raw-food targets out of the production Meal catalog.
+- Reach at least five accepted production Meals.
+- Do not change application code.
+
+**Requirements that become testable**
+
+Collect production-data evidence for REQ-004 through REQ-010. Do not replace the dummy runtime catalog in this phase.
+
+**Phase gate**
+
+Run all `obiad-data` adapter, record-validation, calculation, and export checks. Verify that all 13 targets have one accepted Meal or one rejection record. Independently recalculate each accepted Meal from its Ingredient records. Generate the catalog twice and compare it byte for byte. Verify at least five accepted Meals, no product or raw-food record, no copied source prose, and no generated output committed to Git.
+
+**Review stop**
+
+Read the Phase 29 diff. Approve every accepted Meal, rejection, new Ingredient, adapter, estimate, density, conversion, and operation sequence before Phase 30 tasks are generated.
+
+## Phase 30 — Initial production catalog completion
+
+**Goal**
+
+Attempt every remaining prepared-dish target and publish an initial catalog with at least ten accepted Meals.
+
+**Depends on**
+
+Phase 29.
+
+**Implement**
+
+- Attempt Fried chicken wings, Pancakes, Omelette, Oatmeal, Paella, Pho, Beetroot borscht, Coleslaw, Mondongo, Bandeja paisa, Pastel de nata, Cheesecake, and Goulash.
+- Apply the same adapter, Ingredient, normalization, cooking-operation, calculation, revision, and rejection rules as Phase 29.
+- Verify that all 26 prepared-dish targets from the historical dummy seed have been attempted across Phases 29 and 30.
+- Reach at least ten accepted production Meals.
+- Add an excluding Pizza Food Family for accepted pizza variants.
+- Add an excluding Dumplings Food Family containing Pierogi ruskie and Gyoza when both are accepted.
+- Do not add a descriptive category system.
+- Keep rejected targets out of the generated catalog.
+- Add Open Food Facts ODbL notices and USDA attribution to catalog metadata.
+- Publish the generated machine-readable catalog as a versioned `obiad-data` release artifact.
+- Offer the artifact free of charge and link it from the release metadata.
+- Keep application code and its license separate from the data license.
+
+**Requirements that become testable**
+
+- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
+- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
+- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
+- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
+- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
+- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
+- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
+
+Collect production-catalog evidence for the revised REQ-071. Runtime verification becomes available in Phase 31.
+
+**Phase gate**
+
+Run all `obiad-data` checks from a clean checkout. Verify one accepted or rejected record for every designated target and at least ten accepted Meals. Recalculate every accepted Meal. Verify stable IDs and revisions, required structured operations, explicit yield methods, Serving derivation, Food Family membership and exclusions, source references, attribution metadata, and deterministic byte-identical export. Download the published release artifact and compare it byte for byte with a local export from the tagged data commit.
+
+**Review stop**
+
+Read the Phase 30 diff. Approve the initial production catalog and release artifact before Phase 31 tasks are generated.
+
+## Phase 31 — Production catalog startup
+
+**Goal**
+
+Start Obiad with the pinned production Meal catalog and expose its data attribution and download.
+
+**Depends on**
+
+Phases 23, 28, and 30.
+
+**Implement**
+
+- Add `scripts/prod.py`.
+- Reuse the PostgreSQL, backend, frontend, readiness, signal, and cleanup orchestration from `scripts/start.py`.
+- Do not duplicate the stack lifecycle implementation.
+- Require the `data/` submodule to be initialized at its pinned commit.
+- Run the pinned `obiad-data` validator and exporter into a temporary file.
+- Require at least ten accepted Meals before database mutation.
+- Run application schema migrations.
+- Load the generated production catalog in one offline transaction.
+- Discard the temporary generated file after loading.
+- Start Fiber only after catalog loading succeeds.
+- Keep `scripts/start.py`, CI, and integration checks on application-owned dummy data.
+- Add one persistent localized Data Sources footer link.
+- Link to Open Food Facts attribution, the ODbL, USDA attribution, exact catalog version, and the free catalog download.
+- Keep Ingredients out of runtime suggestions, substitutions, and PostgreSQL.
+- Return only recipe-derived Meals from the production catalog.
+
+**Requirements that become testable**
+
+- [REQ-002](../requirements/requirements.md#req-002--seeded-catalog-source)
+- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
+- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
+- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
+- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
+- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
+- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
+- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
+- [REQ-070](../requirements/requirements.md#req-070--deterministic-database-setup)
+- [REQ-071](../requirements/requirements.md#req-071--catalog-coverage)
+
+Verify the production catalog and attribution requirements introduced in Phase 24.
+
+**Phase gate**
+
+Run `python3 scripts/prod.py` from a checkout with the pinned submodule initialized. Verify that migrations and catalog loading finish before Fiber starts. Search for every accepted Meal in English and Polish. Verify that suggestions and substitutions contain only production Meals and no Ingredient or historical product record. Verify at least ten Meals, stable IDs, explicit basis units, optional Servings, source URLs, and Food Family exclusions through PostgreSQL and HTTP. Open the Data Sources link and verify Open Food Facts, ODbL, USDA, exact catalog version, and the matching free download. Stop the launcher and verify that every owned process, container, credential file, and generated temporary catalog is removed.
+
+**Review stop**
+
+Read the Phase 31 diff. Record the revised catalog requirements and the production catalog and attribution requirements as verified. The implementation plan is complete.
