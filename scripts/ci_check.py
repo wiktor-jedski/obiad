@@ -112,6 +112,32 @@ def run_frontend_checks() -> None:
     """Install frontend dependencies and run static frontend checks."""
 
     run_checked([sys.executable, "scripts/validate_phase_plan.py"])
+    run_checked(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/check_comments.py",
+            "frontend",
+            "--extension",
+            ".ts",
+            "--max-comment-lines",
+            "2",
+        ]
+    )
+    run_checked(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/check_comments.py",
+            "frontend",
+            "--extension",
+            ".svelte",
+            "--max-comment-lines",
+            "2",
+        ]
+    )
     run_checked(["bun", "install", "--frozen-lockfile"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "typecheck"], cwd=FRONTEND_ROOT)
@@ -122,7 +148,21 @@ def run_frontend_checks() -> None:
 def run_backend_checks() -> None:
     """Generate backend code and run all backend tests."""
 
+    run_checked(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/check_comments.py",
+            "backend",
+            "--extension",
+            ".go",
+            "--max-comment-lines",
+            "2",
+        ]
+    )
     run_checked(["go", "generate", "./..."], cwd=BACKEND_ROOT)
+    run_checked(["go", "tool", "golangci-lint", "run", "./..."], cwd=BACKEND_ROOT)
 
     container_name = f"obiad-ci-postgres-{os.getpid()}-{secrets.token_hex(4)}"
     password = secrets.token_urlsafe(24)

@@ -761,7 +761,7 @@ None.
 **Implement**
 
 - Add one Python comment checker under `scripts/`. Accept one directory, one `.go`, `.ts`, or `.svelte` extension, and a maximum comment-line count per invocation. Keep repository ignore patterns in the script. Use syntax-aware parsers, scan all matching files, print every violating comment as a start-to-finish source range, and exit with status 1 after the complete scan when violations exist.
-- Add command-level fixtures for Go, TypeScript, and Svelte comments, ignored paths, strings that contain comment delimiters, accepted boundaries, excessive lines, complete diagnostics, and exit statuses. Pin and install the parser dependency used by local and CI runs.
+- Use the root uv project and lockfile to pin and install the syntax-aware parser dependencies used by local and CI runs.
 - Make the backend CI path run the checker once for `.go` files and make the frontend CI path run it twice, once for `.ts` files and once for `.svelte` files. Keep the separate pinned `golangci-lint` backend check.
 - Clean the existing backend comments. Remove repository issue, requirement, architecture, phase, task, and planning-document references; shorten every comment to the configured boundary; and remove historical rationale while preserving current behavior and necessary invariants.
 - Clean the existing frontend comments with the same policy. Generated, dependency, cache, and build-output paths remain excluded through the checker constants.
@@ -772,7 +772,7 @@ None. This phase adds static-analysis enforcement and does not change product be
 
 **Phase gate**
 
-Run `python3 scripts/check_comments.py backend --extension .go --max-comment-lines 2`, `go test ./...`, and `go tool golangci-lint run ./...` for the backend. Run `python3 scripts/check_comments.py frontend --extension .ts --max-comment-lines 2`, `python3 scripts/check_comments.py frontend --extension .svelte --max-comment-lines 2`, and `bun run lint` for the frontend. Run `python3 scripts/ci_check.py --backend` and `python3 scripts/ci_check.py --frontend` from the repository root; the three comment-checker invocations, `golangci-lint`, existing static checks, and boundary tests must pass.
+Run `uv run python scripts/check_comments.py backend --extension .go --max-comment-lines 2`, `go test ./...`, and `go tool golangci-lint run ./...` for the backend. Run `uv run python scripts/check_comments.py frontend --extension .ts --max-comment-lines 2`, `uv run python scripts/check_comments.py frontend --extension .svelte --max-comment-lines 2`, and `bun run lint` for the frontend. Run `python3 scripts/ci_check.py --backend` and `python3 scripts/ci_check.py --frontend` from the repository root; the three comment-checker invocations, `golangci-lint`, and existing static checks must pass.
 
 **Review stop**
 
