@@ -23,7 +23,7 @@ function isInsideTypeGuard(node: ESTree.Node): boolean {
 	return false;
 }
 
-/** Disallow runtime typeof checks that narrow unparsed values instead of decoding them. */
+
 export const noRuntimeTypeofRule = defineRule({
 	meta: {
 		type: "problem",

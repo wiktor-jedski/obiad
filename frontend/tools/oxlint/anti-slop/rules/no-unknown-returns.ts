@@ -23,7 +23,7 @@ function referencedAliasName(type: ESTree.TSType): string | null {
     : null;
 }
 
-/** Ban function contracts that return unknown instead of a parsed domain type. */
+
 export const noUnknownReturnsRule = defineRule({
   meta: {
     type: "problem",

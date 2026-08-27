@@ -1,33 +1,3 @@
-/**
- * Result-card component integration — happy-dom component integration
- * scenario (task 29; ARCH-001, ARCH-003, ARCH-015, ARCH-020, ARCH-022,
- * REQ-011, REQ-037, REQ-038, REQ-039, REQ-040, ISSUE-008).
- *
- * `bun test` runs this file with the pinned `happy-dom` and
- * `@testing-library/svelte` packages (no generated-client or network call,
- * no backend or database; ISSUE-007). The scenario renders the production
- * `ResultCard.svelte` directly with generated `SubstituteItem` values and
- * proves the full card contract:
- *
- *   - the approved card field order — image, localized name, whole Matched
- *     Quantity, centered calorie value, protein, carbohydrate, fat, and
- *     similarity — with the exact English and Polish labels and copy
- *     (ISSUE-008);
- *   - Matched Quantity stays whole with only `g` or `ml` and no Serving
- *     equivalent (REQ-038), similarity stays a whole percentage, and every
- *     macronutrient shows exactly one active-locale decimal place followed
- *     by `g` — a dot in English and a comma in Polish (REQ-039, ISSUE-008);
- *   - the identical bundled placeholder and empty `alt` for an absent key,
- *     each of the four seeded opaque keys (`pizza-margherita`,
- *     `chicken-breast`, `milk`, `gyoza`), and an arbitrary unmapped key,
- *     with no third-party request (REQ-011, ARCH-015, ISSUE-008);
- *   - a dispatched image error keeps the same bundled placeholder with no
- *     error loop; and
- *   - the card never recalculates or rerounds a nutrition value: the
- *     displayed strings are the exact API-provided numbers formatted for
- *     display (REQ-040).
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/svelte";
 import { foodPlaceholderUrl } from "./lib/assets";
@@ -36,7 +6,6 @@ import { formatMacronutrientValue, getDictionary } from "./lib/i18n";
 import type { InterfaceLanguage } from "./lib/i18n";
 import type { SubstituteItem } from "./client/types.gen";
 
-/** The four seeded opaque image keys (ISSUE-002, ISSUE-008). */
 const SEEDED_IMAGE_KEYS = [
   "pizza-margherita",
   "chicken-breast",
@@ -44,10 +13,8 @@ const SEEDED_IMAGE_KEYS = [
   "gyoza",
 ] as const;
 
-/** An arbitrary unmapped image key. */
 const UNMAPPED_IMAGE_KEY = "some-unmapped-key";
 
-/** A display-ready generated Substitute with an absent image key. */
 const ITEM: SubstituteItem = {
   foodObjectId: 13,
   names: { en: "Gyoza", pl: "Pierożki gyoza" },
@@ -57,7 +24,6 @@ const ITEM: SubstituteItem = {
   similarityPercent: 85,
 };
 
-/** The exact ISSUE-008 card labels of the two supported dictionaries. */
 const LABELS = {
   en: {
     protein: "Protein",
@@ -75,11 +41,6 @@ const LABELS = {
   },
 } as const;
 
-/**
- * heading, whole Matched Quantity, centered calorie value, three labeled
- * macronutrient rows, and similarity, with API-provided values formatted for
- * display only (REQ-037, REQ-038, REQ-039, REQ-040).
- */
 function expectCardBody(
   container: HTMLElement,
   language: InterfaceLanguage,
@@ -91,8 +52,6 @@ function expectCardBody(
     throw new Error("Result card did not render");
   }
 
-  // Approved field order: image, localized name, whole Matched Quantity,
-  // centered calorie value, protein, carbohydrate, fat, similarity (ISSUE-008).
   const sequence = Array.from(
     cardElement.querySelectorAll(
       "img, h3, [data-result-card-matched-quantity], [data-result-card-calories], dt",
@@ -109,7 +68,6 @@ function expectCardBody(
     `DT:${getDictionary(language).similarityLabel()}`,
   ]);
 
-  // The exact ISSUE-008 label copy.
   const labels = LABELS[language];
   expect(getDictionary(language).proteinLabel()).toBe(labels.protein);
   expect(getDictionary(language).carbohydratesLabel()).toBe(
@@ -120,7 +78,6 @@ function expectCardBody(
   expect(getDictionary(language).similarityLabel()).toBe(
     labels.similarityLabel,
   );
-  // Matched Quantity stays whole with only `g` or `ml` (REQ-038).
   const matchedQuantity = cardElement.querySelector(
     "[data-result-card-matched-quantity]",
   );
@@ -129,9 +86,6 @@ function expectCardBody(
   );
   expect(cardElement.textContent ?? "").not.toMatch(/\bserving\b|\bporcja\b/i);
 
-  // Every macronutrient shows exactly one localized decimal place and `g`;
-  // calories shows whole kcal and similarity stays a whole percentage (REQ-039,
-  // REQ-078, ISSUE-008).
   const ddValues = Array.from(cardElement.querySelectorAll("dd")).map(
     (node) => node.textContent ?? "",
   );
@@ -149,8 +103,6 @@ function expectCardBody(
   const calories = cardElement.querySelector("[data-result-card-calories]");
   expect(calories?.textContent).toBe(`${item.calories} kcal`);
 
-  // English keeps a dot, Polish a comma, always with exactly one decimal
-  // place (REQ-039, ISSUE-008).
   const decimal = language === "en" ? "." : ",";
   for (const dd of ddValues.slice(0, 3)) {
     expect(dd).toMatch(new RegExp(`^[0-9]+\\${decimal}[0-9] g$`));
@@ -159,7 +111,6 @@ function expectCardBody(
   expect(ddValues[3]).toMatch(/^[0-9]+%$/);
 }
 
-/** Renders one ResultCard and returns the container element. */
 function renderCard(
   item: SubstituteItem,
   language: InterfaceLanguage,
@@ -193,17 +144,13 @@ describe("the result-card component", () => {
       if (image === null) {
         throw new Error("Result card image did not render");
       }
-      // The identical bundled placeholder (REQ-011, ARCH-015, ISSUE-008).
       expect(image.getAttribute("src")).toBe(foodPlaceholderUrl);
-      // Empty alternative text: the adjacent heading names the Food Object.
       expect(image.getAttribute("alt")).toBe("");
       expectCardBody(container, "en");
     } finally {
       globalThis.fetch = originalFetch;
     }
 
-    // No third-party request: the card performs no fetch, XHR, or external
-    // image load (ISSUE-008).
     expect(fetchCalls).toEqual([]);
   });
 
@@ -234,8 +181,6 @@ describe("the result-card component", () => {
     }
     expect(image.getAttribute("src")).toBe(foodPlaceholderUrl);
 
-    // An error event on the placeholder source must not rewrite or loop:
-    // the source stays the identical bundled placeholder (REQ-011).
     for (let attempt = 0; attempt < 2; attempt += 1) {
       image.dispatchEvent(new Event("error"));
       expect(image.getAttribute("src"), `after error ${attempt + 1}`).toBe(
@@ -246,10 +191,8 @@ describe("the result-card component", () => {
   });
 
   test("English and Polish cards show the exact localized name, labels, dot/comma decimals, and whole values", () => {
-    // English: dot decimal separator, English labels and name.
     expectCardBody(renderCard(ITEM, "en"), "en");
-    // Polish: comma decimal separator, Polish labels and name, no Serving
-    // equivalent (REQ-038, ISSUE-008).
+
     expectCardBody(renderCard(ITEM, "pl"), "pl");
   });
 
@@ -264,8 +207,6 @@ describe("the result-card component", () => {
     };
     const container = renderCard(oddItem, "en");
 
-    // Each rendered value equals the API value formatted for display; no
-    // browser-side rounding or calculation is applied (REQ-040, ARCH-001).
     expect(
       container.querySelector("[data-result-card-matched-quantity]")
         ?.textContent,
@@ -282,8 +223,7 @@ describe("the result-card component", () => {
     expect(
       container.querySelector("[data-result-card-calories]")?.textContent,
     ).toBe("728 kcal");
-    // The exact values survive: 35.7 formats to one decimal place, not a
-    // computed or rerounded number.
+
     expect(ddValues[0]).toBe("35.7 g");
   });
 });

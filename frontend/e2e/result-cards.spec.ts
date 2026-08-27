@@ -4,41 +4,6 @@ import type {
   SubstituteSearchResponse,
 } from "../src/client/types.gen";
 
-/**
- * Real-stack result-card scenario (task 29; ARCH-001, ARCH-003, ARCH-015,
- * ARCH-020, ARCH-022, REQ-011, REQ-036, REQ-037, REQ-038, REQ-039,
- * REQ-040, ISSUE-008; P07-G12, P07-G13, P07-G14, P07-G15).
- *
- * `bun run test:e2e` runs these tests against the complete disposable stack
- * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
- * real setup command, the real Fiber process on the fixed loopback listener
- * 127.0.0.1:8080, and the optimized Vite preview on the strict port 4173.
- * Each scenario drives a real pointer selection and observes the successful
- * page's three result cards rendered by the production `ResultCard.svelte`.
- *
- * The seeded input fixtures produce the deterministic first pages
- * (verified against the real Fiber process and the freshly seeded
- * PostgreSQL catalog; seed migration `0005_seed_food_catalog.sql`):
- * Pizza Margherita (Food Object 1) ranks `[13, 29, 26]` (Gyoza, Paella,
- * Pancakes), Chicken breast (5) ranks `[23, 11, 6]` (Turkey breast, Skyr
- * yogurt, Pork chop), and Milk (10) ranks `[33, 3, 21]` (Mondongo,
- * Lasagna, Beef cheeseburger). The scenario captures the API-provided
- * display-ready values from the real response and proves each card renders
- * those exact values formatted for display only: whole Matched Quantity in
- * `g` or `ml` with no Serving equivalent (REQ-038), one active-locale
- * decimal place per macronutrient — a dot in English and a comma in Polish
- * (REQ-039, ISSUE-008) — a whole similarity percentage, and the exact
- * localized names and labels in the approved field order (REQ-037,
- * ISSUE-008). No nutrition value is calculated or rerounded in the browser
- * (REQ-040).
- *
- * The supported image-key map is empty (ISSUE-008): both the image-less
- * Chicken-breast page (ranks 23, 11, and 6 have no image keys) and the
- * seeded-key Gyoza card (image key `gyoza`) show the identical bundled
- * placeholder that loads successfully, with empty alternative text because
- * the adjacent card heading names the Food Object (REQ-011, ARCH-015).
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
@@ -67,7 +32,6 @@ const COPY = {
   },
 } as const;
 
-/** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
   languages: string[],
@@ -80,16 +44,11 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-/**
- * Captures every display-ready item the real `POST /api/v1/substitutes/
- * search` response carries, keyed by stable Food Object ID. The scenario
- * compares each rendered card field against these API-provided values.
- */
 function captureSubstituteItems(page: Page): Map<number, SubstituteItem> {
   const items = new Map<number, SubstituteItem>();
   page.on("response", async (response) => {
     if (response.url().includes("/api/v1/substitutes/search")) {
-      // SAFETY: The real generated substitute-search route returns SubstituteSearchResponse JSON.
+      // SAFETY: The endpoint response matches the generated API contract.
       const body = (await response.json()) as SubstituteSearchResponse;
       for (const item of body.items) {
         items.set(item.foodObjectId, item);
@@ -99,11 +58,6 @@ function captureSubstituteItems(page: Page): Map<number, SubstituteItem> {
   return items;
 }
 
-/**
- * Drives one pointer selection: fills the Search Query, waits for the five
- * seeded suggestions, clicks the option with the given stable Food Object
- * ID, and waits for the successful result transition.
- */
 async function selectFoodObject(
   page: Page,
   query: string,
@@ -122,11 +76,6 @@ async function selectFoodObject(
   );
 }
 
-/**
- * The exact macronutrient display formatting oracle: one active-locale
- * decimal place, mirroring `formatMacronutrientValue` in `src/lib/i18n.ts`
- * (REQ-039, ISSUE-008).
- */
 function formatMacronutrient(value: number, locale: "en" | "pl"): string {
   return `${new Intl.NumberFormat(locale, {
     minimumFractionDigits: 1,
@@ -134,12 +83,6 @@ function formatMacronutrient(value: number, locale: "en" | "pl"): string {
   }).format(value)} g`;
 }
 
-/**
- * localized name heading, whole Matched Quantity in `g` or `ml`, centered
- * calorie value, the three labeled macronutrient rows, the whole similarity
- * percentage, and the identical bundled placeholder image with empty
- * alternative text.
- */
 async function expectCard(
   card: Locator,
   item: SubstituteItem,
@@ -147,22 +90,16 @@ async function expectCard(
   locale: "en" | "pl",
   placeholderUrl: string,
 ): Promise<void> {
-  // The localized name heading carries the Food Object name (ISSUE-008).
   await expect(
     card.getByRole("heading", { name: item.names[locale] }),
   ).toBeVisible();
   await expect(card.getByRole("heading")).toHaveText(item.names[locale]);
 
-  // Whole Matched Quantity with only `g` or `ml` (REQ-038): the exact
-  // API-provided whole value, no Serving equivalent and no recalculation.
   await expect(card.locator("[data-result-card-matched-quantity]")).toHaveText(
     `${item.matchedQuantity.value} ${item.matchedQuantity.unit}`,
   );
   await expect(card).not.toContainText(/serving|porcja/i);
 
-  // The three labeled macronutrient rows with the exact localized copy
-  // (REQ-037, ISSUE-008) and the API-provided values formatted for display
-  // only (REQ-039, REQ-040).
   await expect(card).toContainText(copy.protein);
   await expect(card).toContainText(
     formatMacronutrient(item.macronutrients.protein, locale),
@@ -180,9 +117,7 @@ async function expectCard(
   );
   await expect(card).toContainText(copy.similarity);
   await expect(card).toContainText(`${item.similarityPercent}%`);
-  // The identical bundled placeholder image with empty alternative text
-  // (REQ-011, ARCH-015, ISSUE-008): the empty supported image-key map
-  // resolves every absent, seeded, or unmapped key to the placeholder.
+
   const image = card.locator("[data-result-card-image]");
   await expect(image).toHaveAttribute("alt", "");
   await expect
@@ -197,11 +132,6 @@ async function expectCard(
     .toBe(new URL(placeholderUrl, PREVIEW_ORIGIN).href);
 }
 
-/**
- * Asserts the approved in-card field order — image, localized name,
- * Matched Quantity, centered calories, protein, carbohydrate, fat, and
- * similarity — by DOM sequence (ISSUE-008, REQ-037).
- */
 async function expectCardFieldOrder(
   card: Locator,
   item: SubstituteItem,
@@ -226,12 +156,6 @@ async function expectCardFieldOrder(
   ]);
 }
 
-/**
- * Asserts that the page renders exactly three unique result cards for the
- * expected ranked Food Object IDs, that each card matches its API-provided
- * item, and that the requested requests stayed on the Vite origin under
- * `/api` (REQ-002, REQ-036).
- */
 async function expectRankedCards(
   page: Page,
   expectedRanks: readonly number[],
@@ -254,7 +178,6 @@ async function expectRankedCards(
     await expectCardFieldOrder(cards.nth(index), item, copy);
   }
 
-  // REQ-036: the designated inputs show the expected ranks 1, 2, and 3.
   expect(
     cards.evaluateAll((elements) =>
       elements.map((element) => element.querySelector("h3")?.textContent),
@@ -284,7 +207,6 @@ test.describe("result cards", () => {
       throw new Error("Application did not expose the placeholder URL");
     }
 
-    // P07-G12, REQ-036: Pizza Margherita (1) ranks 13, 29, and 26.
     await expectRankedCards(
       page,
       [13, 29, 26],
@@ -294,9 +216,6 @@ test.describe("result cards", () => {
       placeholderUrl,
     );
 
-    // The seeded-key Gyoza card (rank 1, image key `gyoza`) shows a valid
-    // placeholder card: the image is the identical bundled placeholder and
-    // it loaded successfully (REQ-011, ARCH-015, ISSUE-008).
     const gyozaImage = page
       .locator("[data-result-card]")
       .first()
@@ -312,9 +231,6 @@ test.describe("result cards", () => {
       )
       .toBe(true);
 
-    // P07-G13, REQ-037, REQ-038: whole `g` Matched Quantity, one-decimal
-    // English dot macronutrients, whole similarity percentage; the API item
-    // for Paella (29) is a solid with a gram unit.
     const paella = items.get(29);
     if (paella === undefined) {
       throw new Error("Paella substitute item was not captured");
@@ -324,8 +240,6 @@ test.describe("result cards", () => {
       `${paella.matchedQuantity.value} g`,
     );
 
-    // REQ-058: current cards keep their IDs and order, then update every
-    // visible name, macronutrient label, and localized value in place.
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
@@ -345,8 +259,6 @@ test.describe("result cards", () => {
       "results",
     );
 
-    // P07-G15, REQ-002: every food-data request stays on the Vite origin
-    // under `/api`; none reaches Fiber or a third-party host.
     const foodData = requestUrls.filter((url) => url.includes("/api/"));
     expect(foodData.length).toBeGreaterThanOrEqual(1);
     for (const url of foodData) {
@@ -373,7 +285,6 @@ test.describe("result cards", () => {
       throw new Error("Application did not expose the placeholder URL");
     }
 
-    // P07-G12, REQ-036: Chicken breast (5) ranks 23, 11, and 6.
     await expectRankedCards(
       page,
       [23, 11, 6],
@@ -383,9 +294,6 @@ test.describe("result cards", () => {
       placeholderUrl,
     );
 
-    // REQ-011: the image-less page (ranks 23, 11, and 6 have no image key)
-    // renders three valid placeholder cards — each image is the identical
-    // bundled placeholder that loads successfully.
     const images = page.locator("[data-result-card] [data-result-card-image]");
     await expect(images).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) {
@@ -431,7 +339,6 @@ test.describe("result cards", () => {
       throw new Error("Application did not expose the placeholder URL");
     }
 
-    // P07-G12, REQ-036: Milk (10) ranks 33, 3, and 21.
     await expectRankedCards(
       page,
       [33, 3, 21],
@@ -441,8 +348,6 @@ test.describe("result cards", () => {
       placeholderUrl,
     );
 
-    // REQ-039, ISSUE-008: Polish macronutrients keep a comma with exactly
-    // one decimal place, and the visible labels are the Polish copy.
     const mondongo = items.get(33);
     if (mondongo === undefined) {
       throw new Error("Mondongo substitute item was not captured");

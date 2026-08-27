@@ -1,12 +1,3 @@
-/**
- * Interface Language dropdown component integration.
- *
- * The happy-dom boundary proves the native select's localized accessible name,
- * fixed options, active value, shared-dictionary update, exact persistence, and
- * storage-failure behavior. Native keyboard interaction and responsive layout
- * remain covered by the real-stack Playwright scenario.
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";

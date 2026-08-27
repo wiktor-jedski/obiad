@@ -14,104 +14,11 @@
   import SuggestionList from "./SuggestionList.svelte";
   import type { FoodSuggestion } from "../../client/types.gen";
   /**
-   * Search control with the live Food Object suggestion slice, the
-   * pointer-selection and new-search transition, and the keyboard
-   * operation of the suggestion list (task 24, task 25, task 27,
-   * task 28, task 31, task 32; ARCH-001, ARCH-002, ARCH-003, ARCH-008,
-   * ARCH-010, ARCH-011, ARCH-012, ARCH-017, ARCH-019, ARCH-020, REQ-012,
-   * REQ-013, REQ-018, REQ-019, REQ-020, REQ-021, REQ-022, REQ-023,
-   * REQ-024, REQ-060, REQ-064, REQ-080, ISSUE-006, ISSUE-007, ISSUE-008,
-   * ISSUE-009). Task 30 keeps this component as the stable Search region of
-   * the root composition: the input and suggestion panel. The read-only
-   * Substitution Input, the result-card region, and the zero-result message
-   * live in the root application (App.svelte), which owns the result-state
-   * geometry: the Search field's `64px` top edge and the `24px` region
-   * intervals.
-   *
-   * The control renders an `<input type="search">` with a visually hidden
-   * label, the placeholder from the active Interface Language dictionary,
-   * no icon, and initial autofocus so a visitor can type immediately. The
-   * pill-shaped field is `56px` high and `min(100%, 640px)` wide; its text
-   * starts `0.5em`
-   * beyond the end radius. The field is horizontally centered; its
-   * vertical placement at `45%` of `100dvh` is owned by the primary column
-   * in App.svelte (ISSUE-006). Styling follows docs/requirements/style.md:
-   * Surface background, 1px Secondary border, Text-Primary text, and a
-   * Primary border on focus without an outer highlight.
-   *
-   * Task 27 adds the suggestion slice: Search Query text and focus live in
-   * the discriminated interaction state (ARCH-002), and the suggestion
-   * request runs through the generated TypeScript client and TanStack Query
-   * only while the field is focused and contains nonempty text (ARCH-010,
-   * ARCH-019). The input follows the combobox/listbox pattern with the
-   * listbox `aria-controls`, `aria-expanded`, and the first option's stable
-   * id as `aria-activedescendant` (REQ-018).
-   *
-   * Task 28 adds the pointer-selection and new-search transition: a click
-   * or tap on any option selects that exact returned Food Object without
-   * moving focus from Search, closes the suggestion list, replaces the
-   * Search Query with the selected active-language name, retains the
-   * selected localized names and returned default Food Quantity as the
-   * read-only Substitution Input, and starts exactly one generated-client
-   * `POST /api/v1/substitutes/search` operation with that `foodObjectId`,
-   * the unchanged default quantity, and `pageIndex: 0` (REQ-020, REQ-022,
-   * REQ-023, REQ-024, REQ-077). After completed results, draft typing keeps
-   * committed selected input and cards visible and overlays fresh
-   * suggestions; selecting one suggestion is the commit boundary that
-   * replaces the prior result. The interaction-state union gains only the
-   * required `loadingNew`, `results`, and `zeroResults` transitions;
-   * TanStack Query continues to own response data and pending state. The
-   * Search region renders no new-search spinner during the pending interval
-   * (REQ-080), and Search keeps focus after completion (REQ-064). The page-0
-   * query itself and the `loadingNew` →
-   * `results`/`zeroResults` transition effect moved to the root composition
-   * with task 30, which also renders the selected-input, result-card, and
-   * zero-result regions. No Food Quantity edit, MORE!, failure state,
-   * motion, or active-content language-change behavior belongs here.
-   *
-   * Task 31 completes the Phase 7 suggestion control with keyboard
-   * operation over the same TanStack Query list and the same selection
-   * transition used by pointer activation (REQ-019, ARCH-010, ARCH-020):
-   * the Search input owns the key handling through the combobox/listbox
-   * active-descendant pattern, so option DOM focus never leaves Search.
-   * Arrow Down moves the active option toward the fifth option and clamps
-   * there; Arrow Up moves toward the first option and clamps there; every
-   * move updates the active option's styling and the input's
-   * `aria-activedescendant`. Enter selects the active option through the
-   * identical `selectSuggestion` path a pointer click uses, so it starts
-   * the same one default-quantity page-0 Substitution Search. Escape
-   * closes the list while retaining the Search Query text and Search focus
-   * and starts no Substitution Search; Tab closes the list through the
-   * native blur without preventing the browser's native focus movement and
-   * starts no Substitution Search. The active option index and the
-   * Escape-closed dismissal are local UI state of this open-list
-   * interaction — HTTP data never leaves TanStack Query, the interaction
-   * state union gains no variant, and pointer behavior is unchanged.
-   *
-   * Task 32 (Phase 9, REQ-021, ARCH-017, ISSUE-009) adds the
-   * normalized-empty browser no-op: emptiness is decided exactly by
-   * whether the ARCH-017 normalization contract produces an empty Search
-   * Query, so drafts consisting only of Go-compatible Unicode whitespace —
-   * including `U+0085` NEXT LINE, `U+00A0` NO-BREAK SPACE, `U+2003` EM
-   * SPACE, and `U+202F` NARROW NO-BREAK SPACE — are normalized-empty. The
-   * exact raw value stays unchanged in the interaction state and the
-   * field, the suggestion panel stays closed for such drafts, and the
-   * suggestion query enables no request. Enter with no open suggestion and
-   * a normalized-empty value prevents the browser action while retaining
-   * the exact raw value, Search focus, and the current interaction state;
-   * it shows no validation message or invalid state and starts neither a
-   * suggestion request nor a Substitution Search request. Enter selection
-   * of a normalized-nonempty open suggestion is unchanged, and no Food
-   * Quantity validation, translation dictionary entry, backend request,
-   * or interaction-state variant is added.
+   * Search field with live suggestions and keyboard or pointer selection.
+   * Drafts stay local until a suggestion is selected.
    */
 
-  /**
-   * The current discriminated interaction state (ARCH-002). It is named
-   * `interaction`, not `state`, so the `$state` runes below are never
-   * shadowed by a store-like identifier (svelte-check resolves `$state` as
-   * a legacy store subscription when a variable named `state` is in scope).
-   */
+  /** Current interaction state; the name avoids shadowing Svelte's $state rune. */
   const interaction = $derived($interactionState);
   /** The current Search Query text from the interaction state. */
   const query = $derived(interaction.query);
@@ -122,14 +29,10 @@
   /** The active dictionary for the accessible label and placeholder. */
   const dictionary = $derived(getDictionary(language));
 
-  /**
-   * Whether the current Search text is an uncommitted suggestion intent.
-   * Selection closes this lane; later typing reopens it without changing a
-   * committed `results` or `zeroResults` transition.
-   */
+  /** Whether the current text opens an uncommitted suggestion intent. */
   let suggestionIntent = $state(false);
 
-  /** The TanStack Query owning the live suggestion list (ARCH-019). */
+  /** TanStack Query that owns the live suggestion list. */
   const suggestions = createSuggestionsQuery({
     query: () => query,
     focused: () => focused,
@@ -137,43 +40,24 @@
     active: () => suggestionIntent,
   });
 
-  /**
-   * The returned five suggestions of the latest response, or undefined
-   * while no response is present for the current query.
-   */
   const suggestionItems = $derived(
     suggestions.data !== undefined ? suggestions.data.items : undefined,
   );
 
+  /** Latest returned suggestions, or undefined before a response arrives. */
+
   /**
-   * The zero-based index of the keyboard-active option (task 31, REQ-019).
-   * The first option is active when the panel opens (REQ-018); Arrow Down
-   * and Arrow Up move the index toward the fifth and first options and
-   * clamp there. It is local UI state of the open list: it resets whenever
-   * the visitor types or re-focuses the field, and it never holds HTTP
-   * data — the option rows come straight from the TanStack Query response.
+   * Keyboard-active option index; it resets when typing or refocusing.
+   * It never stores HTTP data.
    */
   let activeIndex = $state(0);
 
-  /**
-   * Whether the visitor dismissed the open list with Escape (task 31,
-   * REQ-019). While set, the panel stays closed even though the Search
-   * field keeps focus and text; typing or re-focusing the field clears the
-   * dismissal so live suggestions resume for the changed intent. It is
-   * local UI state: no interaction-state variant and no Substitution
-   * Search is involved.
-   */
+  /** Whether Escape dismissed the list until typing or refocusing. */
   let dismissed = $state(false);
 
   /**
-   * Whether the suggestion panel is open: the Search field has an
-   * uncommitted suggestion intent, is focused, and contains text that is
-   * nonempty after the ARCH-017 normalization contract (task 32,
-   * REQ-021); the latest response has arrived; and the visitor has not
-   * dismissed the list with Escape. A completed result can remain visible
-   * beneath this panel until selection commits the next search. No loading
-   * or failure surface belongs here, so the panel renders exactly the five
-   * returned options.
+   * The panel opens for a focused, nonempty intent with fresh data unless dismissed.
+   * Completed results remain visible until a new suggestion is selected.
    */
   const open = $derived(
     suggestionIntent &&
@@ -183,30 +67,14 @@
       !dismissed,
   );
 
-  /**
-   * The stable id of the active option for `aria-activedescendant` (task
-   * 31, REQ-019). It follows the keyboard-active index exactly like the
-   * active styling: the first option when the panel opens, the Arrow-moved
-   * option thereafter. It exists only for a current open list: whenever
-   * the list is closed or the field loses focus, the attribute is absent,
-   * so it can never point to a removed option (ARCH-020, REQ-018).
-   */
+  /** Stable active-option id, present only while the list is open. */
   const activeOptionId = $derived(
     open && suggestionItems !== undefined
       ? suggestionOptionId(suggestionItems[activeIndex].foodObjectId)
       : undefined,
   );
 
-  /**
-   * Fresh-visible-query boundary (ARCH-019): when the Search field loses
-   * focus the suggestion query becomes inactive, and because the disabled
-   * observer stays mounted, `gcTime: 0` alone does not evict it. Removing
-   * every inactive suggestion query on blur guarantees that a later
-   * identical intent — refocusing with the same Search Query text — starts
-   * a real backend request and never reuses a successful response. The
-   * panel stays closed until that fresh request returns, so a reused
-   * response can never be visible.
-   */
+  /** Remove inactive suggestion queries on blur so refocusing makes a fresh request. */
   $effect(() => {
     if (!focused) {
       queryClient.removeQueries({
@@ -215,11 +83,7 @@
     }
   });
 
-  /**
-   * Applies draft Search Query text to the interaction state. Changed text
-   * starts a fresh suggestion intent without changing the committed result
-   * transition or removing its selected input and cards.
-   */
+  /** Applies draft text without changing committed results. */
   function onInput(event: Event): void {
     const field = event.currentTarget;
     if (!(field instanceof HTMLInputElement)) {
@@ -243,30 +107,8 @@
   }
 
   /**
-   * Keyboard operation of the open suggestion list (task 31, REQ-019,
-   * ARCH-010, ARCH-020). The Search input owns the key handling through
-   * the active-descendant pattern; option DOM focus stays on Search.
-   *
-   * - Arrow Down moves the active option toward the fifth option and
-   *   clamps there; Arrow Up moves toward the first option and clamps
-   *   there. Every move updates the active option's styling and the
-   *   input's `aria-activedescendant`.
-   * - Enter selects the active option through the identical
-   *   {@link selectSuggestion} path a pointer click uses, starting the
-   *   same one default-quantity page-0 Substitution Search.
-   * - Enter with no open suggestion and a value that is empty after the
-   *   ARCH-017 normalization contract (task 32, REQ-021, ISSUE-009) is a
-   *   strict no-op: `preventDefault` stops the browser action while the
-   *   exact raw value, Search focus, and the current interaction state
-   *   stay unchanged, no validation message or invalid state renders, and
-   *   neither a suggestion request nor a Substitution Search starts.
-   * - Escape closes the list while retaining the Search Query text and
-   *   Search focus and starts no Substitution Search. `preventDefault`
-   *   also stops the browser's native `type="search"` Escape behavior,
-   *   which would otherwise clear the field's text.
-   * - Tab intentionally has no handler: the browser's native focus
-   *   movement blurs the field, and the blur closes the list without any
-   *   Substitution Search.
+   * Handles keyboard navigation, selection, dismissal, and normalized-empty no-op.
+   * Focus remains on the Search field while the list is open.
    */
   function onKeydown(event: KeyboardEvent): void {
     const key = event.key;
@@ -293,15 +135,7 @@
         return;
       }
       if (isNormalizedEmptySearchQuery(query)) {
-        // Phase 9 (REQ-021, ISSUE-009): Enter with no open suggestion and
-        // a normalized-empty value is a strict browser no-op. Prevent the
-        // browser action (for example implicit form submission) while the
-        // exact raw value, Search focus, and the current interaction state
-        // stay unchanged; no validation message or invalid state renders
-        // and neither a suggestion request nor a Substitution Search
-        // request starts. The empty check uses the ARCH-017 normalization
-        // contract, including Go-compatible Unicode whitespace such as
-        // `U+0085` NEXT LINE.
+        // Normalized-empty Enter remains a browser no-op.
         event.preventDefault();
       }
       return;
@@ -315,11 +149,7 @@
     }
   }
 
-  /**
-   * Re-focusing an empty search resumes its suggestion intent. A completed
-   * search resumes only an existing draft intent, so focus alone never
-   * reopens suggestions for the committed query.
-   */
+  /** Re-focuses the field and resets local list state. */
   function onFocus(): void {
     dismissed = false;
     if (interaction.name === "empty") {
@@ -330,16 +160,8 @@
   }
 
   /**
-   * Pointer activation of one suggestion (task 28, REQ-020, REQ-077):
-   * captures the exact returned Food Object — stable ID, both localized
-   * names, returned default Food Quantity, returned allowed quantity-editor
-   * units (task 34, ISSUE-010), and active Interface Language — replaces
-   * the Search Query with the returned active-language name, and
-   * transitions to `loadingNew`. The transition closes suggestions while
-   * Search keeps focus and starts exactly one page-0 Substitution Search
-   * with the unchanged default quantity. Task 31's Enter key selects
-   * through this same transition, so keyboard and pointer activation are
-   * identical (REQ-019, REQ-020).
+   * Selects a suggestion, closes the list, and starts the page-0 search.
+   * Keyboard and pointer activation share this transition.
    */
   function selectSuggestion(item: FoodSuggestion): void {
     if ($substitutionSearchLock) {

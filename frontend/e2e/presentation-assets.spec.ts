@@ -4,39 +4,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * Real-stack presentation-assets scenario (task 23; ARCH-001, ARCH-015,
- * ARCH-020, ARCH-022; ISSUE-006 presentation contract).
- *
- * `bun run test:e2e` runs this file against the complete disposable stack
- * started by `./e2e/launcher.ts`: the optimized Vite preview on the strict
- * port 4173 proxies same-origin `/api` to the real Fiber process. This
- * scenario loads the optimized shell and proves the presentation contract
- * without rendering a card:
- *
- *   - the exact ISSUE-006 computed palette tokens
- *     (`--color-dark-*` from `docs/requirements/style.md`) plus the
- *     `Inter, system-ui, sans-serif` and `Roboto Mono, ui-monospace,
- *     monospace` fallback chains, applied to the body and resolvable
- *     through the tokens;
- *   - the two system-local `@font-face` rules (Inter `100 900`, Roboto
- *     Mono `100 700`) with no bundled font;
- *   - that the browser makes no runtime font request and no third-party
- *     asset request (every request stays on the preview origin);
- *   - that the placeholder exposed to later cards is served from the Vite
- *     origin and decodes as a `512×512` PNG in the browser; and
- *   - that the committed `food-placeholder.png` is byte-exact with the
- *     ISSUE-006 pin: `512×512`, 8-bit true-color sRGB with optional alpha,
- *     no localized-text chunks, and no unnecessary metadata chunks.
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 
-/** ISSUE-006: the accepted committed placeholder's pinned SHA-256. */
 const PLACEHOLDER_SHA256 =
   "741ef3e3a323cc1b47c466aba947aee59cb03790f7ffee754470fbbc64c24b95";
 
-/** The exact palette from `docs/requirements/style.md`, token -> hex. */
 const PALETTE = {
   "--color-dark-background": "#0a0f0a",
   "--color-dark-surface": "#161d16",
@@ -49,15 +21,12 @@ const PALETTE = {
   "--color-dark-text-on-bright": "#0a0f0a",
 };
 
-/** ISSUE-006 font chains as authored in `@theme` (raw custom-property values). */
 const UI_FONT_CHAIN = '"Inter", system-ui, sans-serif';
 const DATA_FONT_CHAIN = '"Roboto Mono", ui-monospace, monospace';
 
-/** The same chains as serialized by `getComputedStyle`. */
 const UI_FONT_COMPUTED = "Inter, system-ui, sans-serif";
 const DATA_FONT_COMPUTED = '"Roboto Mono", ui-monospace, monospace';
 
-/** The committed placeholder file (also emitted into the optimized build). */
 const PLACEHOLDER_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -67,19 +36,16 @@ const PLACEHOLDER_PATH = resolve(
   "food-placeholder.png",
 );
 
-/** One parsed PNG chunk. */
 interface PngChunk {
   type: string;
   data: Buffer;
 }
 
-/** Parsed PNG signature and ordered chunk sequence. */
 interface ParsedPng {
   signature: Buffer;
   chunks: PngChunk[];
 }
 
-/** Walks a PNG byte stream into its signature and chunks. */
 function parsePng(buffer: Buffer): ParsedPng {
   const signature = buffer.subarray(0, 8);
   const chunks: PngChunk[] = [];
@@ -109,8 +75,6 @@ test.describe("presentation assets", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
 
-    // Let any post-load font or asset request surface before asserting
-    // request silence.
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(300);
 
@@ -118,8 +82,6 @@ test.describe("presentation assets", () => {
       const root = getComputedStyle(document.documentElement);
       const body = getComputedStyle(document.body);
 
-      // Resolve the data chain through its token, mirroring how a future
-      // `font-data` utility would apply it.
       const dataProbe = document.createElement("span");
       dataProbe.style.fontFamily = "var(--font-data)";
       document.body.appendChild(dataProbe);
@@ -167,18 +129,15 @@ test.describe("presentation assets", () => {
       return { bodyFontFamily: body.fontFamily, dataProbeFamily, faces, vars };
     });
 
-    // Exact computed palette (docs/requirements/style.md, ISSUE-006).
     for (const [token, hex] of Object.entries(PALETTE)) {
       expect(observed.vars[token], `token ${token}`).toBe(hex);
     }
 
-    // Exact fallback chains, both as authored tokens and as computed styles.
     expect(observed.vars["--font-ui"]).toBe(UI_FONT_CHAIN);
     expect(observed.vars["--font-data"]).toBe(DATA_FONT_CHAIN);
     expect(observed.bodyFontFamily).toBe(UI_FONT_COMPUTED);
     expect(observed.dataProbeFamily).toBe(DATA_FONT_COMPUTED);
 
-    // Exactly the two system-local @font-face rules (ISSUE-006, ARCH-015).
     expect(observed.faces).toEqual([
       {
         family: "Inter",
@@ -196,9 +155,6 @@ test.describe("presentation assets", () => {
       },
     ]);
 
-    // No runtime font request and no third-party asset request: every
-    // request stays on the preview origin and none carries a font resource
-    // type or font file extension (ARCH-015, ISSUE-006).
     expect(requests.some((request) => request.resourceType === "font")).toBe(
       false,
     );
@@ -221,8 +177,6 @@ test.describe("presentation assets", () => {
 
     await page.goto("/");
 
-    // Task 23 exposes the resolved bundled placeholder URL on the root
-    // element; later cards consume the same URL through `src/lib/assets`.
     const placeholderUrl = await page
       .locator("main")
       .getAttribute("data-placeholder-url");
@@ -256,7 +210,6 @@ test.describe("presentation assets", () => {
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
     ]);
 
-    // The placeholder fetch crossed no external runtime asset source.
     for (const url of requestUrls) {
       expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
         PREVIEW_ORIGIN,
@@ -272,13 +225,10 @@ test.describe("presentation assets", () => {
 
     const { signature, chunks } = parsePng(buffer);
 
-    // PNG magic signature.
     expect(Array.from(signature)).toEqual([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
     ]);
 
-    // IHDR: 512×512, 8-bit, true color with optional alpha (color types 2
-    // and 6), default compression, filter, and no interlace.
     const ihdr = chunks[0];
     expect(ihdr.type).toBe("IHDR");
     expect(ihdr.data.readUInt32BE(0)).toBe(512);
@@ -289,8 +239,6 @@ test.describe("presentation assets", () => {
     expect(ihdr.data[11]).toBe(0);
     expect(ihdr.data[12]).toBe(0);
 
-    // No localized text (tEXt/iTXt/zTXt) and no unnecessary metadata
-    // chunks: the whole file is IHDR + IDAT + IEND only.
     const types = chunks.map((chunk) => chunk.type);
     expect(types[0]).toBe("IHDR");
     expect(types[types.length - 1]).toBe("IEND");

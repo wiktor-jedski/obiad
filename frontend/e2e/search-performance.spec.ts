@@ -1,117 +1,46 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
-/**
- * Real-stack Search performance scenario (task 54, Phase 18; ARCH-022,
- * REQ-074, REQ-075, ISSUE-018).
- *
- * The launcher runs this scenario in performance-only mode
- * (`bun run test:performance`, `./e2e/launcher.ts performance`): it starts
- * the identical optimized real stack — the optimized Vite build through
- * Vite preview, the real Fiber server, a disposable loopback-only
- * PostgreSQL 17 container, and the pinned Playwright Chromium — and then
- * runs only this scenario, alone with one Playwright worker. No standard
- * end-to-end suite load shares the run, so the timing samples measure only
- * the real stack (P18-G1, P18-G6, ARCH-022).
- *
- * ISSUE-018 measurement boundary:
- *
- * - Fixture: Pizza Margherita (Food Object 1) with its default `1 serving`
- *   quantity, the stable seeded acceptance fixture.
- * - 20 measured iterations. Each iteration starts one new Search, measures
- *   its first Result Card, and then activates MORE!, so the same 20 Search
- *   iterations supply the 20 first-card samples.
- * - Before sampling, one complete, unmeasured new Search and MORE! flow
- *   warms the browser, optimized Vite preview, Fiber process, PostgreSQL
- *   connection, and query paths.
- * - Each Search and MORE! request is measured from
- *   `PerformanceResourceTiming.startTime` through `responseEnd`.
- * - First-card time is measured from the browser event that submits the
- *   selected suggestion through the first animation frame in which the
- *   first ranked Result Card has a nonempty layout box and computed
- *   opacity greater than zero.
- * - Each measured response and rendered state is awaited before the next
- *   action, so only one Substitution Search request is active.
- *
- * Phase gate (plan.md Phase 18, P18-G2..P18-G6):
- *
- * - 20 consecutive Search samples are at most 500 ms (P18-G2, REQ-074).
- * - 20 consecutive MORE! samples are at most 500 ms (P18-G3, REQ-074).
- * - The same 20 new Search iterations each make their first Result Card
- *   visible at most 1 second after submission (P18-G4, REQ-075).
- * - The scenario reports each sample index, type, measured milliseconds,
- *   and fixed limit (P18-G5) and checks each sample immediately, exiting
- *   after the first limit breach instead of running or hiding later
- *   samples (P18-G6).
- * - Exactly 20 measured POSTs of each type complete; no automatic retry,
- *   cached response, relaxed limit, or standard end-to-end suite load
- *   contributes to the measurements. The owning TanStack Query uses
- *   `retry: false` and `gcTime: 0`, so every new search and MORE!
- *   activation starts one fresh generated-client POST; the scenario only
- *   measures and never changes a threshold.
- */
-
-/** The 20 measured iterations per ISSUE-018. */
 const ITERATIONS = 20;
-/** Every Search request must end within 500 ms (REQ-074, P18-G2). */
+
 const SEARCH_LIMIT_MS = 500;
-/** Every MORE! request must end within 500 ms (REQ-074, P18-G3). */
+
 const MORE_LIMIT_MS = 500;
-/** The first Result Card must become visible within 1 s (REQ-075, P18-G4). */
+
 const FIRST_CARD_LIMIT_MS = 1000;
 
-/** The stable seeded fixture: Pizza Margherita (ISSUE-018, ISSUE-002). */
 const PIZZA_FOOD_OBJECT_ID = 1;
-/** The Search Query whose suggestions surface the Pizza Margherita option. */
+
 const PIZZA_QUERY = "margherita";
-/** The default Food Quantity the fixture submits: 1 serving (ISSUE-018). */
+
 const PIZZA_QUANTITY = { value: 1, unit: "serving" } as const;
-/**
- * The seeded page-1 replacement cards of the Pizza Margherita search
- * (ISSUE-002, REQ-072): Pho (30), Lasagna (3), Pastel de nata (35) in
- * rank order — the cards every measured MORE! activation renders.
- */
+
 const PIZZA_PAGE_1_IDS = [30, 3, 35] as const;
 
-/** One recorded Substitution Search `PerformanceResourceTiming` entry. */
 interface PerfPost {
-  /** The fetch start boundary (ISSUE-018). */
   startTime: number;
-  /** The response end boundary (ISSUE-018). */
+
   responseEnd: number;
 }
 
-/** One recorded first-card visibility sample of one new Search. */
 interface PerfFirstCard {
-  /** The browser event that submitted the selected suggestion (ISSUE-018). */
   submission: number;
-  /**
-   * The first animation frame in which the first ranked Result Card had a
-   * nonempty layout box and computed opacity greater than zero; `null`
-   * when the sampler deadline elapsed first (ISSUE-018).
-   */
+
   visibleAt: number | null;
 }
 
-/**
- * The browser-window measurement harness the spec installs before the
- * application scripts run (declared here so the spec reads and writes it
- * without an unchecked inline cast).
- */
 declare global {
   interface Window {
     __perf?: {
-      /** Every Substitution Search POST resource entry, in completion order. */
       posts: PerfPost[];
-      /** One first-card sample per submitted suggestion, in submission order. */
+
       firstCards: PerfFirstCard[];
-      /** Discards every recorded sample (used after the unmeasured warm-up). */
+
       reset(): void;
     };
   }
 }
 
-/** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(page: Page): Promise<void> {
   await page.addInitScript(
     (tags: string[]) => {
@@ -124,31 +53,11 @@ async function useBrowserLanguages(page: Page): Promise<void> {
   );
 }
 
-/**
- * Installs the browser-side performance harness before the application
- * scripts run (task 54, ISSUE-018):
- *
- * - a `PerformanceObserver` records every `fetch` resource entry for
- *   `POST /api/v1/substitutes/search`, capturing exactly the
- *   `startTime` through `responseEnd` boundary of each Search and MORE!
- *   request;
- * - a capture-phase document click listener arms the first-card sampler on
- *   the browser event that submits a suggestion (the click on one
- *   `#food-suggestion-option-*` row), and a `requestAnimationFrame`
- *   sampler records the first frame in which the first ranked Result Card
- *   (`[data-result-card-rank="0"]`) has a nonempty layout box and computed
- *   opacity greater than zero. The sampler requires the card to have been
- *   absent from at least one earlier frame so a retained card from the
- *   previous iteration's completed page can never be mistaken for the new
- *   page's first card (the previous result region is unmounted during the
- *   `loadingNew` transition). The sampler stops at a deadline so a failed
- *   search cannot sample forever; the scenario then fails the sample.
- */
 async function installPerformanceHarness(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const posts: PerfPost[] = [];
     const firstCards: PerfFirstCard[] = [];
-    /** The first-card sampler deadline: far beyond the 1 s limit (REQ-075). */
+
     const FIRST_CARD_DEADLINE_MS = 3000;
 
     const observer = new PerformanceObserver((list) => {
@@ -231,26 +140,18 @@ async function installPerformanceHarness(page: Page): Promise<void> {
   });
 }
 
-/** One observed generated-client Substitution Search POST. */
 interface TrackedPost {
   body: SubstituteSearchRequest;
   status: number | null;
 }
 
-/** One Node-side Substitution Search request ledger. */
 interface PostLedger {
   posts: TrackedPost[];
-  /** The greatest number of Substitution Search POSTs in flight at once. */
+
   maxActive: number;
   reset(): void;
 }
 
-/**
- * Records every generated-client `POST /api/v1/substitutes/search` request
- * and its real-stack response status, and tracks the greatest number of
- * such requests in flight at once (P18-G2, P18-G3: no overlapping
- * Substitution Search request).
- */
 function trackSubstitutePosts(page: Page): PostLedger {
   const posts: TrackedPost[] = [];
   let active = 0;
@@ -260,8 +161,8 @@ function trackSubstitutePosts(page: Page): PostLedger {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
-      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
+        // SAFETY: The request payload matches the generated API contract.
         body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
@@ -294,7 +195,6 @@ function trackSubstitutePosts(page: Page): PostLedger {
   };
 }
 
-/** Returns the Food Object IDs of all currently rendered result cards. */
 async function renderedCardIDs(page: Page): Promise<number[]> {
   const cards = page.locator("[data-result-card]");
   return cards.evaluateAll((elements) =>
@@ -304,19 +204,12 @@ async function renderedCardIDs(page: Page): Promise<number[]> {
   );
 }
 
-/** One new-Search iteration's measured Search and first-card samples. */
 interface SearchAndFirstCardSamples {
-  /** The Search request duration: `responseEnd - startTime` (ISSUE-018). */
   searchMs: number;
-  /** The first-card duration: `visibleAt - submission` (ISSUE-018). */
+
   firstCardMs: number;
 }
 
-/**
- * Reads the current iteration's Search request and first-card samples from
- * the browser harness. Both boundaries come from the recorded
- * timestamps, so the Node-side read cannot distort them.
- */
 async function readSearchAndFirstCardSamples(
   page: Page,
   iteration: number,
@@ -343,11 +236,6 @@ async function readSearchAndFirstCardSamples(
   }, iteration);
 }
 
-/**
- * Reads the current iteration's MORE! request sample from the browser
- * harness: `responseEnd - startTime` of the iteration's second POST
- * (ISSUE-018).
- */
 async function readMoreSample(page: Page, iteration: number): Promise<number> {
   return page.evaluate((index) => {
     const post = window.__perf?.posts[2 * index + 1];
@@ -374,9 +262,6 @@ test.describe("Search performance", () => {
     );
     const moreButton = page.locator("[data-more-button]");
 
-    // --- Unmeasured warm-up (ISSUE-018): one complete new Search and MORE!
-    // flow warms the browser, optimized Vite preview, Fiber process,
-    // PostgreSQL connection, and query paths. ---
     await search.fill(PIZZA_QUERY);
     await expect(option).toBeVisible();
     await option.click();
@@ -390,27 +275,17 @@ test.describe("Search performance", () => {
     await expect
       .poll(() => renderedCardIDs(page), { timeout: 30_000 })
       .toEqual([...PIZZA_PAGE_1_IDS]);
-    // Discard the warm-up's recorded measurements: exactly the 20 measured
-    // iterations below supply the reported samples (P18-G6).
+
     await page.evaluate(() => {
       window.__perf?.reset();
     });
     ledger.reset();
 
-    // --- 20 measured iterations (ISSUE-018). Each iteration starts one new
-    // Search, measures its first Result Card, and then activates MORE!, so
-    // the same 20 Search iterations supply the 20 first-card samples. Each
-    // measured response and rendered state is awaited before the next
-    // action, so only one Substitution Search request is active. ---
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-      // New Search: draft the query, wait for the seeded suggestion option,
-      // and submit it with a pointer click.
       await search.fill(PIZZA_QUERY);
       await expect(option).toBeVisible();
       await option.click();
 
-      // Await the measured Search response (its resource entry records
-      // `responseEnd`) and the first visible Result Card frame.
       await expect
         .poll(() => page.evaluate(() => window.__perf?.posts.length ?? 0), {
           timeout: 30_000,
@@ -426,15 +301,12 @@ test.describe("Search performance", () => {
           { timeout: 15_000 },
         )
         .not.toBeNull();
-      // The rendered state replaced the pending surface (REQ-077).
+
       await expect(page.locator("main")).toHaveAttribute(
         "data-interaction-state",
         "results",
       );
 
-      // Measure, report, and immediately check the Search and first-card
-      // samples: the first breach stops the iteration loop right here, so
-      // later samples are never run or hidden (P18-G6).
       const samples = await readSearchAndFirstCardSamples(page, iteration);
       console.log(
         `[performance] Search sample ${iteration}: ${samples.searchMs.toFixed(1)} ms (limit ${SEARCH_LIMIT_MS} ms)`,
@@ -451,8 +323,6 @@ test.describe("Search performance", () => {
         `First card sample ${iteration} must not exceed ${FIRST_CARD_LIMIT_MS} ms`,
       ).toBeLessThanOrEqual(FIRST_CARD_LIMIT_MS);
 
-      // MORE!: activate the next page and await its measured response and
-      // the rendered replacement page before the next iteration.
       await expect(moreButton).toBeVisible();
       await moreButton.click();
       await expect
@@ -474,9 +344,6 @@ test.describe("Search performance", () => {
       ).toBeLessThanOrEqual(MORE_LIMIT_MS);
     }
 
-    // --- Final accounting: exactly 20 measured POSTs of each type
-    // completed, all from the seeded fixture, none overlapping, none
-    // failed, and none contributed by the warm-up (P18-G6, REQ-074). ---
     const totals = await page.evaluate(() => {
       const harness = window.__perf;
       return {

@@ -1,27 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * Real-stack live Food Object suggestion scenario (task 27; ARCH-001,
- * ARCH-002, ARCH-008, ARCH-010, ARCH-019, ARCH-020, ARCH-022, REQ-001,
- * REQ-002, REQ-012, REQ-013, REQ-018, ISSUE-008; P07-G2, P07-G5, P07-G6,
- * P07-G7, P07-G20).
- *
- * `bun run test:e2e` runs these tests against the complete disposable stack
- * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
- * real setup command, the real Fiber process on the fixed loopback listener
- * 127.0.0.1:8080, and the optimized Vite preview on the strict port 4173.
- * The scenario starts in a fresh unauthenticated browser context, observes
- * no startup application request, focuses the Search field and enters a
- * normal Search Query and `zzzzzz`, and sees exactly five distinct seeded
- * suggestions in English and Polish with the approved panel geometry and
- * colors, the baseline combobox/listbox semantics, and the first option's
- * stable id as the Search input's `aria-activedescendant`. It controls two
- * real-stack responses to prove that a superseded browser request is
- * aborted and its delayed response cannot change the latest list, and it
- * verifies that every food-data request stays on the Vite origin under
- * `/api`.
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
@@ -52,13 +30,6 @@ const COPY = {
   },
 } as const;
 
-/**
- * The deterministic seeded suggestion lists for the queries the scenario
- * drives (verified against the real Fiber process and the freshly seeded
- * PostgreSQL catalog; seed migration `0005_seed_food_catalog.sql`).
- * `foodObjectId` is the seeded stable ID and `name` is the localized name
- * the panel must render for the active Interface Language (REQ-013).
- */
 const SEEDED_SUGGESTIONS = {
   en: {
     chicken: [
@@ -101,12 +72,10 @@ const SEEDED_SUGGESTIONS = {
   },
 } as const;
 
-/** The stable option DOM id of one suggestion (suggestions.ts). */
 function optionId(foodObjectId: number): string {
   return `food-suggestion-option-${foodObjectId}`;
 }
 
-/** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
   languages: string[],
@@ -119,15 +88,6 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-/**
- * Asserts that the panel renders exactly the expected seeded suggestions in
- * the expected order with the approved geometry, colors, and baseline
- * combobox/listbox semantics: `OPTION_COUNT` `48px` rows continuously extend
- * the Search field, retain its thin bottom border as the divider, and end in
- * matching `28px` bottom corners. The first option uses Primary and
- * Text-On-Bright, every option has a stable id, and the first option's id is
- * the Search input's `aria-activedescendant` (ISSUE-008, REQ-018).
- */
 async function expectSuggestionPanel(
   page: Page,
   expected: readonly { foodObjectId: number; name: string }[],
@@ -140,7 +100,6 @@ async function expectSuggestionPanel(
   await expect(panel).toBeVisible();
   await expect(options).toHaveCount(OPTION_COUNT);
 
-  // Panel and row geometry (ISSUE-008).
   const searchBox = await search.boundingBox();
   const panelBox = await panel.boundingBox();
   if (searchBox === null || panelBox === null) {
@@ -166,14 +125,10 @@ async function expectSuggestionPanel(
     expect(rowBox.height, `option ${index + 1} is 48px tall`).toBe(
       ROW_HEIGHT_PX,
     );
-    // Rows fill the panel's content box: the 640px border-box panel carries
-    // a 1px Secondary border on each side (ISSUE-008).
+
     expect(rowBox.width).toBe(FIELD_MAX_WIDTH_PX - 2);
   }
 
-  // Search and panel form one continuous control. The Search keeps its thin
-  // bottom border as the query/suggestion divider, while only the combined
-  // outer top and bottom corners retain the original pill radius.
   await expect(search).toHaveCSS("border-bottom-width", "1px");
   await expect(search).toHaveCSS(
     "border-top-left-radius",
@@ -193,14 +148,11 @@ async function expectSuggestionPanel(
     `${OUTER_RADIUS_PX}px`,
   );
 
-  // Query and suggestion labels share the same text origin: the `28px`
-  // outer radius plus the established `0.5em` inset.
   await expect(search).toHaveCSS("padding-left", "36px");
   for (let index = 0; index < OPTION_COUNT; index += 1) {
     await expect(options.nth(index)).toHaveCSS("padding-left", "36px");
   }
 
-  // Resting and active colors (ISSUE-008, style.md).
   await expect(panel).toHaveCSS("background-color", SURFACE_RGB);
   await expect(panel).toHaveCSS("border-top-color", SECONDARY_RGB);
   await expect(panel).toHaveCSS("border-bottom-color", SECONDARY_RGB);
@@ -208,12 +160,10 @@ async function expectSuggestionPanel(
   await expect(options.nth(0)).toHaveCSS("color", TEXT_ON_BRIGHT_RGB);
   await expect(options.nth(1)).toHaveCSS("color", TEXT_PRIMARY_RGB);
 
-  // The exact seeded localized names in ranked order (REQ-002, REQ-013).
   for (let index = 0; index < OPTION_COUNT; index += 1) {
     await expect(options.nth(index)).toHaveText(expected[index].name);
   }
 
-  // Stable option ids; the first option is the active descendant (REQ-018).
   for (let index = 0; index < OPTION_COUNT; index += 1) {
     await expect(options.nth(index)).toHaveAttribute(
       "id",
@@ -232,12 +182,10 @@ async function expectSuggestionPanel(
   );
 }
 
-/** Food-data requests observed by the suggestion scenario. */
 interface RequestTracker {
   foodDataRequests: () => string[];
 }
 
-/** Records every browser request and returns a predicate for food-data URLs. */
 function trackRequests(page: Page, urls: string[]): RequestTracker {
   page.on("request", (request) => urls.push(request.url()));
   return {
@@ -256,7 +204,6 @@ test.describe("live Food Object suggestions", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
 
-    // P07-G2, REQ-001: fresh context, no authentication, no startup request.
     expect(foodDataRequests(), "no startup application request").toEqual([]);
     expect(await page.evaluate(() => document.cookie)).toBe("");
 
@@ -265,24 +212,18 @@ test.describe("live Food Object suggestions", () => {
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
 
-    // P07-G5: a normal Search Query shows exactly five suggestions.
     await search.fill("chicken");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
 
-    // P07-G5: `zzzzzz` also shows exactly five distinct suggestions.
     await search.fill("zzzzzz");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.zzzzzz, COPY.en);
 
-    // The list closes when the field loses focus and the text remains; the
-    // active-descendant must be absent for the closed list (ARCH-020).
     await search.blur();
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(search).toHaveValue("zzzzzz");
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
 
-    // P07-G20, REQ-002: every food-data request stays on the Vite origin
-    // under `/api`; none reaches Fiber or a third-party host.
     const foodData = foodDataRequests();
     expect(foodData.length).toBeGreaterThanOrEqual(2);
     for (const url of foodData) {
@@ -300,14 +241,12 @@ test.describe("live Food Object suggestions", () => {
     await useBrowserLanguages(page, ["en-US"]);
     await page.goto("/");
 
-    // Switch through the real Interface Language control (task 26).
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
     const search = page.getByRole("combobox", { name: COPY.pl.search });
     await expect(search).toHaveAttribute("placeholder", COPY.pl.placeholder);
 
-    // REQ-013: Polish mode compares and renders Polish names.
     await search.fill("kurczak");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.kurczak, COPY.pl);
 
@@ -326,10 +265,6 @@ test.describe("live Food Object suggestions", () => {
       }
     });
 
-    // Hold only the second "chicken" request — the refocus intent — so the
-    // scenario can prove the panel stays closed until that fresh response
-    // returns (ARCH-019: no successful-response reuse; each intent starts a
-    // real backend request).
     let chickenCount = 0;
     let releaseSecond: () => void = () => {};
     const secondGate = new Promise<void>((resolve) => {
@@ -352,34 +287,23 @@ test.describe("live Food Object suggestions", () => {
     const search = page.getByRole("combobox", { name: COPY.en.search });
     const panel = page.getByRole("listbox", { name: COPY.en.listbox });
 
-    // First intent: focus and type a normal Search Query, then see the five
-    // seeded suggestions from the real stack.
     await search.fill("chicken");
     await expect(panel).toBeVisible();
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
 
-    // Blur closes the list and removes the inactive suggestion query.
     await search.blur();
     await expect(panel).toHaveCount(0);
     await expect(search).not.toHaveAttribute("aria-activedescendant");
 
-    // Second intent: refocus with the same text. The fresh request is held,
-    // while the prior rows remain temporary placeholder content so the panel
-    // does not flicker. This presentation continuity does not suppress the
-    // fresh backend request.
     await search.focus();
     await expect(panel).toBeVisible();
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
     await page.waitForTimeout(300);
     await expect(panel).toBeVisible();
 
-    // Releasing the held response replaces the placeholder rows with the
-    // fresh response inside the visible panel.
     releaseSecond();
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
 
-    // Exactly one request per intent — the refocus never reused the first
-    // successful response (ARCH-019).
     expect(
       suggestionRequestUrls.filter((url) => url.includes("query=chicken")),
     ).toHaveLength(2);
@@ -399,9 +323,6 @@ test.describe("live Food Object suggestions", () => {
       }),
     );
 
-    // Hold the first ("chicken") request so it stays in flight when the
-    // second query supersedes it; every other request reaches the real
-    // Fiber and PostgreSQL stack through the preview `/api` proxy.
     let sawFirst = false;
     let releaseFirst: () => void = () => {};
     const firstGate = new Promise<void>((resolve) => {
@@ -421,10 +342,7 @@ test.describe("live Food Object suggestions", () => {
         await firstGate;
         try {
           await route.continue();
-        } catch {
-          // The superseded request was already aborted by the browser, so
-          // there is no response left to forward to it.
-        }
+        } catch {}
         return;
       }
       await route.continue();
@@ -435,14 +353,11 @@ test.describe("live Food Object suggestions", () => {
     await search.fill("chicken");
     await firstSeen;
 
-    // Supersede the held request with a new Search Query.
     await search.fill("pizza");
     const panel = page.getByRole("listbox", { name: COPY.en.listbox });
     await expect(panel).toBeVisible();
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.pizza, COPY.en);
 
-    // P07-G20: the latest list matches the freshly seeded catalog and the
-    // superseded browser request was aborted (ARCH-010, ARCH-019).
     await expect
       .poll(() => failedRequests.find((r) => r.url.includes("query=chicken")))
       .toBeTruthy();
@@ -454,7 +369,6 @@ test.describe("live Food Object suggestions", () => {
     }
     expect(aborted.error).toContain("ERR_ABORTED");
 
-    // Releasing the held (already aborted) response cannot change the list.
     releaseFirst();
     await page.waitForTimeout(400);
     await expect(panel.getByRole("option")).toHaveCount(OPTION_COUNT);

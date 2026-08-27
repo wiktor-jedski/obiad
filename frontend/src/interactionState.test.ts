@@ -1,30 +1,3 @@
-/**
- * Pointer-selection and new-search transition — happy-dom component
- * integration scenario (task 28; ARCH-002, ARCH-003, ARCH-010, ARCH-011,
- * ARCH-022, REQ-020, REQ-022, REQ-023, REQ-024) with the ISSUE-010
- * quantity-editor state (task 34, REQ-025, REQ-026, REQ-027, REQ-028).
- *
- * `bun test` runs this file with the pinned `happy-dom` package and no
- * generated-client or network call (ISSUE-007). The store-level scenario
- * drives fresh `createInteractionState()` instances through the production
- * transition actions — the same narrow seam the real-stack Playwright
- * scenario cannot reach, because zero eligible Substitutes are unreachable
- * with the deterministic catalog (ISSUE-003, ISSUE-008). It proves that a
- * pointer selection transitions `empty` → `loadingNew` carrying the exact
- * selected Food Object and the initialized quantity-editor fields, that
- * the first page-0 outcome transitions `loadingNew` → `results` or
- * `zeroResults` while TanStack Query keeps the response data (the store
- * never copies items), that changed draft Search Query text preserves the
- * committed result, that `setFocused` preserves the transition, that a
- * fresh selection from a completed result commits the next `loadingNew`
- * intent, and that the ISSUE-010 quantity actions keep the exact raw text,
- * follow the draft-unit syntax, commit only changed valid values, clamp
- * above the advertised maximum without a clamp notice, and start no
- * request for an unchanged or invalid draft. Pointer activation, the
- * pending summary value, and focus retention remain covered by the
- * real-stack `food-quantity-editing.spec.ts`.
- */
-
 import { describe, expect, test } from "bun:test";
 import { get } from "svelte/store";
 import {
@@ -33,11 +6,6 @@ import {
   type SelectedFoodObject,
 } from "./lib/interactionState";
 
-/**
- * A captured Butter selection fixture for transition tests: a solid
- * without a Serving, so its allowed quantity-editor units contain only the
- * `g` base unit with the ISSUE-010 `100000` maximum (task 33).
- */
 const SELECTED: SelectedFoodObject = {
   foodObjectId: 18,
   names: { en: "Butter", pl: "Masło" },
@@ -46,12 +14,6 @@ const SELECTED: SelectedFoodObject = {
   capturedLanguage: "en",
 } as const;
 
-/**
- * A captured Pizza Margherita selection fixture for quantity-editor
- * transition tests: a solid with a 350 g Serving, so the allowed units
- * are `serving` first (whole-number floor of 100000 / 350 = 285) and then
- * the `g` base unit with maximum `100000` (task 33, ISSUE-010).
- */
 const SELECTED_SERVING: SelectedFoodObject = {
   foodObjectId: 1,
   names: { en: "Pizza Margherita", pl: "Pizza margherita" },
@@ -63,7 +25,6 @@ const SELECTED_SERVING: SelectedFoodObject = {
   capturedLanguage: "en",
 } as const;
 
-/** The expected quantity-editor fields of a selection with default `100 g`. */
 const DEFAULT_G_FIELDS = {
   quantityText: "100",
   draftUnit: "g",
@@ -73,7 +34,6 @@ const DEFAULT_G_FIELDS = {
   pageIndex: 0,
 } as const;
 
-/** Observable state projection used by transition assertions across variants. */
 interface ObservedInteractionState {
   name: InteractionState["name"];
   query: string;
@@ -122,7 +82,6 @@ describe("the pointer-selection and new-search transitions", () => {
     expect(state.name).toBe("results");
     expect(state.query).toBe("Butter");
     expect(state.selected).toEqual(SELECTED);
-    // The Module never copies query results into the store (ARCH-002).
     expect("items" in state).toBe(false);
     expect("data" in state).toBe(false);
     expect(Object.keys(state).sort()).toEqual([
@@ -238,7 +197,6 @@ describe("the pointer-selection and new-search transitions", () => {
 });
 
 describe("the ISSUE-010 quantity-editor actions", () => {
-  /** Returns the store driven into the results transition with SELECTED_SERVING. */
   function servingResults() {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED_SERVING);
@@ -274,14 +232,11 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     expect(state.quantityInvalid).toBe(false);
     expect(state.committedValue).toBe(1);
 
-    // An invalid Serving draft raises the error and keeps the exact text.
     store.setQuantityText("2,5");
     expect(state.quantityText).toBe("2,5");
     expect(state.quantityInvalid).toBe(true);
     expect(state.committedValue).toBe(1);
 
-    // The error clears as soon as the draft becomes syntactically valid,
-    // without committing it (ISSUE-010).
     store.setQuantityText("3");
     expect(state.quantityText).toBe("3");
     expect(state.quantityInvalid).toBe(false);
@@ -317,14 +272,11 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     expect(state.quantityInvalid).toBe(false);
     expect(state.committedValue).toBe(2.5);
     expect(state.committedUnit).toBe("serving");
-    // The page index never changes through a quantity commit.
     expect(state.pageIndex).toBe(0);
   });
 
   test("a valid draft that resolves to the committed value clears validation but starts no request", () => {
     const store = servingResults();
-    // The committed default is 1 serving; typing the same value commits
-    // nothing, and Enter followed by blur stays request-free.
     store.setQuantityText("1");
     store.commitQuantity();
     store.commitQuantity();
@@ -340,8 +292,6 @@ describe("the ISSUE-010 quantity-editor actions", () => {
 
   test("a valid value above the maximum is silently replaced by the whole maximum before commit, without a clamp notice", () => {
     const store = servingResults();
-    // The Serving maximum is 285 (100000 / 350 floored). A draft of 300 is
-    // silently clamped to 285 before commit.
     store.setQuantityText("300");
     store.commitQuantity();
 
@@ -354,8 +304,6 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     expect(state.committedValue).toBe(285);
     expect(state.committedUnit).toBe("serving");
 
-    // A clamp back to the committed maximum starts no new request: the
-    // resolved value equals the committed value.
     store.setQuantityText("500");
     store.commitQuantity();
     expect(state.committedValue).toBe(285);
@@ -366,7 +314,6 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     const store = servingResults();
     store.setQuantityText("0.5");
 
-    // Moving to the base unit replaces the draft with 100 g and commits.
     store.selectUnit("g");
     let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
@@ -378,14 +325,11 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     expect(state.committedUnit).toBe("g");
     expect(state.quantityInvalid).toBe(false);
 
-    // Selecting the Serving unit again replaces the draft with 1 and
-    // commits immediately.
     store.selectUnit("serving");
     expect(state.quantityText).toBe("1");
     expect(state.committedValue).toBe(1);
     expect(state.committedUnit).toBe("serving");
 
-    // Reselecting the already committed unit starts no new request.
     store.selectUnit("serving");
     expect(state.committedValue).toBe(1);
   });
@@ -464,7 +408,6 @@ describe("the intermediate MORE! result-paging transitions", () => {
 
   test("loadNextPage is a no-op when not in results state", () => {
     const store = createInteractionState();
-    // empty state
     store.loadNextPage();
     let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
@@ -472,7 +415,6 @@ describe("the intermediate MORE! result-paging transitions", () => {
     });
     expect(state.name).toBe("empty");
 
-    // loadingNew state
     store.selectSuggestion(SELECTED);
     store.loadNextPage();
     store.subscribe((next) => {
@@ -481,7 +423,6 @@ describe("the intermediate MORE! result-paging transitions", () => {
     expect(state.name).toBe("loadingNew");
     expect(state.pageIndex).toBe(0);
 
-    // zeroResults state
     store.applySearchResult(false);
     expect(state.name).toBe("zeroResults");
     store.loadNextPage();
@@ -515,10 +456,8 @@ describe("the intermediate MORE! result-paging transitions", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
-    // Advance to page 1
     store.loadNextPage();
     store.applySearchResult(true);
-    // Advance to page 2
     store.loadNextPage();
     store.applySearchResult(true);
 
@@ -551,10 +490,8 @@ describe("the intermediate MORE! result-paging transitions", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED);
     store.applySearchResult(true);
-    // Advance to page 1
     store.loadNextPage();
     store.applySearchResult(true);
-    // Advance to page 2
     store.loadNextPage();
     store.applySearchResult(true);
 

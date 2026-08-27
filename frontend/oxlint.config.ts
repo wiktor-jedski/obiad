@@ -1,6 +1,5 @@
 import { defineConfig } from "oxlint";
 
-/** Configures anti-slop rules for the frontend source. */
 export default defineConfig({
   ignorePatterns: [
     ".agent/**",
