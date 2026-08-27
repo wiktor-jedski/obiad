@@ -114,13 +114,13 @@
    */
   const orderedUnits = $derived(
     twoUnitsAllowed
-      ? ([
+      ? [
           interaction.draftUnit,
           ...allowedQuantities
             .map((allowed) => allowed.unit)
             .filter((unit) => unit !== interaction.draftUnit),
-        ] as QuantityUnit[])
-      : ([allowedQuantities[0].unit] as QuantityUnit[]),
+        ]
+      : [allowedQuantities[0].unit],
   );
   /** Whether the summary shows the initial new-Search pending interaction. */
   const initial = $derived(interaction.name === "loadingNew");
@@ -205,12 +205,11 @@
    * the draft becomes syntactically valid without committing it.
    */
   function onNumberInput(event: Event): void {
-    if (locked) {
+    const field = event.currentTarget;
+    if (locked || !(field instanceof HTMLInputElement)) {
       return;
     }
-    interactionState.setQuantityText(
-      (event.currentTarget as HTMLInputElement).value,
-    );
+    interactionState.setQuantityText(field.value);
   }
 
   /**
@@ -233,12 +232,16 @@
    * or `100` for a base unit and committed immediately (ISSUE-010, REQ-048).
    */
   function onUnitChange(event: Event): void {
-    if (locked) {
+    const selector = event.currentTarget;
+    if (locked || !(selector instanceof HTMLSelectElement)) {
       return;
     }
-    interactionState.selectUnit(
-      (event.currentTarget as HTMLSelectElement).value as QuantityUnit,
+    const selected = allowedQuantities.find(
+      (allowed) => allowed.unit === selector.value,
     );
+    if (selected !== undefined) {
+      interactionState.selectUnit(selected.unit);
+    }
   }
 
   /**
@@ -249,12 +252,12 @@
    * `relatedTarget` check commits only on a real exit (ISSUE-010, REQ-048).
    */
   function onEditorFocusOut(event: FocusEvent): void {
-    if (locked) {
+    const editor = event.currentTarget;
+    if (locked || !(editor instanceof HTMLElement)) {
       return;
     }
-    const editor = event.currentTarget as HTMLElement;
-    const next = event.relatedTarget as Node | null;
-    if (next === null || !editor.contains(next)) {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !editor.contains(next)) {
       interactionState.commitQuantity();
     }
   }

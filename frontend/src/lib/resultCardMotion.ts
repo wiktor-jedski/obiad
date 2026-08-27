@@ -78,7 +78,7 @@ export function resultCardTransition(
   const reducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
   ).matches;
-  if (reducedMotion || typeof node.animate !== "function") {
+  if (reducedMotion || node.animate === undefined) {
     // Reduced motion (REQ-054) and non-animating runtimes remove every
     // duration and delay: the element becomes fully visible immediately,
     // in the same animation frame as the other cards, with no

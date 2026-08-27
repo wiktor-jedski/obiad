@@ -207,12 +207,10 @@ async function assertControlAtViewport(
   await expect(chevron).toHaveText("⌄");
   await expect(page.locator("button")).toHaveCount(0);
 
-  const wrapperBox = (await wrapper.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const wrapperBox = await wrapper.boundingBox();
+  if (wrapperBox === null) {
+    throw new Error(`${viewport.name}: language wrapper has no bounding box`);
+  }
   expect(Math.abs(wrapperBox.y - CONTROL_TOP_PX)).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
@@ -220,10 +218,10 @@ async function assertControlAtViewport(
     ),
   ).toBeLessThanOrEqual(1);
 
-  const selectBox = (await languageSelect.boundingBox()) as {
-    width: number;
-    height: number;
-  };
+  const selectBox = await languageSelect.boundingBox();
+  if (selectBox === null) {
+    throw new Error(`${viewport.name}: language select has no bounding box`);
+  }
   expect(selectBox.width).toBeGreaterThanOrEqual(MIN_TARGET_PX);
   expect(selectBox.height).toBeGreaterThanOrEqual(MIN_TARGET_PX);
   await expect(languageSelect).toHaveCSS("border-top-width", "0px");
@@ -252,12 +250,10 @@ async function assertControlAtViewport(
   ).toHaveValue("pl");
   await expectStored(page, "pl");
 
-  const searchBox = (await searchInput.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const searchBox = await searchInput.boundingBox();
+  if (searchBox === null) {
+    throw new Error(`${viewport.name}: Search input has no bounding box`);
+  }
   const expectedWidth = Math.min(
     viewport.width - 2 * viewport.gutterPx,
     FIELD_MAX_WIDTH_PX,

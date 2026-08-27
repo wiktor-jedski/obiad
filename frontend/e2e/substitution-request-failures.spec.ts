@@ -1,5 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
+import type {
+  Error as ApiError,
+  SubstituteSearchRequest,
+  SubstituteSearchResponse,
+} from "../src/client/types.gen";
 
 /**
  * Real-stack Substitution request-failure scenario (task 41, task 42,
@@ -127,13 +132,9 @@ async function useBrowserLanguages(
 
 /** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
-  responseBody: unknown;
+  responseBody: ApiError | SubstituteSearchResponse | undefined;
 }
 
 /**
@@ -147,8 +148,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as SubstitutePost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
         responseBody: undefined,
       });
@@ -165,8 +167,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
         post.status = response.status();
         void response
           .json()
-          .then((body: unknown) => {
-            post.responseBody = body;
+          .then((body) => {
+            // SAFETY: The generated substitute-search endpoint returns only ApiError or SubstituteSearchResponse JSON.
+            post.responseBody = body as ApiError | SubstituteSearchResponse;
           })
           .catch(() => {
             post.responseBody = undefined;
@@ -266,9 +269,12 @@ async function expectNewSearchFailure(
   await expect.poll(() => posts.length).toBe(2);
   await expect.poll(() => posts[1]?.status).toBe(503);
   await expect.poll(() => posts[1]?.responseBody).toBeDefined();
-  const body = posts[1]?.responseBody as Record<string, unknown> | undefined;
-  expect(body?.code).toBe("CATALOG_UNAVAILABLE");
-  expect("field" in (body ?? {})).toBe(false);
+  const body = posts[1]?.responseBody;
+  if (body === undefined || !("code" in body)) {
+    throw new Error("Expected a parsed CATALOG_UNAVAILABLE response");
+  }
+  expect(body.code).toBe("CATALOG_UNAVAILABLE");
+  expect("field" in body).toBe(false);
   expect(posts[0]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
     quantity: { value: 1, unit: "serving" },
@@ -388,9 +394,12 @@ async function expectMoreFailure(
   });
   await expect.poll(() => posts[2]?.status).toBe(503);
   await expect.poll(() => posts[2]?.responseBody).toBeDefined();
-  const body = posts[2]?.responseBody as Record<string, unknown> | undefined;
-  expect(body?.code).toBe("CATALOG_UNAVAILABLE");
-  expect("field" in (body ?? {})).toBe(false);
+  const body = posts[2]?.responseBody;
+  if (body === undefined || !("code" in body)) {
+    throw new Error("Expected a parsed CATALOG_UNAVAILABLE response");
+  }
+  expect(body.code).toBe("CATALOG_UNAVAILABLE");
+  expect("field" in body).toBe(false);
 
   // The page reaches the moreFailure interaction transition.
   await expect(page.locator("main")).toHaveAttribute(
@@ -406,16 +415,11 @@ async function expectMoreFailure(
 
   // The displayed page index and the current page's ordered card IDs and
   // content stay retained from the successful page-1 response.
-  const page1Response = posts[1]?.responseBody as
-    | {
-        pageIndex: number;
-        items?: Array<{
-          foodObjectId: number;
-          names: { en: string; pl: string };
-        }>;
-      }
-    | undefined;
-  expect(page1Response?.pageIndex).toBe(1);
+  const page1Response = posts[1]?.responseBody;
+  if (page1Response === undefined || !("pageIndex" in page1Response)) {
+    throw new Error("Expected the successful page-1 response body");
+  }
+  expect(page1Response.pageIndex).toBe(1);
   await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
   await expect(page.locator("[data-result-card]")).toHaveCount(3);
   const firstCardName = await page

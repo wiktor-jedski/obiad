@@ -18,6 +18,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
+import { get } from "svelte/store";
 import App from "./App.svelte";
 import {
   INTERFACE_LANGUAGE_STORAGE_KEY,
@@ -101,9 +102,12 @@ describe("the persisted Interface Language store", () => {
 
   test("rendering and a language switch make no cookie or network call", () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (() => {
-      throw new Error("unexpected network call in component integration");
-    }) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(
+      function unexpectedFetch() {
+        throw new Error("unexpected network call in component integration");
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     try {
       render(App);
       interfaceLanguage.set("pl");
@@ -119,20 +123,13 @@ describe("the persisted Interface Language store", () => {
       storage: recordingStorage("pl", log),
       browserLanguages: ["en-US"],
     });
-    let initial = "en";
-    plOverBrowserEn.subscribe((value) => {
-      initial = value;
-    });
-    expect(initial).toBe("pl");
+    expect(get(plOverBrowserEn)).toBe("pl");
 
     const enOverBrowserPl = createInterfaceLanguageStore({
       storage: recordingStorage("en", log),
       browserLanguages: ["pl-PL"],
     });
-    enOverBrowserPl.subscribe((value) => {
-      initial = value;
-    });
-    expect(initial).toBe("en");
+    expect(get(enOverBrowserPl)).toBe("en");
   });
 
   test("the first supported primary language wins in browser order, defaulting to English", () => {
@@ -149,11 +146,7 @@ describe("the persisted Interface Language store", () => {
         storage: recordingStorage(null, log),
         browserLanguages: languages,
       });
-      const state: { current: "en" | "pl" } = { current: "en" };
-      store.subscribe((next) => {
-        state.current = next;
-      });
-      expect(state.current, `browser languages ${languages.join(", ")}`).toBe(
+      expect(get(store), `browser languages ${languages.join(", ")}`).toBe(
         expected,
       );
     }
@@ -165,11 +158,7 @@ describe("the persisted Interface Language store", () => {
       storage: recordingStorage("fr", log),
       browserLanguages: ["pl-PL"],
     });
-    const state: { current: "en" | "pl" } = { current: "en" };
-    store.subscribe((next) => {
-      state.current = next;
-    });
-    expect(state.current).toBe("pl");
+    expect(get(store)).toBe("pl");
     // The invalid value is read once and never written back (ISSUE-007).
     expect(log).toEqual([`read:${INTERFACE_LANGUAGE_STORAGE_KEY}`]);
   });
@@ -180,11 +169,7 @@ describe("the persisted Interface Language store", () => {
       storage: recordingStorage(null, log),
       browserLanguages: ["pl-PL"],
     });
-    const state: { current: "en" | "pl" } = { current: "en" };
-    store.subscribe((next) => {
-      state.current = next;
-    });
-    expect(state.current).toBe("pl");
+    expect(get(store)).toBe("pl");
     // Initialization performs no storage write (ISSUE-007, REQ-056).
     expect(log).toEqual([`read:${INTERFACE_LANGUAGE_STORAGE_KEY}`]);
   });
@@ -194,11 +179,7 @@ describe("the persisted Interface Language store", () => {
       storage: recordingStorage("pl", [], { read: true }),
       browserLanguages: ["en-US"],
     });
-    const state: { current: "en" | "pl" } = { current: "pl" };
-    store.subscribe((next) => {
-      state.current = next;
-    });
-    expect(state.current).toBe("en");
+    expect(get(store)).toBe("en");
   });
 
   test("the setter updates memory before attempting persistence and survives a failed write", () => {

@@ -118,8 +118,10 @@ async function assertEmptyShell(
   const label = page.locator("label");
   await expect(label).toHaveCount(1);
   await expect(label).toHaveText("Search");
-  const inputId = (await input.getAttribute("id")) as string;
-  expect(inputId.length).toBeGreaterThan(0);
+  const inputId = await input.getAttribute("id");
+  if (inputId === null || inputId === "") {
+    throw new Error("Search input must have a nonempty id");
+  }
   await expect(label).toHaveAttribute("for", inputId);
   await expect(input).toHaveAttribute("placeholder", "Search foods");
   await expect(input).toHaveAccessibleName("Search");
@@ -301,10 +303,12 @@ test.describe("empty shell", () => {
     await expect
       .poll(() =>
         search.evaluate((field) => {
-          const input = field as HTMLInputElement;
+          if (!(field instanceof HTMLInputElement)) {
+            throw new TypeError("Search combobox must be an input element");
+          }
           return {
-            start: input.selectionStart,
-            end: input.selectionEnd,
+            start: field.selectionStart,
+            end: field.selectionEnd,
           };
         }),
       )

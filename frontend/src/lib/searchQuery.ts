@@ -26,15 +26,15 @@
  */
 
 /**
- * Go-compatible Unicode whitespace (Go `unicode.IsSpace`, ARCH-017): the
- * Latin-1 control spaces, `U+0085` NEXT LINE, `U+00A0` NO-BREAK SPACE, and
- * the Unicode White_Space property (`U+1680`, `U+2000`–`U+200A`,
- * `U+2028`, `U+2029`, `U+202F`, `U+205F`, `U+3000`). The set is explicit
- * because JavaScript's `\s` differs: it adds `U+FEFF` and omits `U+0085`,
- * so it would classify a NEXT-LINE-only draft as nonempty (ISSUE-009).
+ * Go-compatible Unicode whitespace (Go `unicode.IsSpace`, ARCH-017).
+ * Unicode's `White_Space` property contains the Latin-1 control spaces,
+ * `U+0085` NEXT LINE, `U+00A0` NO-BREAK SPACE, `U+1680`,
+ * `U+2000`–`U+200A`, `U+2028`, `U+2029`, `U+202F`, `U+205F`, and
+ * `U+3000`. JavaScript's `\s` is not used because it adds `U+FEFF` and
+ * would classify a byte-order-mark-only draft differently from Go
+ * (ISSUE-009).
  */
-const GO_WHITESPACE =
-  /[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/u;
+const GO_WHITESPACE = /\p{White_Space}/u;
 
 /**
  * Applies the ARCH-017 normalization pipeline to one raw Search Query,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack Search performance scenario (task 54, Phase 18; ARCH-022,
@@ -151,7 +152,10 @@ async function installPerformanceHarness(page: Page): Promise<void> {
     const FIRST_CARD_DEADLINE_MS = 3000;
 
     const observer = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries() as PerformanceResourceTiming[]) {
+      for (const entry of list.getEntries()) {
+        if (!(entry instanceof PerformanceResourceTiming)) {
+          continue;
+        }
         if (
           entry.name.includes("/api/v1/substitutes/search") &&
           entry.initiatorType === "fetch"
@@ -229,11 +233,7 @@ async function installPerformanceHarness(page: Page): Promise<void> {
 
 /** One observed generated-client Substitution Search POST. */
 interface TrackedPost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
 }
 
@@ -260,8 +260,9 @@ function trackSubstitutePosts(page: Page): PostLedger {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as TrackedPost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
       active += 1;
@@ -411,14 +412,9 @@ test.describe("Search performance", () => {
       // Await the measured Search response (its resource entry records
       // `responseEnd`) and the first visible Result Card frame.
       await expect
-        .poll(
-          () =>
-            page.evaluate(
-              (index) => window.__perf?.posts.length ?? 0,
-              iteration,
-            ),
-          { timeout: 30_000 },
-        )
+        .poll(() => page.evaluate(() => window.__perf?.posts.length ?? 0), {
+          timeout: 30_000,
+        })
         .toBeGreaterThanOrEqual(2 * iteration + 1);
       await expect
         .poll(
@@ -460,14 +456,9 @@ test.describe("Search performance", () => {
       await expect(moreButton).toBeVisible();
       await moreButton.click();
       await expect
-        .poll(
-          () =>
-            page.evaluate(
-              (index) => window.__perf?.posts.length ?? 0,
-              iteration,
-            ),
-          { timeout: 30_000 },
-        )
+        .poll(() => page.evaluate(() => window.__perf?.posts.length ?? 0), {
+          timeout: 30_000,
+        })
         .toBeGreaterThanOrEqual(2 * iteration + 2);
       await expect
         .poll(() => renderedCardIDs(page), { timeout: 30_000 })

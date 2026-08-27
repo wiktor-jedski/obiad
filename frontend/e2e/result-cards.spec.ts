@@ -1,4 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import type {
+  SubstituteItem,
+  SubstituteSearchResponse,
+} from "../src/client/types.gen";
 
 /**
  * Real-stack result-card scenario (task 29; ARCH-001, ARCH-003, ARCH-015,
@@ -63,20 +67,6 @@ const COPY = {
   },
 } as const;
 
-/**
- * One display-ready Substitute as returned by the real Fiber process; the
- * scenario compares every rendered card field against these API values.
- */
-interface SubstituteItem {
-  foodObjectId: number;
-  names: { en: string; pl: string };
-  imageKey?: string;
-  matchedQuantity: { value: number; unit: "g" | "ml" };
-  macronutrients: { protein: number; carbohydrate: number; fat: number };
-  calories: number;
-  similarityPercent: number;
-}
-
 /** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
@@ -99,7 +89,8 @@ function captureSubstituteItems(page: Page): Map<number, SubstituteItem> {
   const items = new Map<number, SubstituteItem>();
   page.on("response", async (response) => {
     if (response.url().includes("/api/v1/substitutes/search")) {
-      const body = (await response.json()) as { items: SubstituteItem[] };
+      // SAFETY: The real generated substitute-search route returns SubstituteSearchResponse JSON.
+      const body = (await response.json()) as SubstituteSearchResponse;
       for (const item of body.items) {
         items.set(item.foodObjectId, item);
       }
@@ -195,7 +186,14 @@ async function expectCard(
   const image = card.locator("[data-result-card-image]");
   await expect(image).toHaveAttribute("alt", "");
   await expect
-    .poll(() => image.evaluate((element) => (element as HTMLImageElement).src))
+    .poll(() =>
+      image.evaluate((element) => {
+        if (!(element instanceof HTMLImageElement)) {
+          throw new TypeError("Result card image must be an image element");
+        }
+        return element.src;
+      }),
+    )
     .toBe(new URL(placeholderUrl, PREVIEW_ORIGIN).href);
 }
 
@@ -248,7 +246,10 @@ async function expectRankedCards(
   for (let index = 0; index < expectedRanks.length; index += 1) {
     const foodObjectId = expectedRanks[index];
     await expect.poll(() => items.get(foodObjectId)).toBeTruthy();
-    const item = items.get(foodObjectId) as SubstituteItem;
+    const item = items.get(foodObjectId);
+    if (item === undefined) {
+      throw new Error(`Substitute item ${foodObjectId} was not captured`);
+    }
     await expectCard(cards.nth(index), item, copy, locale, placeholderUrl);
     await expectCardFieldOrder(cards.nth(index), item, copy);
   }
@@ -256,10 +257,7 @@ async function expectRankedCards(
   // REQ-036: the designated inputs show the expected ranks 1, 2, and 3.
   expect(
     cards.evaluateAll((elements) =>
-      elements.map(
-        (element) =>
-          (element.querySelector("h3") as HTMLElement | null)?.textContent,
-      ),
+      elements.map((element) => element.querySelector("h3")?.textContent),
     ),
   ).resolves.toEqual(
     expectedRanks.map(
@@ -279,9 +277,12 @@ test.describe("result cards", () => {
 
     await page.goto("/");
     await selectFoodObject(page, "margherita", 1, COPY.en);
-    const placeholderUrl = (await page
+    const placeholderUrl = await page
       .locator("main")
-      .getAttribute("data-placeholder-url")) as string;
+      .getAttribute("data-placeholder-url");
+    if (placeholderUrl === null || placeholderUrl === "") {
+      throw new Error("Application did not expose the placeholder URL");
+    }
 
     // P07-G12, REQ-036: Pizza Margherita (1) ranks 13, 29, and 26.
     await expectRankedCards(
@@ -302,18 +303,22 @@ test.describe("result cards", () => {
       .locator("[data-result-card-image]");
     await expect
       .poll(() =>
-        gyozaImage.evaluate(
-          (element) =>
-            (element as HTMLImageElement).complete &&
-            (element as HTMLImageElement).naturalWidth > 0,
-        ),
+        gyozaImage.evaluate((element) => {
+          if (!(element instanceof HTMLImageElement)) {
+            throw new TypeError("Gyoza card image must be an image element");
+          }
+          return element.complete && element.naturalWidth > 0;
+        }),
       )
       .toBe(true);
 
     // P07-G13, REQ-037, REQ-038: whole `g` Matched Quantity, one-decimal
     // English dot macronutrients, whole similarity percentage; the API item
     // for Paella (29) is a solid with a gram unit.
-    const paella = items.get(29) as SubstituteItem;
+    const paella = items.get(29);
+    if (paella === undefined) {
+      throw new Error("Paella substitute item was not captured");
+    }
     expect(paella.matchedQuantity.unit).toBe("g");
     await expect(page.locator("[data-result-card]").nth(1)).toContainText(
       `${paella.matchedQuantity.value} g`,
@@ -361,9 +366,12 @@ test.describe("result cards", () => {
 
     await page.goto("/");
     await selectFoodObject(page, "chicken breast", 5, COPY.en);
-    const placeholderUrl = (await page
+    const placeholderUrl = await page
       .locator("main")
-      .getAttribute("data-placeholder-url")) as string;
+      .getAttribute("data-placeholder-url");
+    if (placeholderUrl === null || placeholderUrl === "") {
+      throw new Error("Application did not expose the placeholder URL");
+    }
 
     // P07-G12, REQ-036: Chicken breast (5) ranks 23, 11, and 6.
     await expectRankedCards(
@@ -383,22 +391,24 @@ test.describe("result cards", () => {
     for (let index = 0; index < 3; index += 1) {
       await expect
         .poll(() =>
-          images
-            .nth(index)
-            .evaluate(
-              (element) =>
-                (element as HTMLImageElement).complete &&
-                (element as HTMLImageElement).naturalWidth > 0,
-            ),
+          images.nth(index).evaluate((element) => {
+            if (!(element instanceof HTMLImageElement)) {
+              throw new TypeError("Result card image must be an image element");
+            }
+            return element.complete && element.naturalWidth > 0;
+          }),
         )
         .toBe(true);
     }
     const absolutePlaceholder = new URL(placeholderUrl, PREVIEW_ORIGIN).href;
     for (let index = 0; index < 3; index += 1) {
       expect(
-        await images
-          .nth(index)
-          .evaluate((element) => (element as HTMLImageElement).src),
+        await images.nth(index).evaluate((element) => {
+          if (!(element instanceof HTMLImageElement)) {
+            throw new TypeError("Result card image must be an image element");
+          }
+          return element.src;
+        }),
       ).toBe(absolutePlaceholder);
     }
   });
@@ -414,9 +424,12 @@ test.describe("result cards", () => {
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
     await selectFoodObject(page, "mleko", 10, COPY.pl);
-    const placeholderUrl = (await page
+    const placeholderUrl = await page
       .locator("main")
-      .getAttribute("data-placeholder-url")) as string;
+      .getAttribute("data-placeholder-url");
+    if (placeholderUrl === null || placeholderUrl === "") {
+      throw new Error("Application did not expose the placeholder URL");
+    }
 
     // P07-G12, REQ-036: Milk (10) ranks 33, 3, and 21.
     await expectRankedCards(
@@ -430,7 +443,10 @@ test.describe("result cards", () => {
 
     // REQ-039, ISSUE-008: Polish macronutrients keep a comma with exactly
     // one decimal place, and the visible labels are the Polish copy.
-    const mondongo = items.get(33) as SubstituteItem;
+    const mondongo = items.get(33);
+    if (mondongo === undefined) {
+      throw new Error("Mondongo substitute item was not captured");
+    }
     const proteinRow = page
       .locator("[data-result-card]")
       .first()

@@ -26,6 +26,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { get } from "svelte/store";
 import {
   createInteractionState,
   type InteractionState,
@@ -72,6 +73,20 @@ const DEFAULT_G_FIELDS = {
   pageIndex: 0,
 } as const;
 
+/** Observable state projection used by transition assertions across variants. */
+interface ObservedInteractionState {
+  name: InteractionState["name"];
+  query: string;
+  focused: boolean;
+  selected?: SelectedFoodObject;
+  quantityText?: string;
+  draftUnit?: SelectedFoodObject["quantity"]["unit"];
+  committedValue?: number;
+  committedUnit?: SelectedFoodObject["quantity"]["unit"];
+  quantityInvalid?: boolean;
+  pageIndex?: number;
+}
+
 describe("the pointer-selection and new-search transitions", () => {
   test("a pointer selection replaces the query with the active-language name, initializes the quantity editor, and transitions to loadingNew", () => {
     const store = createInteractionState();
@@ -80,7 +95,7 @@ describe("the pointer-selection and new-search transitions", () => {
 
     store.selectSuggestion(SELECTED);
 
-    let state: InteractionState | undefined;
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
       state = next;
     });
@@ -100,9 +115,9 @@ describe("the pointer-selection and new-search transitions", () => {
 
     store.applySearchResult(true);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("results");
     expect(state.query).toBe("Butter");
@@ -131,9 +146,9 @@ describe("the pointer-selection and new-search transitions", () => {
 
     store.applySearchResult(false);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("zeroResults");
     expect(state.query).toBe("Butter");
@@ -164,9 +179,9 @@ describe("the pointer-selection and new-search transitions", () => {
 
     store.setQuery("pizza");
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state).toEqual({
       name: "results",
@@ -192,9 +207,9 @@ describe("the pointer-selection and new-search transitions", () => {
     store.setQuery("milk");
     store.selectSuggestion(nextSelected);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state).toEqual({
       name: "loadingNew",
@@ -214,9 +229,9 @@ describe("the pointer-selection and new-search transitions", () => {
     const store = createInteractionState();
     store.applySearchResult(true);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("empty");
   });
@@ -235,9 +250,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     const store = createInteractionState();
     store.selectSuggestion(SELECTED_SERVING);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("1");
     expect(state.draftUnit).toBe("serving");
@@ -251,9 +266,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     const store = servingResults();
     store.setQuantityText("2.5");
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("2.5");
     expect(state.quantityInvalid).toBe(false);
@@ -279,9 +294,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     store.setQuantityText("abc");
     store.commitQuantity();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("abc");
     expect(state.quantityInvalid).toBe(true);
@@ -294,9 +309,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     store.setQuantityText("2.5");
     store.commitQuantity();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("2.5");
     expect(state.quantityInvalid).toBe(false);
@@ -314,9 +329,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     store.commitQuantity();
     store.commitQuantity();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityInvalid).toBe(false);
     expect(state.committedValue).toBe(1);
@@ -330,9 +345,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
     store.setQuantityText("300");
     store.commitQuantity();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("285");
     expect(state.quantityInvalid).toBe(false);
@@ -353,9 +368,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
 
     // Moving to the base unit replaces the draft with 100 g and commits.
     store.selectUnit("g");
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityText).toBe("100");
     expect(state.draftUnit).toBe("g");
@@ -396,9 +411,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
       "1,5",
     ]) {
       store.setQuantityText(invalid);
-      let state: Record<string, unknown> = {};
+      let state: ObservedInteractionState = get(store);
       store.subscribe((next) => {
-        state = { ...next };
+        state = next;
       });
       expect(
         state.quantityInvalid,
@@ -412,9 +427,9 @@ describe("the ISSUE-010 quantity-editor actions", () => {
 
     store.setQuantityText("250");
     store.commitQuantity();
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.quantityInvalid).toBe(false);
     expect(state.committedValue).toBe(250);
@@ -429,9 +444,9 @@ describe("the intermediate MORE! result-paging transitions", () => {
 
     store.loadNextPage();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state).toEqual({
       name: "loadingMore",
@@ -451,9 +466,9 @@ describe("the intermediate MORE! result-paging transitions", () => {
     const store = createInteractionState();
     // empty state
     store.loadNextPage();
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("empty");
 
@@ -461,7 +476,7 @@ describe("the intermediate MORE! result-paging transitions", () => {
     store.selectSuggestion(SELECTED);
     store.loadNextPage();
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("loadingNew");
     expect(state.pageIndex).toBe(0);
@@ -471,7 +486,7 @@ describe("the intermediate MORE! result-paging transitions", () => {
     expect(state.name).toBe("zeroResults");
     store.loadNextPage();
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("zeroResults");
     expect(state.pageIndex).toBe(0);
@@ -485,9 +500,9 @@ describe("the intermediate MORE! result-paging transitions", () => {
 
     store.applySearchResult(true);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("results");
     expect(state.pageIndex).toBe(1);
@@ -507,9 +522,9 @@ describe("the intermediate MORE! result-paging transitions", () => {
     store.loadNextPage();
     store.applySearchResult(true);
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("results");
     expect(state.pageIndex).toBe(2);
@@ -524,7 +539,7 @@ describe("the intermediate MORE! result-paging transitions", () => {
     store.selectSuggestion(nextSelected);
 
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.name).toBe("loadingNew");
     expect(state.pageIndex).toBe(0);
@@ -546,9 +561,9 @@ describe("the intermediate MORE! result-paging transitions", () => {
     store.setQuantityText("200");
     store.commitQuantity();
 
-    let state: Record<string, unknown> = {};
+    let state: ObservedInteractionState = get(store);
     store.subscribe((next) => {
-      state = { ...next };
+      state = next;
     });
     expect(state.pageIndex).toBe(2);
     expect(state.committedValue).toBe(200);

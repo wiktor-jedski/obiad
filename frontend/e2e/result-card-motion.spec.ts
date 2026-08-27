@@ -243,11 +243,10 @@ function installMotionObserver(): void {
       event.type === "outrostart" ||
       event.type === "outroend"
     ) {
-      const target = this;
-      if (target instanceof Element) {
-        const card = target.matches("[data-result-card]")
-          ? target
-          : target.querySelector("[data-result-card]");
+      if (this instanceof Element) {
+        const card = this.matches("[data-result-card]")
+          ? this
+          : this.querySelector("[data-result-card]");
         if (card !== null) {
           const heading = document.querySelector(
             "[data-substitutions-heading]",
@@ -262,17 +261,20 @@ function installMotionObserver(): void {
             // they are frame-accurate and immune to asynchronous event
             // delivery. Intro events target the card; outro events target
             // its stable rank-slot motion wrapper.
-            const finished = target
-              .getAnimations()
-              .filter((animation) => animation.playState === "finished");
+            const finished = this.getAnimations().filter(
+              (animation) => animation.playState === "finished",
+            );
             const main = finished[0];
-            if (
-              main !== undefined &&
-              typeof main.startTime === "number" &&
-              typeof main.currentTime === "number"
-            ) {
-              startTime = main.startTime;
-              currentTime = main.currentTime;
+            if (main !== undefined) {
+              const observedStartTime = Number(main.startTime);
+              const observedCurrentTime = Number(main.currentTime);
+              if (
+                Number.isFinite(observedStartTime) &&
+                Number.isFinite(observedCurrentTime)
+              ) {
+                startTime = observedStartTime;
+                currentTime = observedCurrentTime;
+              }
             }
           }
           events.push({
@@ -456,12 +458,8 @@ test.describe("Result Card motion", () => {
     const events = await motionEvents(page);
     const frames = await motionFrames(page);
     const tolerance = observedFrameMs(frames);
-    const starts = events.filter(
-      (entry) => entry.type === "introstart",
-    ) as MotionEventEntry[];
-    const ends = events.filter(
-      (entry) => entry.type === "introend",
-    ) as MotionEventEntry[];
+    const starts = events.filter((entry) => entry.type === "introstart");
+    const ends = events.filter((entry) => entry.type === "introend");
     expect(starts).toHaveLength(3);
     expect(ends).toHaveLength(3);
     expect(
@@ -741,18 +739,10 @@ test.describe("Result Card motion", () => {
 
     // The replacement window contains exactly the three outro and three
     // intro pairs of the keyed replacement sequence (REQ-053).
-    const outroStarts = events.filter(
-      (entry) => entry.type === "outrostart",
-    ) as MotionEventEntry[];
-    const outroEnds = events.filter(
-      (entry) => entry.type === "outroend",
-    ) as MotionEventEntry[];
-    const introStarts = events.filter(
-      (entry) => entry.type === "introstart",
-    ) as MotionEventEntry[];
-    const introEnds = events.filter(
-      (entry) => entry.type === "introend",
-    ) as MotionEventEntry[];
+    const outroStarts = events.filter((entry) => entry.type === "outrostart");
+    const outroEnds = events.filter((entry) => entry.type === "outroend");
+    const introStarts = events.filter((entry) => entry.type === "introstart");
+    const introEnds = events.filter((entry) => entry.type === "introend");
     expect(outroStarts).toHaveLength(3);
     expect(outroEnds).toHaveLength(3);
     expect(introStarts).toHaveLength(3);
@@ -900,18 +890,10 @@ test.describe("Result Card motion", () => {
 
     const events = (await motionEvents(page)).slice(firstPageEventCount);
     expect(events).toHaveLength(12);
-    const outroStarts = events.filter(
-      (entry) => entry.type === "outrostart",
-    ) as MotionEventEntry[];
-    const outroEnds = events.filter(
-      (entry) => entry.type === "outroend",
-    ) as MotionEventEntry[];
-    const introStarts = events.filter(
-      (entry) => entry.type === "introstart",
-    ) as MotionEventEntry[];
-    const introEnds = events.filter(
-      (entry) => entry.type === "introend",
-    ) as MotionEventEntry[];
+    const outroStarts = events.filter((entry) => entry.type === "outrostart");
+    const outroEnds = events.filter((entry) => entry.type === "outroend");
+    const introStarts = events.filter((entry) => entry.type === "introstart");
+    const introEnds = events.filter((entry) => entry.type === "introend");
     expect(outroStarts).toHaveLength(3);
     expect(outroEnds).toHaveLength(3);
     expect(introStarts).toHaveLength(3);

@@ -39,10 +39,8 @@
    * the Search control), so the language selection explicitly collapses it.
    */
   function clearSearchTextSelection(): void {
-    const field = document.getElementById(
-      "food-search",
-    ) as HTMLInputElement | null;
-    if (field !== null) {
+    const field = document.getElementById("food-search");
+    if (field instanceof HTMLInputElement) {
       field.setSelectionRange(field.value.length, field.value.length);
     }
   }
@@ -61,7 +59,11 @@
    * automatic focus return is added.
    */
   function selectLanguage(event: Event): void {
-    const language = (event.currentTarget as HTMLSelectElement).value;
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const language = target.value;
     if (!isInterfaceLanguage(language)) {
       return;
     }

@@ -51,7 +51,7 @@
  * stack).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import App from "./App.svelte";
@@ -175,22 +175,29 @@ describe("the root result-state composition", () => {
     const postUrls: string[] = [];
     const originalFetch = globalThis.fetch;
     const OriginalRequest = globalThis.Request;
-    globalThis.Request = HappyDomRequest as unknown as typeof Request;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === "string" ? input : (input as { url: string }).url;
-      if (url.includes("/api/v1/substitutes/search")) {
-        postUrls.push(url);
-        return new Response(EMPTY_RESPONSE_BODY, {
+    Object.defineProperty(globalThis, "Request", {
+      configurable: true,
+      writable: true,
+      value: HappyDomRequest,
+    });
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url =
+          input instanceof globalThis.Request ? input.url : input.toString();
+        if (url.includes("/api/v1/substitutes/search")) {
+          postUrls.push(url);
+          return new Response(EMPTY_RESPONSE_BODY, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ items: [] }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
-      }
-      return new Response(JSON.stringify({ items: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     try {
       // A selection exists before the first application mount (REQ-022):
       // the interaction state is the loadingNew transition.
@@ -358,32 +365,34 @@ describe("the root result-state composition", () => {
     const postUrls: string[] = [];
     const originalFetch = globalThis.fetch;
     const OriginalRequest = globalThis.Request;
-    globalThis.Request = HappyDomRequest as unknown as typeof Request;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-      if (url.includes("/api/v1/substitutes/search")) {
-        postUrls.push(url);
-        return new Response(EMPTY_RESPONSE_BODY, {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      if (url.includes("/api/v1/food-suggestions")) {
-        return new Response(JSON.stringify({ items: SUGGESTION_ITEMS }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ items: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
+    Object.defineProperty(globalThis, "Request", {
+      configurable: true,
+      writable: true,
+      value: HappyDomRequest,
+    });
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url =
+          input instanceof globalThis.Request ? input.url : input.toString();
+        if (url.includes("/api/v1/substitutes/search")) {
+          postUrls.push(url);
+          return new Response(EMPTY_RESPONSE_BODY, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            items: SUGGESTION_ITEMS,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     try {
       const view = render(App);
       const search = view.getByRole("combobox", { name: "Search" });
@@ -416,9 +425,10 @@ describe("the root result-state composition", () => {
       // production transition to zeroResults with zero cards.
 
       expect(postUrls, "one POST for the keyboard selection").toHaveLength(1);
-      // The combobox role resolves to the native search input element.
-      const searchInput = search as HTMLInputElement;
-      expect(searchInput.value).toBe("Food 7");
+      if (!(search instanceof HTMLInputElement)) {
+        throw new TypeError("Search combobox must be an input element");
+      }
+      expect(search.value).toBe("Food 7");
       expect(view.queryByRole("listbox")).toBeNull();
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),

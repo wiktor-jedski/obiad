@@ -115,8 +115,11 @@
    * case here because the supported map is empty.
    */
   function onImageError(event: Event): void {
-    const image = event.currentTarget as HTMLImageElement;
-    if (image.getAttribute("src") !== foodPlaceholderUrl) {
+    const image = event.currentTarget;
+    if (
+      image instanceof HTMLImageElement &&
+      image.getAttribute("src") !== foodPlaceholderUrl
+    ) {
       image.setAttribute("src", foodPlaceholderUrl);
     }
   }

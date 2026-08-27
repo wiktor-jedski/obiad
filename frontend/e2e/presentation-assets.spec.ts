@@ -37,7 +37,7 @@ const PLACEHOLDER_SHA256 =
   "741ef3e3a323cc1b47c466aba947aee59cb03790f7ffee754470fbbc64c24b95";
 
 /** The exact palette from `docs/requirements/style.md`, token -> hex. */
-const PALETTE: Record<string, string> = {
+const PALETTE = {
   "--color-dark-background": "#0a0f0a",
   "--color-dark-surface": "#161d16",
   "--color-dark-primary": "#4ade80",
@@ -73,8 +73,14 @@ interface PngChunk {
   data: Buffer;
 }
 
+/** Parsed PNG signature and ordered chunk sequence. */
+interface ParsedPng {
+  signature: Buffer;
+  chunks: PngChunk[];
+}
+
 /** Walks a PNG byte stream into its signature and chunks. */
-function parsePng(buffer: Buffer): { signature: Buffer; chunks: PngChunk[] } {
+function parsePng(buffer: Buffer): ParsedPng {
   const signature = buffer.subarray(0, 8);
   const chunks: PngChunk[] = [];
   let offset = 8;
@@ -220,8 +226,10 @@ test.describe("presentation assets", () => {
     const placeholderUrl = await page
       .locator("main")
       .getAttribute("data-placeholder-url");
-    expect(placeholderUrl).toBeTruthy();
-    const absoluteUrl = new URL(placeholderUrl as string, PREVIEW_ORIGIN);
+    if (placeholderUrl === null || placeholderUrl === "") {
+      throw new Error("Application did not expose the bundled placeholder URL");
+    }
+    const absoluteUrl = new URL(placeholderUrl, PREVIEW_ORIGIN);
     expect(absoluteUrl.origin).toBe(PREVIEW_ORIGIN);
 
     const decoded = await page.evaluate(async (target: string) => {

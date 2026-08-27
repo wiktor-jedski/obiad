@@ -128,9 +128,10 @@ const pl = {
 const dictionaries = { pl, en } satisfies Record<InterfaceLanguage, Messages>;
 
 /** Supported Interface Languages in UI display order. */
-export const interfaceLanguages: readonly InterfaceLanguage[] = Object.freeze(
-  Object.keys(dictionaries) as InterfaceLanguage[],
-);
+export const interfaceLanguages = Object.freeze([
+  "pl",
+  "en",
+] satisfies readonly InterfaceLanguage[]);
 
 /**
  * Reports whether a raw value identifies a supported Interface Language.

@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import type { FoodSuggestionsResponse } from "../src/client/types.gen";
+import type {
+  FoodSuggestionsResponse,
+  GetFoodSuggestionsErrors,
+  GetFoodSuggestionsResponses,
+} from "../src/client/types.gen";
 
 /**
  * Real-stack smoke scenario (task 22; ARCH-008, ARCH-016, ARCH-022).
@@ -20,46 +24,38 @@ import type { FoodSuggestionsResponse } from "../src/client/types.gen";
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
-/** The minimal generated-client surface the scenario drives in the browser. */
-interface GeneratedClient {
-  setConfig: (config: { baseUrl: string }) => void;
-  get: <T>(options: {
-    url: string;
-    query: Record<string, unknown>;
-    throwOnError: true;
-    responseStyle: "data";
-  }) => Promise<T>;
-}
-
 test.describe("real-stack smoke", () => {
   test("the generated client, executed in Chromium, receives the five-item seeded response through the preview /api proxy", async ({
     page,
   }) => {
     const bundlePath = process.env.OBIAD_E2E_BROWSER_CLIENT_BUNDLE;
-    expect(
-      bundlePath,
-      "run through `bun run test:e2e` so the launcher builds the browser client bundle",
-    ).toBeTruthy();
-
+    if (bundlePath === undefined || bundlePath === "") {
+      throw new Error(
+        "run through `bun run test:e2e` so the launcher builds the browser client bundle",
+      );
+    }
     // Capture every request the browser makes, including the generated-client call.
     const requestUrls: string[] = [];
     page.on("request", (request) => requestUrls.push(request.url()));
 
     await page.goto("/");
-    await page.addScriptTag({ path: bundlePath as string });
+    await page.addScriptTag({ path: bundlePath });
 
     const suggestions = await page.evaluate(
       async (): Promise<FoodSuggestionsResponse> => {
-        const generatedClient = (
-          globalThis as { __obiadGeneratedClient?: GeneratedClient }
-        ).__obiadGeneratedClient;
+        const generatedClient = globalThis.__obiadGeneratedClient;
         if (!generatedClient) {
           throw new Error(
             "browser client bundle did not register __obiadGeneratedClient",
           );
         }
         generatedClient.setConfig({ baseUrl: window.location.origin });
-        return generatedClient.get<FoodSuggestionsResponse>({
+        return generatedClient.get<
+          GetFoodSuggestionsResponses,
+          GetFoodSuggestionsErrors,
+          true,
+          "data"
+        >({
           url: "/api/v1/food-suggestions",
           query: { query: "chicken", language: "en" },
           throwOnError: true,

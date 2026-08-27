@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack MORE! result-paging scenario (task 37, task 38, task 45;
@@ -123,11 +124,7 @@ async function useBrowserLanguages(
 
 /** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
 }
 
@@ -142,8 +139,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as SubstitutePost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     }

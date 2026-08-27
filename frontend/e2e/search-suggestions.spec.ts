@@ -141,18 +141,13 @@ async function expectSuggestionPanel(
   await expect(options).toHaveCount(OPTION_COUNT);
 
   // Panel and row geometry (ISSUE-008).
-  const searchBox = (await search.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  const panelBox = (await panel.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const searchBox = await search.boundingBox();
+  const panelBox = await panel.boundingBox();
+  if (searchBox === null || panelBox === null) {
+    throw new Error(
+      "Search field and suggestion panel must have bounding boxes",
+    );
+  }
   expect(searchBox.height).toBe(FIELD_HEIGHT_PX);
   expect(panelBox.width).toBe(FIELD_MAX_WIDTH_PX);
   expect(
@@ -164,10 +159,10 @@ async function expectSuggestionPanel(
     "the panel continuously extends the Search field",
   ).toBe(0);
   for (let index = 0; index < OPTION_COUNT; index += 1) {
-    const rowBox = (await options.nth(index).boundingBox()) as {
-      height: number;
-      width: number;
-    };
+    const rowBox = await options.nth(index).boundingBox();
+    if (rowBox === null) {
+      throw new Error(`Suggestion option ${index + 1} has no bounding box`);
+    }
     expect(rowBox.height, `option ${index + 1} is 48px tall`).toBe(
       ROW_HEIGHT_PX,
     );
@@ -237,11 +232,13 @@ async function expectSuggestionPanel(
   );
 }
 
+/** Food-data requests observed by the suggestion scenario. */
+interface RequestTracker {
+  foodDataRequests: () => string[];
+}
+
 /** Records every browser request and returns a predicate for food-data URLs. */
-function trackRequests(
-  page: Page,
-  urls: string[],
-): { foodDataRequests: () => string[] } {
+function trackRequests(page: Page, urls: string[]): RequestTracker {
   page.on("request", (request) => urls.push(request.url()));
   return {
     foodDataRequests: () => urls.filter((url) => url.includes("/api/")),
@@ -449,9 +446,12 @@ test.describe("live Food Object suggestions", () => {
     await expect
       .poll(() => failedRequests.find((r) => r.url.includes("query=chicken")))
       .toBeTruthy();
-    const aborted = failedRequests.find((r) =>
-      r.url.includes("query=chicken"),
-    ) as { url: string; error: string };
+    const aborted = failedRequests.find((request) =>
+      request.url.includes("query=chicken"),
+    );
+    if (aborted === undefined) {
+      throw new Error("Superseded chicken request did not fail");
+    }
     expect(aborted.error).toContain("ERR_ABORTED");
 
     // Releasing the held (already aborted) response cannot change the list.

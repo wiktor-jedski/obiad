@@ -82,12 +82,10 @@ async function selectPizzaMargherita(page: Page): Promise<void> {
  */
 async function expectEmptyStateGeometry(page: Page): Promise<void> {
   const search = page.getByRole("combobox", { name: COPY.search });
-  const box = (await search.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const box = await search.boundingBox();
+  if (box === null) {
+    throw new Error("Empty-state Search has no bounding box");
+  }
   const dvhHeight = await page.evaluate(() => {
     const probe = document.createElement("div");
     probe.style.position = "absolute";
@@ -138,10 +136,10 @@ async function expectResultStateComposition(page: Page): Promise<void> {
 
   // The Search field's top edge sits 64px from the viewport top (ISSUE-008).
   const search = page.getByRole("combobox", { name: COPY.search });
-  const searchBox = (await search.boundingBox()) as {
-    y: number;
-    height: number;
-  };
+  const searchBox = await search.boundingBox();
+  if (searchBox === null) {
+    throw new Error("Search field has no bounding box");
+  }
   expect(
     Math.abs(searchBox.y - SEARCH_TOP_PX),
     "the Search field's top edge is 64px from the viewport top",
@@ -150,16 +148,20 @@ async function expectResultStateComposition(page: Page): Promise<void> {
   // The approved vertical gaps: the selected-input region starts 24px below
   // the Search field and the result region 24px below the selected-input
   // region (ISSUE-008).
-  const selectedBox = (await page
+  const selectedBox = await page
     .locator("[data-selected-input-region]")
-    .boundingBox()) as { y: number; height: number };
+    .boundingBox();
+  if (selectedBox === null) {
+    throw new Error("Selected-input region has no bounding box");
+  }
   expect(
     Math.abs(selectedBox.y - (searchBox.y + searchBox.height) - REGION_GAP_PX),
     "the selected-input region is 24px below the Search field",
   ).toBeLessThanOrEqual(1);
-  const resultBox = (await page
-    .locator("[data-result-region]")
-    .boundingBox()) as { y: number; height: number };
+  const resultBox = await page.locator("[data-result-region]").boundingBox();
+  if (resultBox === null) {
+    throw new Error("Result region has no bounding box");
+  }
   expect(
     Math.abs(
       resultBox.y - (selectedBox.y + selectedBox.height) - REGION_GAP_PX,
@@ -172,11 +174,15 @@ async function expectResultStateComposition(page: Page): Promise<void> {
   // REQ-062).
   const cards = page.locator("[data-result-card]");
   await expect(cards).toHaveCount(CARD_COUNT);
-  const cardBoxes = (await Promise.all(
-    Array.from({ length: CARD_COUNT }, (_, index) =>
-      cards.nth(index).boundingBox(),
-    ),
-  )) as Array<{ x: number; y: number; width: number; height: number }>;
+  const cardBoxes = await Promise.all(
+    Array.from({ length: CARD_COUNT }, async (_, index) => {
+      const box = await cards.nth(index).boundingBox();
+      if (box === null) {
+        throw new Error(`Result card ${index + 1} has no bounding box`);
+      }
+      return box;
+    }),
+  );
   for (let index = 1; index < CARD_COUNT; index += 1) {
     expect(
       Math.abs(cardBoxes[index].y - cardBoxes[0].y),
@@ -277,10 +283,16 @@ test.describe("result state", () => {
     await expect(page.locator("[data-selected-input-region]")).toBeVisible();
 
     const selectedGap = await page.evaluate(() => {
-      const input = document.getElementById("food-search") as HTMLElement;
-      const selected = document.querySelector(
-        "[data-selected-input-region]",
-      ) as HTMLElement;
+      const input = document.getElementById("food-search");
+      const selected = document.querySelector("[data-selected-input-region]");
+      if (
+        !(input instanceof HTMLElement) ||
+        !(selected instanceof HTMLElement)
+      ) {
+        throw new Error(
+          "Search and selected-input regions must be HTML elements",
+        );
+      }
       return (
         selected.getBoundingClientRect().top -
         input.getBoundingClientRect().bottom

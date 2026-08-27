@@ -1,4 +1,5 @@
 import { cpSync, existsSync, mkdirSync } from "node:fs";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 import { execFileSync } from "node:child_process";
 import { dirname } from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
@@ -205,14 +206,15 @@ async function useBrowserLanguages(
  * proves each key operation starts exactly one request with the exact
  * committed input and page index (REQ-019, REQ-026, REQ-027, REQ-041).
  */
-function trackSubstitutePosts(page: Page): Array<Record<string, unknown>> {
-  const posts: Array<Record<string, unknown>> = [];
+function trackSubstitutePosts(page: Page): SubstituteSearchRequest[] {
+  const posts: SubstituteSearchRequest[] = [];
   page.on("request", (request) => {
     if (
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
-      posts.push(request.postDataJSON() as Record<string, unknown>);
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
+      posts.push(request.postDataJSON() as SubstituteSearchRequest);
     }
   });
   return posts;
@@ -271,6 +273,13 @@ async function expectKeyboardActiveOption(
     optionId(expected[activeIndex].foodObjectId),
   );
 }
+/** Controls the pending substitute-search requests held by a scenario. */
+interface SubstitutePostGate {
+  waitForPosts: (count: number) => Promise<void>;
+  releasePost: (index: number) => void;
+  count: () => number;
+}
+
 /**
  * Holds every generated-client Substitution Search POST at the browser
  * boundary until the scenario releases it (the spinner-stop-time gate
@@ -281,11 +290,7 @@ async function expectKeyboardActiveOption(
  * has observed so a scenario can prove a blocked activation starts no
  * second request (REQ-048).
  */
-function gateSubstitutePosts(page: Page): {
-  waitForPosts: (count: number) => Promise<void>;
-  releasePost: (index: number) => void;
-  count: () => number;
-} {
+function gateSubstitutePosts(page: Page): SubstitutePostGate {
   const gates: Array<{ release: () => void; promise: Promise<void> }> = [];
   let postCount = 0;
   page.route("**/api/v1/substitutes/search", async (route) => {
@@ -426,13 +431,10 @@ async function expectWcagAAndAaClean(page: Page, state: string): Promise<void> {
   // are not mid-transition (or no cards at all) pass immediately.
   await page.waitForFunction(() => {
     const cards = Array.from(document.querySelectorAll("[data-result-card]"));
-    return (
-      cards.length === 0 ||
-      cards.every(
-        (card) =>
-          getComputedStyle(card).opacity === "1" &&
-          card.getAnimations().length === 0,
-      )
+    return cards.every(
+      (card) =>
+        getComputedStyle(card).opacity === "1" &&
+        card.getAnimations().length === 0,
     );
   });
   const results = await new AxeBuilder({ page })
@@ -1020,7 +1022,7 @@ async function expectContrastTargets(
  * must observe the final presentation rather than a mid-fade one
  * (P17-G5, REQ-069). A surface without cards passes immediately.
  */
-async function expectSettledCards(page: Page, where: string): Promise<void> {
+async function expectSettledCards(page: Page, _where: string): Promise<void> {
   await expect
     .poll(async () =>
       page
@@ -1232,7 +1234,7 @@ test.describe("Control accessibility", () => {
 });
 
 test.describe("Control focus indication", () => {
-  for (const [seedKey, lang, copy] of [
+  for (const [, lang, copy] of [
     ["en", "en-US", COPY.en],
     ["pl", "pl-PL", COPY.pl],
   ] as const) {
@@ -1368,12 +1370,7 @@ test.describe("Control focus indication", () => {
         // proof compares transition-stable presentations.
         await page.waitForTimeout(250);
         const after = await captureSurface(page);
-        expectFocusMove(
-          before,
-          after,
-          toControl,
-          fromControl as keyof typeof CONTROL_SELECTORS | undefined,
-        );
+        expectFocusMove(before, after, toControl, fromControl);
         before = after;
       }
     });
@@ -1426,7 +1423,7 @@ test.describe("Control focus indication", () => {
 });
 
 test.describe("Control disabled presentation", () => {
-  for (const [seedKey, lang, copy] of [
+  for (const [, lang, copy] of [
     ["en", "en-US", COPY.en],
     ["pl", "pl-PL", COPY.pl],
   ] as const) {
@@ -1605,7 +1602,7 @@ test.describe("Control disabled presentation", () => {
 });
 
 test.describe("WCAG 2.1 accessibility scan", () => {
-  for (const [seedKey, lang, copy] of [
+  for (const [, lang, copy] of [
     ["en", "en-US", COPY.en],
     ["pl", "pl-PL", COPY.pl],
   ] as const) {
@@ -2516,7 +2513,7 @@ test.describe("Control keyboard-only flow", () => {
     seedKey: "en" | "pl",
     copy: (typeof COPY)[keyof typeof COPY],
     selectIndex: number,
-  ): Promise<Array<Record<string, unknown>>> {
+  ): Promise<SubstituteSearchRequest[]> {
     const posts = trackSubstitutePosts(page);
     // Load the application; the Search field carries the autofocus, so it
     // is focused with no pointer input.

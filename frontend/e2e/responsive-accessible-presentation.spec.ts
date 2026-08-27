@@ -253,16 +253,15 @@ async function expectCardColumns(
 async function gateSubstitutePosts(page: Page): Promise<{
   release: (postNumber: 1 | 2 | 3) => void;
 }> {
-  const gates: Record<number, { promise: Promise<void>; resolve: () => void }> =
-    {
-      1: Promise.withResolvers<void>(),
-      2: Promise.withResolvers<void>(),
-      3: Promise.withResolvers<void>(),
-    };
+  const gates = [
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+  ];
   let postCount = 0;
   await page.route("**/api/v1/substitutes/search", async (route) => {
     postCount += 1;
-    const gate = gates[postCount];
+    const gate = gates.at(postCount - 1);
     if (gate !== undefined) {
       await gate.promise;
     }
@@ -270,7 +269,7 @@ async function gateSubstitutePosts(page: Page): Promise<{
   });
   return {
     release(postNumber: 1 | 2 | 3): void {
-      gates[postNumber].resolve();
+      gates[postNumber - 1].resolve();
     },
   };
 }

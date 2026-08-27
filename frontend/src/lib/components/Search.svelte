@@ -221,10 +221,14 @@
    * transition or removing its selected input and cards.
    */
   function onInput(event: Event): void {
+    const field = event.currentTarget;
+    if (!(field instanceof HTMLInputElement)) {
+      return;
+    }
     dismissed = false;
     suggestionIntent = true;
     activeIndex = 0;
-    interactionState.setQuery((event.currentTarget as HTMLInputElement).value);
+    interactionState.setQuery(field.value);
   }
 
   /**
@@ -232,8 +236,8 @@
    * replace an existing query with one keystroke, like a browser address bar.
    */
   function onClick(event: MouseEvent): void {
-    const field = event.currentTarget as HTMLInputElement;
-    if (field.value !== "") {
+    const field = event.currentTarget;
+    if (field instanceof HTMLInputElement && field.value !== "") {
       field.select();
     }
   }

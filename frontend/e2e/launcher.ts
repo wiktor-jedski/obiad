@@ -196,11 +196,14 @@ interface BoundedResult {
   timedOut: boolean;
 }
 
-/** One serialized shutdown: the first signal wins and cleanup runs exactly once. */
-const shutdown: {
+/** Mutable state of the launcher's single serialized shutdown. */
+interface ShutdownState {
   signal: NodeJS.Signals | null;
   cleanupInFlight: Promise<string[]> | null;
-} = {
+}
+
+/** One serialized shutdown: the first signal wins and cleanup runs exactly once. */
+const shutdown: ShutdownState = {
   signal: null,
   cleanupInFlight: null,
 };
@@ -744,14 +747,8 @@ function fiberReady(
     return false;
   }
   try {
-    const parsed: unknown = JSON.parse(body);
-    return (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      Object.keys(parsed as Record<string, unknown>).length === 1 &&
-      (parsed as Record<string, unknown>).status === "ready"
-    );
+    const parsed = JSON.parse(body);
+    return JSON.stringify(parsed) === '{"status":"ready"}';
   } catch {
     return false;
   }
@@ -844,7 +841,7 @@ async function cleanup(resources: OwnedResources): Promise<string[]> {
     }
   }
 
-  for (const name of [...resources.containers]) {
+  for (const name of resources.containers) {
     if (await removeContainer(resources, name)) {
       resources.containers = resources.containers.filter(
         (owned) => owned !== name,

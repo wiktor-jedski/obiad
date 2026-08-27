@@ -108,26 +108,26 @@ describe("the Substitution Search lifecycle", () => {
     const postUrls: string[] = [];
     const originalFetch = globalThis.fetch;
     const OriginalRequest = globalThis.Request;
-    globalThis.Request = HappyDomRequest as unknown as typeof Request;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-      if (url.includes("/api/v1/substitutes/search")) {
-        postUrls.push(url);
-        return new Response(RESPONSE_BODY, {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ items: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
+    Object.defineProperty(globalThis, "Request", {
+      configurable: true,
+      writable: true,
+      value: HappyDomRequest,
+    });
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url =
+          input instanceof globalThis.Request ? input.url : input.toString();
+        if (url.includes("/api/v1/substitutes/search")) {
+          postUrls.push(url);
+          return new Response(RESPONSE_BODY, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
 
     try {
       // A selection exists before the first application mount (REQ-022):
@@ -170,62 +170,67 @@ describe("the Substitution Search lifecycle", () => {
     let releaseButterSuggestions: (() => void) | undefined;
     const originalFetch = globalThis.fetch;
     const OriginalRequest = globalThis.Request;
-    globalThis.Request = HappyDomRequest as unknown as typeof Request;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-      if (url.includes("/api/v1/food-suggestions")) {
-        const suggestionQuery = new URL(
-          url,
-          "http://localhost",
-        ).searchParams.get("query");
-        if (suggestionQuery === "butter") {
-          await new Promise<void>((resolve) => {
-            releaseButterSuggestions = resolve;
-          });
+    Object.defineProperty(globalThis, "Request", {
+      configurable: true,
+      writable: true,
+      value: HappyDomRequest,
+    });
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url =
+          input instanceof globalThis.Request ? input.url : input.toString();
+        if (url.includes("/api/v1/food-suggestions")) {
+          const suggestionQuery = new URL(
+            url,
+            "http://localhost",
+          ).searchParams.get("query");
+          if (suggestionQuery === "butter") {
+            await new Promise<void>((resolve) => {
+              releaseButterSuggestions = resolve;
+            });
+          }
+          const firstFoodObjectId =
+            suggestionQuery === "olive"
+              ? 11
+              : suggestionQuery === "butter"
+                ? 6
+                : 1;
+          return new Response(
+            JSON.stringify({
+              items: Array.from({ length: 5 }, (_, index) => ({
+                foodObjectId: firstFoodObjectId + index,
+                names: {
+                  en: `Food ${firstFoodObjectId + index}`,
+                  pl: `Potrawa ${firstFoodObjectId + index}`,
+                },
+                defaultQuantity: { value: 100, unit: "g" },
+                allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+              })),
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
         }
-        const firstFoodObjectId =
-          suggestionQuery === "olive"
-            ? 11
-            : suggestionQuery === "butter"
-              ? 6
-              : 1;
-        return new Response(
-          JSON.stringify({
-            items: Array.from({ length: 5 }, (_, index) => ({
-              foodObjectId: firstFoodObjectId + index,
-              names: {
-                en: `Food ${firstFoodObjectId + index}`,
-                pl: `Potrawa ${firstFoodObjectId + index}`,
-              },
-              defaultQuantity: { value: 100, unit: "g" },
-              allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
-            })),
-          }),
-          {
+        if (url.includes("/api/v1/substitutes/search")) {
+          postUrls.push(url);
+          return new Response(RESPONSE_BODY, {
             status: 200,
             headers: { "content-type": "application/json" },
-          },
-        );
-      }
-      if (url.includes("/api/v1/substitutes/search")) {
-        postUrls.push(url);
-        return new Response(RESPONSE_BODY, {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    }) as typeof fetch;
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
 
     try {
       const view = render(App);
       const search = view.getByRole("combobox", { name: "Search" });
-
+      if (!(search instanceof HTMLInputElement)) {
+        throw new TypeError("Search combobox must be an input element");
+      }
       await fireEvent.focus(search);
       await fireEvent.input(search, { target: { value: "b" } });
       await settle();
@@ -258,7 +263,7 @@ describe("the Substitution Search lifecycle", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
-      expect((search as HTMLInputElement).value).toBe("Food 6");
+      expect(search.value).toBe("Food 6");
 
       // Task 45 (REQ-083): after a successful result page renders, focus
       // moves to the localized results heading, so Search no longer keeps
@@ -287,7 +292,7 @@ describe("the Substitution Search lifecycle", () => {
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
-      expect((search as HTMLInputElement).value).toBe("Food 11");
+      expect(search.value).toBe("Food 11");
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack Active Interface Language change scenario (task 43,
@@ -203,10 +204,12 @@ async function selectionRange(search: Locator): Promise<{
   end: number;
 }> {
   return search.evaluate((element) => {
-    const input = element as HTMLInputElement;
+    if (!(element instanceof HTMLInputElement)) {
+      throw new TypeError("Search combobox must be an input element");
+    }
     return {
-      start: input.selectionStart ?? -1,
-      end: input.selectionEnd ?? -1,
+      start: element.selectionStart ?? -1,
+      end: element.selectionEnd ?? -1,
     };
   });
 }
@@ -288,11 +291,7 @@ async function expectSuggestionPanel(
 
 /** One observed generated-client Substitution Search POST (task 44). */
 interface SubstitutePost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
 }
 
@@ -309,8 +308,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as SubstitutePost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     }

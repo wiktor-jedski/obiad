@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import type {
+  SubstituteSearchRequest,
+  SubstituteSearchResponse,
+} from "../src/client/types.gen";
 
 /**
  * Real-stack ISSUE-010 quantity-editing scenario (task 34; ARCH-001,
@@ -79,11 +83,11 @@ const COPY = {
 /** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
   /** The parsed JSON request body (closed request object, ISSUE-005). */
-  body: Record<string, unknown>;
+  body: SubstituteSearchRequest;
   /** The real-stack response status, once it arrives. */
   status: number | null;
   /** The real-stack response body, once it arrives. */
-  response: Record<string, unknown> | null;
+  response: SubstituteSearchResponse | null;
 }
 
 /**
@@ -102,8 +106,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as Record<string, unknown>,
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
         response: null,
       });
@@ -118,7 +123,8 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       const post = posts.find((entry) => entry.status === null);
       if (post !== undefined) {
         post.status = response.status();
-        post.response = (await response.json()) as Record<string, unknown>;
+        // SAFETY: A successful real generated substitute-search response has the SubstituteSearchResponse schema.
+        post.response = (await response.json()) as SubstituteSearchResponse;
       }
     }
   });
@@ -295,11 +301,14 @@ test.describe("food quantity editing", () => {
     await expect(select).toBeDisabled();
     await expect(selectedSpinner).toHaveCount(1);
     await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
-    const spinnerSize = await selectedSpinner.evaluate((element) => ({
-      width: (element as HTMLElement).offsetWidth,
-      height: (element as HTMLElement).offsetHeight,
-      ariaHidden: element.getAttribute("aria-hidden"),
-    }));
+    const spinnerSize = await selectedSpinner.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        width: Number.parseFloat(style.width),
+        height: Number.parseFloat(style.height),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      };
+    });
     expect(spinnerSize).toEqual({ width: 16, height: 16, ariaHidden: "true" });
     await expect(summary(page)).toHaveAttribute("aria-busy", "true");
     await expect(editorStatus(page)).toHaveText(COPY.en.loadingNutritionValues);
@@ -376,23 +385,10 @@ test.describe("food quantity editing", () => {
     // [13, 29, 26] with their matched quantities, macronutrients, and
     // similarity (P10-G8).
     await expect.poll(() => posts[0]?.response).toBeTruthy();
-    const first = posts[0]?.response as {
-      pageIndex: number;
-      inputMacronutrients: {
-        protein: number;
-        carbohydrate: number;
-        fat: number;
-      };
-      inputCalories: number;
-      items: Array<{
-        foodObjectId: number;
-        names: { en: string };
-        matchedQuantity: { value: number; unit: string };
-        macronutrients: { protein: number; carbohydrate: number; fat: number };
-        calories: number;
-        similarityPercent: number;
-      }>;
-    };
+    const first = posts[0]?.response;
+    if (first === null || first === undefined) {
+      throw new Error("Initial substitute-search response was not captured");
+    }
     expect(first.pageIndex).toBe(0);
     expect(first.items.map((item) => item.foodObjectId)).toEqual([13, 29, 26]);
 
@@ -435,7 +431,12 @@ test.describe("food quantity editing", () => {
     // unchanged, and the response page index is still 0 (P10-G7, P10-G8,
     // REQ-028, ARCH-018).
     await expect.poll(() => posts[1]?.response).toBeTruthy();
-    const second = posts[1]?.response as typeof first;
+    const second = posts[1]?.response;
+    if (second === null || second === undefined) {
+      throw new Error(
+        "Recalculated substitute-search response was not captured",
+      );
+    }
     expect(second.pageIndex).toBe(0);
     expect(second.items.map((item) => item.foodObjectId)).toEqual([13, 29, 26]);
     for (let index = 0; index < first.items.length; index += 1) {
@@ -755,15 +756,15 @@ test.describe("food quantity editing", () => {
     await expect.poll(() => posts[0]?.response).toBeTruthy();
     const cards = page.locator("[data-result-card]");
     const selectedCard = summary(page);
-    const settledSelectedCardSize = await selectedCard.evaluate((element) => ({
-      width: (element as HTMLElement).offsetWidth,
-      height: (element as HTMLElement).offsetHeight,
-    }));
+    const settledSelectedCardSize = await selectedCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    });
     const settledCardSizes = await cards.evaluateAll((elements) =>
-      elements.map((element) => ({
-        width: (element as HTMLElement).offsetWidth,
-        height: (element as HTMLElement).offsetHeight,
-      })),
+      elements.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height };
+      }),
     );
 
     // Commit a changed quantity; the recalculation is held at the browser
@@ -783,22 +784,25 @@ test.describe("food quantity editing", () => {
     const resultSpinners = cards.locator("[data-card-spinner]");
     await expect(resultSpinners).toHaveCount(3);
     await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
-    const spinnerSize = await selectedSpinner.evaluate((element) => ({
-      width: (element as HTMLElement).offsetWidth,
-      height: (element as HTMLElement).offsetHeight,
-      ariaHidden: element.getAttribute("aria-hidden"),
-    }));
+    const spinnerSize = await selectedSpinner.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        width: Number.parseFloat(style.width),
+        height: Number.parseFloat(style.height),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      };
+    });
     expect(spinnerSize).toEqual({ width: 16, height: 16, ariaHidden: "true" });
     const pendingCardSizes = await cards.evaluateAll((elements) =>
-      elements.map((element) => ({
-        width: (element as HTMLElement).offsetWidth,
-        height: (element as HTMLElement).offsetHeight,
-      })),
+      elements.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height };
+      }),
     );
-    const pendingSelectedCardSize = await selectedCard.evaluate((element) => ({
-      width: (element as HTMLElement).offsetWidth,
-      height: (element as HTMLElement).offsetHeight,
-    }));
+    const pendingSelectedCardSize = await selectedCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    });
     expect(
       pendingSelectedCardSize,
       "the single spinner does not resize the settled selected-food card",
@@ -846,14 +850,12 @@ test.describe("food quantity editing", () => {
       );
     }
     await expect.poll(() => posts[1]?.response).toBeTruthy();
-    const second = posts[1]?.response as {
-      inputMacronutrients: {
-        protein: number;
-        carbohydrate: number;
-        fat: number;
-      };
-      inputCalories: number;
-    };
+    const second = posts[1]?.response;
+    if (second === null || second === undefined) {
+      throw new Error(
+        "Recalculated substitute-search response was not captured",
+      );
+    }
     await expect(page.locator("[data-input-macro-protein]")).toHaveText(
       formatMacronutrient(second.inputMacronutrients.protein, "en"),
     );

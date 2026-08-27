@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack pointer-selection and new-search transition scenario
@@ -130,7 +131,7 @@ async function useBrowserLanguages(
 /** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
   /** The parsed JSON request body (closed request object, ISSUE-005). */
-  body: Record<string, unknown>;
+  body: SubstituteSearchRequest;
   /** The HTTP status of the real-stack response, once it arrives. */
   status: number | null;
 }
@@ -148,8 +149,9 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This handler only accepts the generated client's substitute-search route, whose request body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as Record<string, unknown>,
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     }

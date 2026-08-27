@@ -85,9 +85,11 @@ function expectCardBody(
   language: InterfaceLanguage,
   item: SubstituteItem = ITEM,
 ): void {
-  const card = container.querySelector("[data-result-card]");
-  expect(card).not.toBeNull();
-  const cardElement = card as HTMLElement;
+  const cardElement =
+    container.querySelector<HTMLElement>("[data-result-card]");
+  if (cardElement === null) {
+    throw new Error("Result card did not render");
+  }
 
   // Approved field order: image, localized name, whole Matched Quantity,
   // centered calorie value, protein, carbohydrate, fat, similarity (ISSUE-008).
@@ -174,19 +176,23 @@ describe("the result-card component", () => {
   test("an absent image key renders the identical bundled placeholder with empty alt and no third-party request", () => {
     const fetchCalls: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === "string" ? input : (input as { url: string }).url;
-      fetchCalls.push(url);
-      return new Response("", { status: 200 });
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        fetchCalls.push(url);
+        return new Response("", { status: 200 });
+      },
+      { preconnect: originalFetch.preconnect },
+    );
 
     try {
       const container = renderCard(ITEM, "en");
-      const image = container.querySelector(
+      const image = container.querySelector<HTMLImageElement>(
         "[data-result-card-image]",
-      ) as HTMLImageElement;
-      expect(image).not.toBeNull();
+      );
+      if (image === null) {
+        throw new Error("Result card image did not render");
+      }
       // The identical bundled placeholder (REQ-011, ARCH-015, ISSUE-008).
       expect(image.getAttribute("src")).toBe(foodPlaceholderUrl);
       // Empty alternative text: the adjacent heading names the Food Object.
@@ -204,9 +210,12 @@ describe("the result-card component", () => {
   test("each seeded opaque image key and an arbitrary unmapped key resolve to the identical bundled placeholder", () => {
     for (const imageKey of [...SEEDED_IMAGE_KEYS, UNMAPPED_IMAGE_KEY]) {
       const container = renderCard({ ...ITEM, imageKey }, "en");
-      const image = container.querySelector(
+      const image = container.querySelector<HTMLImageElement>(
         "[data-result-card-image]",
-      ) as HTMLImageElement;
+      );
+      if (image === null) {
+        throw new Error(`Result card image did not render for key ${imageKey}`);
+      }
       expect(image.getAttribute("src"), `key ${imageKey}`).toBe(
         foodPlaceholderUrl,
       );
@@ -217,9 +226,12 @@ describe("the result-card component", () => {
 
   test("a dispatched image error keeps the same bundled placeholder and never loops", () => {
     const container = renderCard({ ...ITEM, imageKey: "gyoza" }, "en");
-    const image = container.querySelector(
+    const image = container.querySelector<HTMLImageElement>(
       "[data-result-card-image]",
-    ) as HTMLImageElement;
+    );
+    if (image === null) {
+      throw new Error("Result card image did not render");
+    }
     expect(image.getAttribute("src")).toBe(foodPlaceholderUrl);
 
     // An error event on the placeholder source must not rewrite or loop:

@@ -11,4 +11,9 @@
  */
 import { client } from "../src/client/client.gen";
 
-(globalThis as Record<string, unknown>).__obiadGeneratedClient = client;
+declare global {
+  /** Generated client exposed only to the injected real-stack smoke script. */
+  var __obiadGeneratedClient: typeof client;
+}
+
+globalThis.__obiadGeneratedClient = client;

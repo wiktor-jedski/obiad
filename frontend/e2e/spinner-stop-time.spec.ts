@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack Spinner stop-time and single card loading spinner scenario
@@ -56,6 +57,25 @@ const DISABLED_MORE_TEXT_COLOR = "oklch(0.872 0.01 258.338)";
 /** Maximum allowed delay (ms) from HTTP responseEnd to spinner removal (REQ-049). */
 const MAXIMUM_SPINNER_STOP_DELAY_MS = 100;
 
+/** One browser-observed spinner-count transition. */
+interface SpinnerEvent {
+  count: number;
+  timestamp: number;
+}
+
+/** Browser-side spinner observer exposed to the timing assertions. */
+interface SpinnerTracker {
+  events: SpinnerEvent[];
+  getRemovalTimeAfter(minTime: number): number | null;
+}
+
+declare global {
+  interface Window {
+    /** Browser-side spinner observer installed before application startup. */
+    __spinnerTracker: SpinnerTracker;
+  }
+}
+
 /** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
@@ -75,7 +95,7 @@ async function useBrowserLanguages(
  */
 async function installSpinnerObserver(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const events: { count: number; timestamp: number }[] = [];
+    const events: SpinnerEvent[] = [];
 
     const record = () => {
       const count = document.querySelectorAll("[data-card-spinner]").length;
@@ -101,13 +121,13 @@ async function installSpinnerObserver(page: Page): Promise<void> {
       attach();
     }
 
-    (window as unknown as { __spinnerTracker: unknown }).__spinnerTracker = {
+    window.__spinnerTracker = {
       events,
       getRemovalTimeAfter(minTime: number) {
         for (let i = 0; i < events.length; i += 1) {
-          const ev = events[i];
-          if (ev && ev.timestamp >= minTime && ev.count === 0) {
-            return ev.timestamp;
+          const event = events[i];
+          if (event && event.timestamp >= minTime && event.count === 0) {
+            return event.timestamp;
           }
         }
         return null;
@@ -118,11 +138,7 @@ async function installSpinnerObserver(page: Page): Promise<void> {
 
 /** One observed generated-client Substitution Search POST. */
 interface TrackedPost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
 }
 
@@ -135,8 +151,9 @@ function trackSubstitutePosts(page: Page): TrackedPost[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as TrackedPost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     }
@@ -228,11 +245,14 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
       await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
 
-      const initialSpinnerInfo = await selectedSpinner.evaluate((el) => ({
-        width: (el as HTMLElement).offsetWidth,
-        height: (el as HTMLElement).offsetHeight,
-        ariaHidden: el.getAttribute("aria-hidden"),
-      }));
+      const initialSpinnerInfo = await selectedSpinner.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          width: Number.parseFloat(style.width),
+          height: Number.parseFloat(style.height),
+          ariaHidden: element.getAttribute("aria-hidden"),
+        };
+      });
       expect(initialSpinnerInfo).toEqual({
         width: 16,
         height: 16,
@@ -265,21 +285,15 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
 
       // Measure browser timing between PerformanceResourceTiming.responseEnd and spinner removal
       const searchTiming1 = await page.evaluate(() => {
-        interface Tracker {
-          getRemovalTimeAfter(t: number): number | null;
-          events: { count: number; timestamp: number }[];
-        }
-        const tracker = (window as unknown as { __spinnerTracker: Tracker })
-          .__spinnerTracker;
-        const entries = (
-          performance.getEntriesByType(
-            "resource",
-          ) as PerformanceResourceTiming[]
-        ).filter(
-          (e) =>
-            e.name.includes("/api/v1/substitutes/search") &&
-            e.initiatorType === "fetch",
-        );
+        const tracker = window.__spinnerTracker;
+        const entries = performance
+          .getEntriesByType("resource")
+          .filter(
+            (entry): entry is PerformanceResourceTiming =>
+              entry instanceof PerformanceResourceTiming &&
+              entry.name.includes("/api/v1/substitutes/search") &&
+              entry.initiatorType === "fetch",
+          );
         const postEntry = entries[0];
         if (!postEntry) {
           return {
@@ -306,15 +320,15 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       // Record settled card dimensions for recalculation check (REQ-081)
       const resultCards = page.locator("[data-result-card]");
       await expect(resultCards).toHaveCount(3);
-      const settledSelectedSize = await selectedCard.evaluate((el) => ({
-        width: (el as HTMLElement).offsetWidth,
-        height: (el as HTMLElement).offsetHeight,
-      }));
+      const settledSelectedSize = await selectedCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height };
+      });
       const settledCardSizes = await resultCards.evaluateAll((elements) =>
-        elements.map((el) => ({
-          width: (el as HTMLElement).offsetWidth,
-          height: (el as HTMLElement).offsetHeight,
-        })),
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        }),
       );
 
       // =========================================================================
@@ -339,15 +353,15 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       await expect(page.locator("[data-value-spinner]")).toHaveCount(0);
 
       // - Settled card dimensions do not change (REQ-081)
-      const pendingSelectedSize = await selectedCard.evaluate((el) => ({
-        width: (el as HTMLElement).offsetWidth,
-        height: (el as HTMLElement).offsetHeight,
-      }));
+      const pendingSelectedSize = await selectedCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height };
+      });
       const pendingCardSizes = await resultCards.evaluateAll((elements) =>
-        elements.map((el) => ({
-          width: (el as HTMLElement).offsetWidth,
-          height: (el as HTMLElement).offsetHeight,
-        })),
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        }),
       );
       expect(pendingSelectedSize).toEqual(settledSelectedSize);
       expect(pendingCardSizes).toEqual(settledCardSizes);
@@ -383,21 +397,15 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
 
       // Measure browser timing between PerformanceResourceTiming.responseEnd and recalculation spinner removal
       const searchTiming2 = await page.evaluate(() => {
-        interface Tracker {
-          getRemovalTimeAfter(t: number): number | null;
-          events: { count: number; timestamp: number }[];
-        }
-        const tracker = (window as unknown as { __spinnerTracker: Tracker })
-          .__spinnerTracker;
-        const entries = (
-          performance.getEntriesByType(
-            "resource",
-          ) as PerformanceResourceTiming[]
-        ).filter(
-          (e) =>
-            e.name.includes("/api/v1/substitutes/search") &&
-            e.initiatorType === "fetch",
-        );
+        const tracker = window.__spinnerTracker;
+        const entries = performance
+          .getEntriesByType("resource")
+          .filter(
+            (entry): entry is PerformanceResourceTiming =>
+              entry instanceof PerformanceResourceTiming &&
+              entry.name.includes("/api/v1/substitutes/search") &&
+              entry.initiatorType === "fetch",
+          );
         const postEntry = entries[1];
         if (!postEntry) {
           return {

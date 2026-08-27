@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 /**
  * Real-stack Substitution request-lock scenario (task 39; ARCH-001,
@@ -71,11 +72,7 @@ async function useBrowserLanguages(
 
 /** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
-  body: {
-    foodObjectId?: number;
-    quantity?: { value: number; unit: string };
-    pageIndex?: number;
-  };
+  body: SubstituteSearchRequest;
   status: number | null;
 }
 
@@ -85,14 +82,17 @@ interface SuggestionGet {
   status: number | null;
 }
 
+/** Requests observed while the application owns the substitution lock. */
+interface RequestLog {
+  posts: SubstitutePost[];
+  suggestionGets: SuggestionGet[];
+}
+
 /**
  * Records every generated-client `POST /api/v1/substitutes/search` request
  * and every `GET /api/v1/food-suggestions` request.
  */
-function trackRequests(page: Page): {
-  posts: SubstitutePost[];
-  suggestionGets: SuggestionGet[];
-} {
+function trackRequests(page: Page): RequestLog {
   const posts: SubstitutePost[] = [];
   const suggestionGets: SuggestionGet[] = [];
 
@@ -102,8 +102,9 @@ function trackRequests(page: Page): {
       request.method() === "POST" &&
       url.includes("/api/v1/substitutes/search")
     ) {
+      // SAFETY: This branch only handles the generated client's substitute-search route, whose body is SubstituteSearchRequest.
       posts.push({
-        body: request.postDataJSON() as SubstitutePost["body"],
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     } else if (
