@@ -1,20 +1,5 @@
 package repository
 
-// Integration tests for Phase 3 (task 10): the private concrete PostgreSQL
-// Catalog Loader (ARCH-006, ARCH-013, ARCH-016, ARCH-022). They require a
-// real PostgreSQL server: each test creates its isolated disposable database
-// plus the schema-owner, SELECT-only runtime, and unprivileged login roles
-// through the shared testdb support, runs the real setup command against it,
-// grants the runtime catalog read through the same embedded privilege SQL the
-// local deployment setup applies, and drives the real Loader through the
-// SELECT-only runtime credential. A query tracer on the runtime connection
-// proves that every load executes exactly one embedded SELECT and no mutating
-// statement, and that a failing load is not retried and a changed catalog is
-// not cached. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style
-// environment variables; no credential is committed and tests skip when no
-// server is reachable.
-
 import (
 	"context"
 	"errors"
@@ -30,7 +15,6 @@ import (
 	"obiad/backend/internal/testdb"
 )
 
-// moduleRoot walks up from the test working directory to the module root.
 func moduleRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -49,8 +33,6 @@ func moduleRoot(t *testing.T) string {
 	}
 }
 
-// runDBSetupCommand executes the real setup command against dbURL and returns
-// its combined output.
 func runDBSetupCommand(t *testing.T, dbURL string) string {
 	t.Helper()
 	cmd := exec.Command("go", "-C", moduleRoot(t), "run", "./cmd/dbsetup")
@@ -62,8 +44,6 @@ func runDBSetupCommand(t *testing.T, dbURL string) string {
 	return string(out)
 }
 
-// redactedURL returns raw with any userinfo removed so failure and skip
-// messages never disclose credentials.
 func redactedURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -73,7 +53,6 @@ func redactedURL(raw string) string {
 	return u.String()
 }
 
-// connect opens a database connection closed when the test finishes.
 func connect(t *testing.T, dbURL string) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), dbURL)
@@ -88,8 +67,6 @@ func connect(t *testing.T, dbURL string) *pgx.Conn {
 	return conn
 }
 
-// connectWithTracer opens a database connection closed when the test
-// finishes and records every executed statement on tracer.
 func connectWithTracer(t *testing.T, dbURL string, tracer *stmtTracer) *pgx.Conn {
 	t.Helper()
 	cfg, err := pgx.ParseConfig(dbURL)
@@ -109,17 +86,11 @@ func connectWithTracer(t *testing.T, dbURL string, tracer *stmtTracer) *pgx.Conn
 	return conn
 }
 
-// mutationKeywords are the statement-leading words that would indicate a
-// mutating statement. The loader must never execute one.
 var mutationKeywords = []string{
 	"INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE", "GRANT", "REVOKE",
 	"CREATE", "ALTER", "DROP", "CALL", "COPY",
 }
 
-// stmtTracer records every statement executed on one connection so a test
-// can prove exactly one SELECT and no mutation per load. pgx invokes the
-// tracer synchronously on the calling goroutine, so the recorded statements
-// are visited in execution order without synchronization.
 type stmtTracer struct {
 	stmts []pgx.TraceQueryStartData
 }
@@ -131,13 +102,8 @@ func (t *stmtTracer) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data p
 
 func (t *stmtTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {}
 
-// reset forgets every recorded statement.
 func (t *stmtTracer) reset() { t.stmts = nil }
 
-// assertSingleSelect verifies that exactly one statement was recorded since
-// the last reset, that it is the embedded load SELECT, and that it is not a
-// mutating statement. One recorded statement per load also proves that a
-// failing load is not automatically retried.
 func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	tb.Helper()
 	if len(t.stmts) != 1 {
@@ -161,10 +127,6 @@ func (t *stmtTracer) assertSingleSelect(tb testing.TB, wantSQL string) {
 	}
 }
 
-// wantFoodObject is one expected row of the owner-approved ISSUE-002 catalog
-// as the loader must map it: fixed ID, localized names, Physical State,
-// Macro Profile, optional Serving, optional Food Family membership, and
-// optional image key (ARCH-013).
 type wantFoodObject struct {
 	id           int32
 	en           string
@@ -182,8 +144,6 @@ func f64p(v float64) *float64 { return &v }
 func i32p(v int32) *int32     { return &v }
 func strp(v string) *string   { return &v }
 
-// issue002Catalog returns the exact 38-row owner-approved catalog from
-// ISSUE-002 in ascending fixed-ID order (the deterministic Phase 2 seed).
 func issue002Catalog() []wantFoodObject {
 	return []wantFoodObject{
 		{1, "Pizza Margherita", "Pizza margherita", stateSolid, 10, 30, 10, f64p(350), i32p(1), strp("pizza-margherita")},
@@ -248,10 +208,6 @@ func equalStrPtr(got, want *string) bool {
 	return got == nil || *got == *want
 }
 
-// assertIssue002Catalog checks that the loader returned exactly the
-// owner-approved 38-row ISSUE-002 catalog with exact IDs, localized names,
-// Physical States, Macro Profiles, optional Servings, Food Family
-// membership, and image keys, in ascending stable ID order.
 func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 	t.Helper()
 	want := issue002Catalog()
@@ -285,16 +241,6 @@ func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 	}
 }
 
-// TestCatalogLoaderIntegration verifies the ARCH-006 loader against real
-// PostgreSQL through the SELECT-only runtime credential (ARCH-016): it loads
-// all 38 seeded Food Objects with exact IDs, localized names, Physical
-// States, Macro Profiles, optional Servings, Food Family membership, and
-// image keys, executes exactly one embedded SELECT and no mutating statement
-// per load, and classifies real storage and catalog-invariant failures
-// without a cache or automatic retry. The catalog-invariant cases include
-// the ISSUE-010 Serving boundary (task-33 repair): a stored Serving whose
-// whole-number allowed maximum of 100000 divided by it is zero or beyond the
-// int32 display range is a catalog-invariant failure.
 func TestCatalogLoaderIntegration(t *testing.T) {
 	db := testdb.NewDB(t)
 	runDBSetupCommand(t, db.OwnerURL)
@@ -313,10 +259,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 		t.Fatalf("read embedded catalog SELECT: %v", err)
 	}
 
-	// The loader reads the complete seeded catalog through the SELECT-only
-	// runtime credential: exactly 38 Food Objects with the exact ISSUE-002
-	// values, in ascending stable ID order, from exactly one embedded SELECT
-	// and no mutating statement.
 	objects, err := loader.load(ctx)
 	if err != nil {
 		t.Fatalf("Load seeded catalog through the runtime credential: %v", err)
@@ -324,18 +266,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	tracer.assertSingleSelect(t, wantSQL)
 	assertIssue002Catalog(t, objects)
 
-	// Serving-boundary invariant failures (task-33 repair): the DB Serving
-	// constraint accepts any positive finite value, but the ARCH-013 catalog
-	// invariant additionally requires the whole-number allowed maximum (the
-	// floor of 100000 divided by the stored Serving base quantity) to be a
-	// positive value that fits the generated int32 display range. A valid
-	// stored Serving above 100000 has an exact floor of zero, and a tiny
-	// positive Serving has a floor beyond MaxInt32; both must fail the load
-	// as catalog-invariant failures after exactly one SELECT and no
-	// mutating statement — the loader can never hand a zero or
-	// int32-wrapping maximum to the allowed-quantity derivation or the HTTP
-	// Adapter. Each boundary row is deleted after its assertion so the
-	// later permanent invariant fixtures below fail at their own row.
 	servingBoundaryCases := []struct {
 		name    string
 		id      int32
@@ -366,12 +296,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 		}
 	}
 
-	// Catalog-invariant failure: the schema owner drops the Macro Profile
-	// "not all zero" constraint and inserts a row whose Macro Profile is all
-	// zero. PostgreSQL accepts the row, but it violates the ARCH-013 catalog
-	// invariant, so the loader must fail the load with a catalog-invariant
-	// classification — after exactly one SELECT and no mutating statement on
-	// the runtime connection (no retry, no cache).
 	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_macro_profile_not_all_zero"); err != nil {
 		t.Fatalf("drop macro profile constraint: %v", err)
 	}
@@ -388,10 +312,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
-	// Nonpositive-ID invariant failure: the schema owner drops the
-	// positive-ID constraint and inserts a row with ID 0. The loader must read
-	// the nonpositive row, reach Go-side invariant validation, and classify
-	// the load as a catalog-invariant failure.
 	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_id_check"); err != nil {
 		t.Fatalf("drop positive-ID constraint: %v", err)
 	}
@@ -411,11 +331,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
-	// Storage failure: the schema owner revokes the runtime role's SELECT
-	// grant, so the next fresh read fails inside PostgreSQL with a permission
-	// error. The loader must classify it as a storage failure after exactly
-	// one SELECT attempt and no mutating statement — the single failed read
-	// also proves the loader performs no automatic retry.
 	if _, err := owner.Exec(ctx, "REVOKE SELECT ON food_objects FROM "+db.RuntimeRole); err != nil {
 		t.Fatalf("revoke runtime catalog read: %v", err)
 	}
@@ -430,10 +345,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	tracer.assertSingleSelect(t, wantSQL)
 }
 
-// TestCatalogLoaderReadsFreshSnapshot verifies that the loader holds no
-// runtime cache (ARCH-006): the same loader instance performs one fresh
-// embedded SELECT per load and observes an owner-made valid fixture change
-// on the next load.
 func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	db := testdb.NewDB(t)
 	runDBSetupCommand(t, db.OwnerURL)
@@ -452,7 +363,6 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 		t.Fatalf("read embedded catalog SELECT: %v", err)
 	}
 
-	// First load: the complete seeded catalog, exactly one SELECT.
 	first, err := loader.load(ctx)
 	if err != nil {
 		t.Fatalf("first Load: %v", err)
@@ -461,10 +371,6 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	assertIssue002Catalog(t, first)
 	tracer.reset()
 
-	// The schema owner makes a valid fixture change while the same loader
-	// instance stays alive: an updated localized name on Food Object 1 and a
-	// new valid Food Object 39. The runtime credential cannot write, so the
-	// change is owner-made (ARCH-016).
 	if _, err := owner.Exec(ctx, `UPDATE food_objects SET names = '{"en": "Pizza Margherita Fresca", "pl": "Pizza margherita"}'::jsonb WHERE id = 1`); err != nil {
 		t.Fatalf("owner fixture name update: %v", err)
 	}
@@ -472,10 +378,6 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 		t.Fatalf("owner fixture row insert: %v", err)
 	}
 
-	// Second load through the same loader instance sees both owner-made
-	// changes immediately: the updated English name and the new Food Object
-	// 39. The loader holds no runtime cache and performs exactly one fresh
-	// SELECT and no mutating statement for this load too.
 	second, err := loader.load(ctx)
 	if err != nil {
 		t.Fatalf("second Load: %v", err)

@@ -1,33 +1,5 @@
 package server
 
-// Integration tests for task 19 (ARCH-005, ARCH-008, ARCH-016, ARCH-019,
-// ARCH-022): the Fiber Adapter for POST /api/v1/substitutes/search. They
-// require a real PostgreSQL server. Each test creates its isolated
-// disposable database — plus the schema-owner, SELECT-only runtime, and
-// unprivileged login roles the local deployment setup creates before
-// dbsetup runs (ARCH-016, ISSUE-001) — through the shared testdb support,
-// runs the real setup command against it, grants the runtime role catalog
-// SELECT exactly as the local deployment setup does, composes the real
-// Fiber v3 application over the runtime pool, and serves it on an actual
-// loopback listener (127.0.0.1:0, the ISSUE-004 test-composition address)
-// that real HTTP clients call.
-//
-// TestSubstituteSearchHTTPIntegration proves the exact ISSUE-005 success
-// contract (P04-G4): the strict page-0 success field sets with no unknown
-// fields at any nesting level, the designated page-0 order and exact
-// display values for the three seeded inputs, three unique items, the exact
-// totalEligibleCount and hasMore, both localized names, omitted and present
-// image keys, serving/g/ml inputs, and solid g plus liquid ml whole Matched
-// Quantity outputs. TestSubstituteSearchContractHTTPIntegration proves the
-// task-19 strict decoder paths: only application/json is accepted, and
-// empty, malformed, trailing, unknown-key, and duplicate-key JSON at every
-// nesting level are rejected with 400 INVALID_REQUEST — without a field for
-// structural failures and unknown keys, and with the exact ISSUE-005 field
-// path for missing, duplicate, null, or wrong-typed known fields. The
-// admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from
-// libpq-style environment variables; no credential is committed and tests
-// skip when no server is reachable.
-
 import (
 	"encoding/json"
 	"io"
@@ -40,10 +12,6 @@ import (
 	"obiad/backend/internal/transport"
 )
 
-// postSubstitutes performs a real POST /api/v1/substitutes/search request
-// with the given Content-Type (empty means the header is left absent) and
-// raw body and returns the status, the raw response body, and the
-// response Content-Type header.
 func postSubstitutes(t *testing.T, baseURL string, contentType string, body string) (status int, responseBody string, responseContentType string) {
 	t.Helper()
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -70,16 +38,6 @@ func postSubstitutes(t *testing.T, baseURL string, contentType string, body stri
 	return resp.StatusCode, string(raw), resp.Header.Get("Content-Type")
 }
 
-// assertSubstituteSuccessEnvelope asserts the exact ISSUE-005 success shape
-// of a substitute search response: status 200, application/json, and a body
-// with no unknown fields at any nesting level — exactly the pageIndex,
-// totalEligibleCount, hasMore, inputMacronutrients, and items envelope,
-// inputMacronutrients with exactly protein, carbohydrate, and fat, every
-// item with exactly foodObjectId, names, matchedQuantity, macronutrients,
-// and similarityPercent plus the optional imageKey exactly when present,
-// names with exactly en and pl, matchedQuantity with exactly value and
-// unit, and macronutrients with exactly protein, carbohydrate, and fat
-// (additionalProperties: false). It returns the decoded generated envelope.
 func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, contentType string) transport.SubstituteSearchResponse {
 	t.Helper()
 	if status != http.StatusOK {
@@ -103,9 +61,6 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 		t.Fatalf("items %q is not a JSON array: %v", envelope["items"], err)
 	}
 	for i, item := range items {
-		// imageKey is optional: present exactly when the Food Object has an
-		// image and never null (ISSUE-005). The per-item value assertions
-		// below also pin the present key to the seeded opaque key.
 		wantFields := []string{"foodObjectId", "names", "matchedQuantity", "macronutrients", "calories", "similarityPercent"}
 		if _, ok := item["imageKey"]; ok {
 			wantFields = append(wantFields, "imageKey")
@@ -134,10 +89,6 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	return response
 }
 
-// assertInputMacronutrients checks the exact ISSUE-010 input macronutrients
-// of a decoded substitute response: the protein, carbohydrate, and fat of
-// the Substitution Input at the committed quantity, rounded to 0.1 g by the
-// same backend half-up display projection as the result cards.
 func assertInputMacronutrients(t *testing.T, response transport.SubstituteSearchResponse, protein, carbohydrate, fat float64) {
 	t.Helper()
 	got := response.InputMacronutrients
@@ -146,10 +97,6 @@ func assertInputMacronutrients(t *testing.T, response transport.SubstituteSearch
 	}
 }
 
-// assertInputCalories checks the exact REQ-078 input calories of a decoded
-// substitute response: the whole display calories of the Substitution Input at
-// the committed quantity, derived from full-precision macronutrients and
-// rounded to a whole kcal by the backend display projection.
 func assertInputCalories(t *testing.T, response transport.SubstituteSearchResponse, calories int64) {
 	t.Helper()
 	if response.InputCalories != calories {
@@ -157,10 +104,6 @@ func assertInputCalories(t *testing.T, response transport.SubstituteSearchRespon
 	}
 }
 
-// wantSubstituteItem is one exact ISSUE-005 page-0 success expectation: the
-// stable Food Object ID, both localized names, the optional image key (nil
-// when omitted), the whole Matched Quantity value and unit, the three
-// scaled macronutrients, and the whole similarity percentage.
 type wantSubstituteItem struct {
 	id                int32
 	en                string
@@ -175,8 +118,6 @@ type wantSubstituteItem struct {
 	similarityPercent int32
 }
 
-// assertSubstituteItem checks one decoded substitute item against an exact
-// expectation (task 19, P04-G4).
 func assertSubstituteItem(t *testing.T, item transport.SubstituteItem, want wantSubstituteItem) {
 	t.Helper()
 	if item.FoodObjectId != want.id {
@@ -206,10 +147,6 @@ func assertSubstituteItem(t *testing.T, item transport.SubstituteItem, want want
 	}
 }
 
-// assertSubstitutePage checks the exact envelope of a decoded substitute
-// response: the echoed page index, the total eligible count, hasMore, exactly
-// the expected unique items in the designated order, and each item's exact
-// values.
 func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchResponse, pageIndex, totalEligibleCount int32, hasMore bool, wants ...wantSubstituteItem) {
 	t.Helper()
 	if response.PageIndex != pageIndex {
@@ -234,13 +171,8 @@ func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchRespo
 	}
 }
 
-// strPtr returns a pointer to s for the optional image-key expectations.
 func strPtr(s string) *string { return &s }
 
-// assertInvalidRequest asserts one task-19 strict-decoder failure: status
-// 400, application/json, and the exact generated Error JSON with the stable
-// code INVALID_REQUEST and the given ISSUE-005 field path (empty for
-// structural failures and unknown keys) and no other fields.
 func assertInvalidRequest(t *testing.T, status int, body string, contentType string, wantField transport.ErrorField) {
 	t.Helper()
 	if status != http.StatusBadRequest {
@@ -269,27 +201,11 @@ func assertInvalidRequest(t *testing.T, status int, body string, contentType str
 	}
 }
 
-// TestSubstituteSearchHTTPIntegration verifies the Fiber Adapter for
-// POST /api/v1/substitutes/search over an actual loopback Fiber listener
-// backed by disposable real PostgreSQL (P04-G4, P11-G1): the strict page
-// success field sets with no unknown fields, the designated page order and
-// exact display values for the three seeded inputs, unique items,
-// totalEligibleCount, hasMore, both localized names, omitted and present
-// image keys, serving/g/ml inputs, solid g plus liquid ml whole Matched
-// Quantity outputs, and valid intermediate, full-last, and partial-last pages.
 func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	const jsonType = "application/json"
 
-	// Pizza Margherita at one Serving (350 g), page 0: designated eligible
-	// count 36, hasMore true, designated page-0 order [13, 29, 26], three
-	// unique items, both localized names, the present gyoza image key on
-	// ID 13 and omitted image keys on IDs 29 and 26, and whole solid-gram
-	// Matched Quantities with the exact scaled macronutrients and whole
-	// similarity percentages. The ISSUE-010 inputMacronutrients are the input
-	// macros scaled to the committed 350 g and projected to 0.1 g: protein
-	// 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and fat 10 × 3.5 = 35.0.
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
 	pizza := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -301,8 +217,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", matchedValue: 440, matchedUnit: transport.MatchedQuantityUnitG, protein: 26.4, carbohydrate: 123.1, fat: 30.8, calories: 875, similarityPercent: 99},
 	)
 
-	// Valid intermediate page: Pizza Margherita page 1 (ranks 4 through 6,
-	// hasMore true).
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":1}`)
 	pizzaPage1 := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -314,8 +228,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 35, en: "Pastel de nata", pl: "Pastel de nata", matchedValue: 306, matchedUnit: transport.MatchedQuantityUnitG, protein: 15.3, carbohydrate: 107.1, fat: 42.8, calories: 875, similarityPercent: 98},
 	)
 
-	// Valid full-last page: Pizza Margherita page 11 (ranks 34 through 36,
-	// hasMore false).
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":11}`)
 	pizzaLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -327,10 +239,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", matchedValue: 106, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0, carbohydrate: 0, fat: 97.2, calories: 875, similarityPercent: 30},
 	)
 
-	// A changed accepted quantity of the same input: Pizza Margherita at
-	// 100 g commits protein 10 × 1 = 10.0, carbohydrate 30 × 1 = 30.0, and
-	// fat 10 × 1 = 10.0. The ranked result IDs and order do not change
-	// (REQ-028, ISSUE-010).
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":1,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
 	pizzaAt100g := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -345,11 +253,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		}
 	}
 
-	// Chicken breast at 100 g, page 0: designated eligible count 37,
-	// hasMore true, page-0 IDs [23, 11, 6], and every image key omitted
-	// (none of the three candidates has a seeded image). The input
-	// macronutrients at the committed 100 g are the seeded per-100 g
-	// values: 31.0, 0.0, and 3.6.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
 	chicken := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -361,8 +264,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", matchedValue: 67, matchedUnit: transport.MatchedQuantityUnitG, protein: 18, carbohydrate: 0, fat: 9.4, calories: 156, similarityPercent: 93},
 	)
 
-	// Valid partial-last page: Chicken breast page 12 (rank 37, hasMore false,
-	// exactly 1 item).
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":12}`)
 	chickenLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -372,12 +273,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 9, en: "Apple juice", pl: "Sok jabłkowy", matchedValue: 345, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0.3, carbohydrate: 38, fat: 0.3, calories: 156, similarityPercent: 1},
 	)
 
-	// Milk at 100 ml, page 0: designated eligible count 37, hasMore true,
-	// page-0 IDs [33, 3, 21], and whole Matched Quantity outputs in both
-	// candidate base units: millilitres for the liquid Mondongo and grams for
-	// the solid Lasagna and Beef cheeseburger (ARCH-013). The input
-	// macronutrients at the committed 100 ml are the seeded per-100 ml
-	// values: 3.4, 4.8, and 2.0.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":0}`)
 	milk := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -389,8 +284,6 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", matchedValue: 19, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 4.6, fat: 2.5, calories: 51, similarityPercent: 99},
 	)
 
-	// Valid partial-last page: Milk page 12 (rank 37, hasMore false, exactly
-	// 1 item).
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
 		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":12}`)
 	milkLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
@@ -401,48 +294,25 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	)
 }
 
-// TestSubstituteSearchContractHTTPIntegration verifies the task-19 strict
-// decoder paths of POST /api/v1/substitutes/search over an actual loopback
-// Fiber listener backed by disposable real PostgreSQL: only the
-// application/json Content-Type is accepted, and empty, malformed,
-// trailing, unknown-key, and duplicate-key JSON at every nesting level are
-// rejected with 400 INVALID_REQUEST — without a field for structural
-// failures and unknown keys, and with the exact ISSUE-005 field path for
-// missing, duplicate, null, or wrong-typed known fields. The canonical
-// request proves the strict decoder accepts exactly the closed generated
-// object and nothing else.
 func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	const jsonType = "application/json"
 
-	// The canonical closed request the strict decoder accepts. The success
-	// envelope also proves the ISSUE-010 inputMacronutrients field set and
-	// the exact value for Pizza Margherita at one Serving (350 g): protein
-	// 10 × 3.5 = 35.0, carbohydrate 30 × 3.5 = 105.0, and fat 10 × 3.5 =
-	// 35.0, projected to 0.1 g.
 	valid := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType, valid)
 	canonical := assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	assertInputMacronutrients(t, canonical, 35.0, 105.0, 35.0)
 	assertInputCalories(t, canonical, 875)
-	// application/json with a parameter is still application/json; a
-	// trailing newline after the object is whitespace, not trailing JSON.
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType+"; charset=utf-8", valid)
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType, valid+"\n")
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	// JSON object member order is insignificant: a reordered, spaced
-	// request with the nested unit before the value is the same closed
-	// object and must be accepted with the same inputMacronutrients.
 	reordered := "{\n  \"pageIndex\": 0,\n  \"quantity\": { \"unit\": \"serving\", \"value\": 1 },\n  \"foodObjectId\": 1\n}"
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType, reordered)
 	reorderedEnvelope := assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	assertInputMacronutrients(t, reorderedEnvelope, 35.0, 105.0, 35.0)
 
-	// Content-Type: only application/json. A missing Content-Type and any
-	// other media type return 400 INVALID_REQUEST without a field
-	// (ISSUE-005).
 	contentTypeCases := []struct {
 		name        string
 		contentType string
@@ -459,9 +329,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Structural JSON failures: empty, whitespace-only, and malformed
-	// bodies, and a top-level value that is not the closed request object,
-	// return 400 INVALID_REQUEST without a field.
 	structuralCases := []struct {
 		name string
 		body string
@@ -484,8 +351,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Unknown keys at every nesting level return 400 INVALID_REQUEST without
-	// a field (closed request objects, ISSUE-005).
 	unknownCases := []struct {
 		name string
 		body string
@@ -501,8 +366,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Duplicate keys at every nesting level return 400 INVALID_REQUEST with
-	// the duplicated known field's ISSUE-005 path.
 	duplicateCases := []struct {
 		name  string
 		body  string
@@ -521,8 +384,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Missing required fields return 400 INVALID_REQUEST with the missing
-	// field's ISSUE-005 path.
 	missingCases := []struct {
 		name  string
 		body  string
@@ -541,9 +402,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Null known fields return 400 INVALID_REQUEST with the field's
-	// ISSUE-005 path (ISSUE-005: a null known field is a structural
-	// failure).
 	nullCases := []struct {
 		name  string
 		body  string
@@ -562,11 +420,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Wrong-typed known fields return 400 INVALID_REQUEST with the field's
-	// ISSUE-005 path: a non-number where a number is required, a non-string
-	// unit, an array or scalar where the quantity object is required, a
-	// fractional or out-of-int32-range number for an int32 field, and a
-	// number that does not fit the double range.
 	wrongTypeCases := []struct {
 		name  string
 		body  string
@@ -592,14 +445,6 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	// Complete-document syntax precedence (task-19 repair): a truncated or
-	// malformed document is rejected without a field even when a partial
-	// token walk would have classified a known field — a wrong-typed or
-	// null value token followed by truncation or a broken delimiter is
-	// still malformed JSON, never a field error (ISSUE-005: malformed JSON
-	// carries no field). The same wrong-type or null value inside a
-	// syntactically complete document is covered by the nullCases and
-	// wrongTypeCases above and keeps its exact field path.
 	precedenceCases := []struct {
 		name string
 		body string

@@ -1,38 +1,5 @@
 package repository
 
-// Integration test for Phase 4 (task 18) and Phase 11 (task 36): the Find
-// Substitute Page input validation and stable Module failures (ARCH-005,
-// ARCH-006, ARCH-008, ARCH-018, ARCH-022, P04-G4, P11-G1). It requires a
-// real PostgreSQL server: it reuses the shared task-16 fixture
-// setupSubstituteFixture, which creates an isolated disposable database plus
-// the schema-owner, SELECT-only runtime, and unprivileged login roles through
-// the shared testdb support, runs the real setup command against it, grants
-// the runtime catalog read through the same embedded privilege SQL the local
-// deployment setup applies, connects the SELECT-only runtime credential with
-// a statement tracer, and builds a Find Substitute Page Module over that
-// connection.
-//
-// The test proves the accepted inputs — positive integer direct g and ml
-// values, dot-decimal Serving counts, both 100,000 g / 100,000 ml
-// converted-value boundaries (including a Serving conversion that lands
-// exactly on the limit and a tiny positive converted value), and page 0
-// for zero eligible Substitutes — and the exact ISSUE-005 stable failures
-// for nonpositive, fractional, or nonfinite base values, unsupported units,
-// invalid Serving values, Physical State unit mismatch, missing Serving,
-// over-limit converted values, a converted value that underflows to zero,
-// nonpositive or absent Food Object IDs, negative pages, and out-of-range
-// nonzero pages (including the first page after the last page and
-// math.MaxInt32). A per-request statement tracer proves no retry and at most
-// one fresh SELECT: catalog-independent request failures (negative page
-// index, Food Object ID, quantity value or unit) are rejected before any
-// catalog read and record zero statements; object-dependent failures (absent
-// ID, unit mismatch, unavailable Serving, converted-value range, page out of
-// range) record exactly one fresh embedded SELECT and no second read; and
-// every accepted request records exactly one fresh embedded SELECT. No fake
-// Adapter, exported seam, or test hook is added: the test sits in the same
-// package. The admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or
-// from libpq-style environment variables; no credential is committed and
-// tests skip when no server is reachable.
 import (
 	"context"
 	"errors"
@@ -40,9 +7,6 @@ import (
 	"testing"
 )
 
-// assertStableFailure checks that Run returned exactly the expected stable
-// Module failure: the ISSUE-005 code and the exact field path, with no page
-// result and no other failure type.
 func assertStableFailure(t *testing.T, err error, wantCode Code, wantField string) {
 	t.Helper()
 	if err == nil {
@@ -60,25 +24,10 @@ func assertStableFailure(t *testing.T, err error, wantCode Code, wantField strin
 	}
 }
 
-// TestFindSubstitutePageValidationIntegration exercises the concrete Find
-// Substitute Page validation and stable failures against real PostgreSQL
-// through the SELECT-only runtime credential (P04-G4). Designated seeded
-// inputs: Pizza Margherita (ID 1, solid, Serving 350 g, 36 eligible),
-// Chicken breast (ID 5, solid, no Serving, 37 eligible), Milk (ID 10,
-// liquid, no Serving, 37 eligible), Polish chicken soup (ID 17, liquid,
-// Serving 300 ml, 37 eligible), and Coleslaw (ID 32, solid, Serving 100 g,
-// 37 eligible).
 func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 	_, module, tracer, wantSQL, owner := setupSubstituteFixture(t)
 	ctx := context.Background()
 
-	// Accepted inputs: positive integer direct g and ml values, dot-decimal
-	// Serving counts, and both converted-value boundaries (ARCH-018,
-	// REQ-025). Each accepted request performs exactly one fresh embedded
-	// SELECT and no retry. The boundary cases prove 100,000 g and
-	// 100,000 ml are accepted, and the Coleslaw case proves a Serving
-	// conversion landing exactly on the 100,000 g limit (1000 × 100 g) is
-	// accepted.
 	accepted := []struct {
 		name      string
 		input     SubstituteInput
@@ -106,22 +55,6 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		})
 	}
 
-	// Converted-value lower bound (ARCH-018: the converted base quantity
-	// must be strictly positive and finite). The schema owner inserts an
-	// isolated artificial fixture — a schema-valid tiny stored Serving of
-	// 1e-4 on Food Object 39 — that the production seed never contains
-	// (ISSUE-002, ARCH-018 quality constraints). The value is small enough
-	// that a smallest-subnormal Serving count times it underflows to exactly
-	// zero, yet large enough to satisfy the ISSUE-010 Serving invariant
-	// (the whole-number maximum floor(100000 / 1e-4) = 1000000000 fits the
-	// int32 display range), so the row passes the Catalog Loader and reaches
-	// the converted-value guard. The underflowed zero product must be
-	// classified as the ISSUE-005 stable INVALID_QUANTITY with field
-	// quantity.value (a nonpositive base quantity) after exactly one fresh
-	// SELECT instead of returning a false successful zero-quantity page. A
-	// Serving count of 1 against the same fixture converts to 1e-4
-	// (strictly positive), proving the guard rejects only the underflowed
-	// zero product, not every tiny converted value.
 	if _, err := owner.Exec(ctx,
 		`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving)
 		 VALUES ($1, $2::jsonb, 'solid', 1, 1, 1, $3)`,
@@ -153,13 +86,6 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		t.Fatalf("delete tiny-Serving fixture: %v", err)
 	}
 
-	// Catalog-independent failures: rejected before the single catalog read,
-	// recording zero statements (no read at all, no retry). These cover the
-	// nonpositive Food Object ID, negative page, every nonzero page, and
-	// the value/unit rules that need no catalog data: nonpositive,
-	// fractional, or nonfinite (NaN, +Inf, -Inf) direct base values,
-	// unsupported units, and invalid (nonpositive or nonfinite) Serving
-	// values.
 	preLoad := []struct {
 		name      string
 		input     SubstituteInput
@@ -201,12 +127,6 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		})
 	}
 
-	// Object-dependent failures: rejected after the single fresh catalog
-	// read, recording exactly one embedded SELECT and no second read, no
-	// retry. These cover the absent positive Food Object ID, the
-	// unit-to-Physical-State mismatch, the unavailable Serving, and the
-	// over-limit converted values (direct, Serving-converted, and
-	// dot-decimal Serving-converted, for both solids and liquids).
 	postLoad := []struct {
 		name      string
 		input     SubstituteInput
@@ -244,8 +164,6 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		})
 	}
 
-	// Zero-result contract: page 0 remains valid when zero eligible Substitutes
-	// exist, while nonzero pages return PAGE_OUT_OF_RANGE with pageIndex.
 	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id) VALUES (99)"); err != nil {
 		t.Fatalf("owner insert food_families 99: %v", err)
 	}

@@ -1,18 +1,3 @@
-// Package-level file for the Fiber Adapter of the versioned
-// POST /api/v1/substitutes/search route (tasks 19 and 20; ARCH-005,
-// ARCH-008, ARCH-016, ARCH-019, ARCH-022). The adapter enforces the
-// 4 KiB request-body limit, accepts only the application/json
-// Content-Type, strictly decodes one closed generated
-// SubstituteSearchRequest object at the HTTP boundary — rejecting empty,
-// malformed, or trailing JSON, unknown keys, and duplicate keys at every
-// nesting level — derives one 450 ms request context (ARCH-019) and passes
-// it through pool Acquire and the concrete Find Substitute Page Run
-// operation to pgx, maps every failure to the ISSUE-005-resolved stable
-// HTTP status, code, and optional field, and serializes the exact
-// generated SubstituteSearchResponse envelope with omitted-not-null
-// optional image keys. Generated transport values never enter the Module,
-// and Module domain values never reach the wire un-mapped (ISSUE-005).
-
 package server
 
 import (
@@ -31,68 +16,26 @@ import (
 	"obiad/backend/internal/transport"
 )
 
-// maxRequestBodyBytes is the request-body limit of POST
-// /api/v1/substitutes/search (ARCH-008, ISSUE-005): a body over 4 KiB
-// (4096 bytes) is rejected with the stable 413 REQUEST_BODY_TOO_LARGE
-// response without a field, and a body of exactly 4 KiB is accepted. The
-// limit is enforced as a pre-read ingress cap through the fasthttp
-// HeaderReceived hook in Compose, so an oversized body is rejected while
-// the request is read, before any handler runs and before the body is
-// buffered. This constant is the single source of the 4 KiB value for both
-// the ingress cap and the handler-level backstop below.
+// maxRequestBodyBytes limits substitute request bodies before decoding.
 const maxRequestBodyBytes = 4096
 
-// substitutesHandler returns the Fiber handler for the versioned
-// POST /api/v1/substitutes/search route (ARCH-008). It enforces the 4 KiB
-// request-body limit (413 REQUEST_BODY_TOO_LARGE without a field before any
-// body processing), accepts only the application/json Content-Type,
-// strictly decodes one closed generated request object (ISSUE-005: empty,
-// malformed, or trailing JSON, unknown keys, and duplicate keys at every
-// nesting level are rejected; a missing, duplicate, null, or wrong-typed
-// known field carries its ISSUE-005 field path), derives one 450 ms request
-// context (ARCH-019) and passes it through pool Acquire and the concrete
-// Find Substitute Page Run operation to pgx, maps every failure to the
-// ISSUE-005-resolved stable status, code, and optional field, and
-// serializes the exact generated envelope with omitted-not-null
-// optional image keys. Generated transport values never enter the Module
-// (ARCH-008).
+// substitutesHandler decodes and serves substitute searches.
 func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// The 4 KiB request-body limit is enforced pre-read by the fasthttp
-		// HeaderReceived ingress cap in Compose, so a body over 4096 bytes
-		// is rejected before this handler runs. This byte check is the
-		// handler-level backstop: if the ingress cap ever did not apply, the
-		// request still fails with the exact stable 413 REQUEST_BODY_TOO_LARGE
-		// response, without a field, before any JSON processing (ARCH-008,
-		// ISSUE-005).
 		if len(c.Body()) > maxRequestBodyBytes {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, transport.REQUESTBODYTOOLARGE, nil, "request body exceeds the 4 KiB limit")
 		}
 
 		req, field, err := decodeSubstituteRequest(c)
 		if err != nil {
-			// A missing or non-JSON Content-Type, empty, malformed, or
-			// trailing JSON, and an unknown key return 400 INVALID_REQUEST
-			// without a field; a missing, duplicate, null, or wrong-typed
-			// known field returns 400 INVALID_REQUEST with its ISSUE-005
-			// field path.
 			return writeError(c, fiber.StatusBadRequest, transport.INVALIDREQUEST, field, err.Error())
 		}
 
-		// ARCH-019: one 450 ms context bounds the whole substitute request —
-		// pool Acquire, Find Substitute Page Run, and the pgx catalog read.
-		// No retry occurs anywhere in the chain; when the deadline fires,
-		// the context cancels pgx and the request fails with the stable
-		// SEARCH_TIMEOUT code (ISSUE-005).
 		ctx, cancel := context.WithTimeout(c.Context(), requestDeadline)
 		defer cancel()
 
 		poolConn, err := pool.Acquire(ctx)
 		if err != nil {
-			// Acquire blocks while the four-connection pool is exhausted and
-			// fails when no connection can serve the read (ARCH-016). A
-			// deadline expiry is SEARCH_TIMEOUT; every other acquire failure
-			// means the catalog storage is unavailable (ISSUE-005).
 			if errors.Is(err, context.DeadlineExceeded) {
 				return writeError(c, fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, err.Error())
 			}
@@ -102,8 +45,6 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 
 		find, err := repository.NewFindSubstitutePage(poolConn.Conn())
 		if err != nil {
-			// The embedded catalog SELECT cannot be read: an unexpected
-			// internal failure, never a client error.
 			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error())
 		}
 
@@ -122,16 +63,10 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 	}
 }
 
-// deadlineLogCause is the fixed internal cause text of a substitute request
-// whose 450 ms deadline expired while reading the catalog (ARCH-019). The
-// fixed text keeps the request log free of any pgx or query detail.
+// deadlineLogCause is used for expired request logs.
 const deadlineLogCause = "request deadline expired while reading the catalog"
 
-// safeSubstituteCause returns the stable internal cause text of one
-// substitute client failure: a fixed description and the fixed ISSUE-005
-// field path. It never contains client values (Food Quantities, units,
-// Food Object IDs, page indexes) or request body text (ARCH-019,
-// golang-security logging guidance).
+// safeSubstituteCause builds a log-safe client error description.
 func safeSubstituteCause(description, field string) string {
 	if field == "" {
 		return description
@@ -139,18 +74,7 @@ func safeSubstituteCause(description, field string) string {
 	return description + " (field " + field + ")"
 }
 
-// substituteRunError maps one Find Substitute Page Module failure to the
-// ISSUE-005-resolved stable HTTP status, code, optional field, and the safe
-// internal cause text for the request log. Deadline expiry (the 450 ms
-// request context reached pgx) is SEARCH_TIMEOUT no matter how the failure
-// surfaces from the Module. Client failures derive the log cause only from
-// the stable code and the fixed ISSUE-005 field path: the Module cause text
-// contains the client Food Quantity values, units, Food Object IDs, and
-// page indexes, which must never reach the log (ARCH-019). Server failures
-// (storage, invariant, unexpected) keep the server-generated pgx or
-// catalog-invariant cause, which contains no client input. Client failures
-// carry their field; server failures carry none and expose no internal
-// cause in the response.
+// substituteRunError maps module errors to HTTP errors.
 func substituteRunError(err error) (status int, code transport.ErrorCode, field *transport.ErrorField, logCause string) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return fiber.StatusGatewayTimeout, transport.SEARCHTIMEOUT, nil, deadlineLogCause
@@ -159,17 +83,10 @@ func substituteRunError(err error) (status int, code transport.ErrorCode, field 
 	if errors.As(err, &moduleErr) {
 		switch moduleErr.Code {
 		case repository.CodeInvalidRequest:
-			// A nonpositive Food Object ID (ISSUE-005: 400 INVALID_REQUEST
-			// with field foodObjectId). The strict decoder already
-			// classifies every structural foodObjectId failure.
 			return fiber.StatusBadRequest, transport.INVALIDREQUEST, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute request", moduleErr.Field)
 		case repository.CodeFoodObjectNotFound:
 			return fiber.StatusNotFound, transport.FOODOBJECTNOTFOUND, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object is absent from the catalog", moduleErr.Field)
 		case repository.CodeInvalidQuantity:
-			// The Module reports the exact ISSUE-005 field: quantity.value
-			// for a nonpositive or nonintegral direct value or a
-			// nonpositive Serving count, quantity.unit for an unsupported
-			// unit.
 			return fiber.StatusUnprocessableEntity, transport.INVALIDQUANTITY, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute quantity", moduleErr.Field)
 		case repository.CodeQuantityUnitMismatch:
 			return fiber.StatusUnprocessableEntity, transport.QUANTITYUNITMISMATCH, fieldPathOf(moduleErr.Field), safeSubstituteCause("quantity unit does not match the food object physical state", moduleErr.Field)
@@ -190,8 +107,7 @@ func substituteRunError(err error) (status int, code transport.ErrorCode, field 
 	return fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error()
 }
 
-// valueKind enumerates the JSON value kinds the strict request decoder
-// accepts for one field of the closed request object.
+// valueKind identifies an accepted JSON value type.
 type valueKind int
 
 const (
@@ -200,10 +116,7 @@ const (
 	kindString
 )
 
-// fieldSpec describes one required field of a closed request object at one
-// nesting level: the JSON key, the ISSUE-005 error field path carried by a
-// missing, duplicate, null, or wrong-typed known value, the accepted JSON
-// kind, and the nested closed-object spec for kindObject fields.
+// fieldSpec describes one request field.
 type fieldSpec struct {
 	key    string
 	path   string
@@ -211,17 +124,12 @@ type fieldSpec struct {
 	nested *objectSpec
 }
 
-// objectSpec is the closed-object schema of one request nesting level.
+// objectSpec describes a closed JSON object.
 type objectSpec struct {
 	fields []fieldSpec
 }
 
-// substituteRequestSpec is the ISSUE-005 closed substitute search request
-// schema: the root requires foodObjectId (number), quantity (object), and
-// pageIndex (number); the quantity object requires value (number) and unit
-// (string). The generated shape does not encode the semantic quantity,
-// unit, Physical State, and Serving rules — the Module enforces those
-// (ISSUE-005).
+// substituteRequestSpec defines the accepted request shape.
 var substituteRequestSpec = &objectSpec{fields: []fieldSpec{
 	{key: "foodObjectId", path: "foodObjectId", kind: kindNumber},
 	{key: "quantity", path: "quantity", kind: kindObject, nested: &objectSpec{fields: []fieldSpec{
@@ -231,28 +139,11 @@ var substituteRequestSpec = &objectSpec{fields: []fieldSpec{
 	{key: "pageIndex", path: "pageIndex", kind: kindNumber},
 }}
 
-// decodeSubstituteRequest strictly decodes one closed generated
-// SubstituteSearchRequest object from the raw request at the HTTP boundary
-// (task 19; ISSUE-005). It enforces the application/json Content-Type and
-// rejects empty, malformed, or trailing JSON and unknown keys without a
-// field, and a missing, duplicate, null, or wrong-typed known field with
-// its ISSUE-005 field path. The returned field is nil for structural
-// failures; err describes the sanitizable internal cause for the request
-// log and never reaches a response.
-//
-// Syntax precedence (task-19 repair): the complete body must first be one
-// valid JSON document (json.Valid) before any known-field classification.
-// A truncated or malformed document is rejected without a field no matter
-// what a partial token walk would have classified — {"foodObjectId":true
-// and {"foodObjectId":[] are malformed, not wrong-typed-field failures.
-// Only a syntactically complete document reaches the strict object walk,
-// where a wrong-typed or null known field carries its exact field path.
+// decodeSubstituteRequest strictly decodes one request object.
 func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *transport.ErrorField, error) {
 	var req transport.SubstituteSearchRequest
 	mediaType, _, err := mime.ParseMediaType(c.Get(fiber.HeaderContentType))
 	if err != nil || mediaType != "application/json" {
-		// The cause is fixed text: the client-supplied Content-Type header
-		// value never reaches the request log (ARCH-019).
 		return req, nil, errors.New("Content-Type is not application/json")
 	}
 
@@ -260,12 +151,6 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	if len(body) == 0 {
 		return req, nil, errors.New("request body is empty")
 	}
-	// The body must be exactly one syntactically complete JSON document:
-	// json.Valid rejects truncated, malformed, and trailing JSON, and a
-	// top-level value that is not the closed request object is rejected by
-	// readStrictObject — both without a field (ISSUE-005). The gate makes
-	// every wrong-type or null token the walk sees afterwards belong to a
-	// complete document, so its field path is exact.
 	if !json.Valid(body) {
 		return req, nil, errors.New("request body is not one valid JSON document")
 	}
@@ -293,19 +178,10 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	return req, nil, nil
 }
 
-// readStrictObject reads one JSON object from dec — the opening '{', every
-// member, and the closing '}' — and enforces the closed-object contract of
-// spec: every key must be known, no key may repeat, every required field
-// must be present, and every value must have the field's accepted kind. It
-// returns the parsed members (json.Number, string, or a nested
-// map[string]any) and the ISSUE-005 field path of the first known-field
-// violation; an unknown key, a malformed value, and a non-object top level
-// carry no field.
+// readStrictObject reads one closed JSON object.
 func readStrictObject(dec *json.Decoder, spec *objectSpec) (map[string]any, *transport.ErrorField, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		// io.EOF is an empty body and *json.SyntaxError a malformed one;
-		// both are structural failures without a field.
 		return nil, nil, err
 	}
 	open, ok := tok.(json.Delim)
@@ -315,8 +191,7 @@ func readStrictObject(dec *json.Decoder, spec *objectSpec) (map[string]any, *tra
 	return readStrictMembers(dec, spec)
 }
 
-// readStrictMembers reads the members of an object whose opening '{' was
-// already consumed, up to and including the closing '}'.
+// readStrictMembers reads all members of an object.
 func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *transport.ErrorField, error) {
 	byKey := make(map[string]*fieldSpec, len(spec.fields))
 	for i := range spec.fields {
@@ -343,9 +218,6 @@ func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *tr
 		}
 		field, known := byKey[key]
 		if !known {
-			// An unknown key is a closed-object violation without a field
-			// (ISSUE-005). The cause is fixed text: the client-supplied key
-			// name never reaches the request log (ARCH-019).
 			return nil, nil, errors.New("request body contains an unknown field")
 		}
 		if seen[key] {
@@ -360,13 +232,7 @@ func readStrictMembers(dec *json.Decoder, spec *objectSpec) (map[string]any, *tr
 	}
 }
 
-// readStrictValue reads one JSON value and enforces the accepted kind of
-// field. The caller has already proven the whole body is one valid JSON
-// document (decodeSubstituteRequest), so every token here belongs to a
-// syntactically complete value: a null or wrong-typed known field carries
-// the field's exact ISSUE-005 path. The premature-closing-delimiter branch
-// is unreachable after that gate and stays malformed without a field as a
-// defensive boundary.
+// readStrictValue reads and validates one JSON value.
 func readStrictValue(dec *json.Decoder, field *fieldSpec) (any, *transport.ErrorField, error) {
 	tok, err := dec.Token()
 	if err != nil {
@@ -382,7 +248,7 @@ func readStrictValue(dec *json.Decoder, field *fieldSpec) (any, *transport.Error
 			return readStrictMembers(dec, field.nested)
 		case '[':
 			return nil, fieldPathOf(field.path), fmt.Errorf("field %q must not be an array", field.key)
-		default: // '}' or ']': a value cannot be a closing delimiter.
+		default:
 			return nil, nil, errors.New("unexpected closing delimiter in request body")
 		}
 	case nil:
@@ -400,21 +266,16 @@ func readStrictValue(dec *json.Decoder, field *fieldSpec) (any, *transport.Error
 	case bool:
 		return nil, fieldPathOf(field.path), fmt.Errorf("field %q must not be a boolean", field.key)
 	}
-	return nil, nil, errors.New("unexpected JSON value") // unreachable
+	return nil, nil, errors.New("unexpected JSON value")
 }
 
-// fieldPathOf returns a pointer to the ISSUE-005 error field path of one
-// known request field.
+// fieldPathOf returns a transport error field pointer.
 func fieldPathOf(path string) *transport.ErrorField {
 	field := transport.ErrorField(path)
 	return &field
 }
 
-// strictInt32 converts a validated JSON number token to the int32 of one
-// generated request field, rejecting non-integral values and values outside
-// the int32 range with the field's ISSUE-005 path (a generated int32 decode
-// failure). The cause names only the fixed known field: the client-supplied
-// numeric token never reaches the request log (ARCH-019).
+// strictInt32 parses one request integer.
 func strictInt32(number json.Number, field string) (int32, error) {
 	v, err := strconv.ParseInt(number.String(), 10, 32)
 	if err != nil {
@@ -423,11 +284,7 @@ func strictInt32(number json.Number, field string) (int32, error) {
 	return int32(v), nil
 }
 
-// strictFloat64 converts a validated JSON number token to the float64 of
-// one generated request field, rejecting values that do not fit the double
-// range with the field's ISSUE-005 path (a generated double decode
-// failure). The cause names only the fixed known field: the client-supplied
-// numeric token never reaches the request log (ARCH-019).
+// strictFloat64 parses one request number.
 func strictFloat64(number json.Number, field string) (float64, error) {
 	v, err := strconv.ParseFloat(number.String(), 64)
 	if err != nil {
@@ -436,15 +293,7 @@ func strictFloat64(number json.Number, field string) (float64, error) {
 	return v, nil
 }
 
-// substituteResponse maps the domain page returned by the Find Substitute
-// Page Module to the generated OpenAPI response envelope at the HTTP
-// boundary (ARCH-008, ISSUE-005, ISSUE-010): the echoed page index, the
-// total eligible count, hasMore, the input macronutrients at the committed
-// quantity, and zero to three items, each with the stable positive Food
-// Object ID, both required localized names, the optional image key (omitted
-// when the Food Object has no image, never null), the whole Matched
-// Quantity in the candidate base unit, the scaled macronutrients, and the
-// whole similarity percentage, and no unknown fields.
+// substituteResponse maps a page to transport values.
 func substituteResponse(page *repository.Page) transport.SubstituteSearchResponse {
 	items := make([]transport.SubstituteItem, 0, len(page.Items))
 	for _, item := range page.Items {

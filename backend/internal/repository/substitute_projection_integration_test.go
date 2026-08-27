@@ -1,42 +1,5 @@
 package repository
 
-// Integration test for Phase 4 (task 17): the final display projection of
-// the concrete Find Substitute Page Run operation (ARCH-005, ARCH-013,
-// ARCH-018, ARCH-022, REQ-031, REQ-039, REQ-040). It requires a real
-// PostgreSQL server: the test creates its isolated disposable database plus
-// the schema-owner, SELECT-only runtime, and unprivileged login roles
-// through the shared testdb support, runs the real setup command against
-// it, grants the runtime catalog read through the same embedded privilege
-// SQL the local deployment setup applies, and drives the real Find
-// Substitute Page Module through the SELECT-only runtime credential. A
-// query tracer on the runtime connection proves that every Run performs
-// exactly one fresh embedded SELECT and no mutating statement.
-//
-// The test proves the P04-G4 projection clauses with artificial boundary
-// fixtures kept outside the production seed (ISSUE-002, ARCH-018 quality
-// constraints): full-precision ranking and scaling, the solid g and liquid
-// ml Matched Quantity units, whole-unit Matched Quantity, one-decimal
-// macronutrient, and whole-percentage similarity projection, exact-half-up
-// behavior at every target precision, a positive value that displays as
-// zero, and an early-rounding adversary that fails if any intermediate
-// value is rounded before the final projection (REQ-040). The recorded
-// full-precision expectations are verified directly through the private
-// production calorie, cosine, and Matched Quantity helpers with
-// abs(got - want) <= 1e-12 (ISSUE-005), and the projected display is
-// verified on the concrete Run output. Exact-half boundaries at every
-// target precision are proven through concrete page-0 Run fixtures — the
-// whole-unit and 0.1 g halves (fixtures 101 and 103) and the whole-
-// percentage half (fixture 108, whose loaded cosine satisfies
-// 100 × similarity == 94.5 exactly); arbitrary 0.1 g halves that no
-// top-ranked fixture can reach are additionally asserted directly on the
-// private production projection helpers, mirroring the task-16
-// helper-assertion pattern. The schema-valid extreme pair whose projected
-// Matched Quantity exceeds the int64 display range is classified as the
-// stable INTERNAL_ERROR through Run. No exported seam, fake, or test hook
-// is added. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables;
-// no credential is committed and tests skip when no server is reachable.
-
 import (
 	"context"
 	"errors"
@@ -44,12 +7,6 @@ import (
 	"testing"
 )
 
-// wantProjectionItem records the independently computed full-precision
-// values and the final display projection of one fixture candidate: the
-// full-precision cosine Nutritional Similarity, Matched Quantity, and
-// scaled macronutrients, plus the whole Matched Quantity value and
-// candidate base unit, the 0.1 g macronutrients, and the whole similarity
-// percentage the Run operation must display.
 type wantProjectionItem struct {
 	id                  int32
 	cosine              float64
@@ -66,14 +23,6 @@ type wantProjectionItem struct {
 	similarityPercent   int32
 }
 
-// scenarioAProjections covers the solid g scenario (input 100 =
-// (0.1, 1, 1) at 350 g): the collinear half fixture 101 whose Matched
-// Quantity lands exactly on the whole-unit half (437.5 g → 438 g) and whose
-// protein lands exactly on the 0.1 g half (0.35 g → 0.4 g); the
-// early-rounding adversary 102 whose full-precision Matched Quantity and
-// protein sit just below those halves (437.463… g → 437 g, 0.34997… g →
-// 0.3 g); and the zero-display fixture 104 whose positive protein
-// (0.01441… g) displays as 0.0 g.
 var scenarioAProjections = []wantProjectionItem{
 	{
 		id: 101, cosine: 1.0, mq: 437.5, protein: 0.35, carbohydrate: 3.5, fat: 3.5,
@@ -94,17 +43,6 @@ var scenarioAProjections = []wantProjectionItem{
 	},
 }
 
-// scenarioBProjections covers the liquid ml scenario (input 110 =
-// (3, 4, 9) at 350 g): the half fixture 103 whose Matched Quantity lands
-// on the whole-unit half (437.50000000000006 ml → 438 ml) and whose protein
-// and fat land on 0.1 g halves (8.750000000000002 g → 8.8 g,
-// 29.750000000000004 g → 29.8 g); the ordinary fixture 107 whose whole
-// Matched Quantity and ordinary 0.1 g macronutrients project without
-// boundary effects; and the exact-percentage-half fixture 108 whose loaded
-// full-precision cosine satisfies 100 × similarity == 94.5 exactly in
-// float64 (0.94500000000000006 × 100 == 94.5), so Run must round
-// SimilarityPercent up to 95 — the concrete-Run exact-half-up evidence at
-// the whole-percentage target precision (P04-G4, REQ-039).
 var scenarioBProjections = []wantProjectionItem{
 	{
 		id: 103, cosine: 0.9856504098890393, mq: 437.50000000000006,
@@ -126,15 +64,11 @@ var scenarioBProjections = []wantProjectionItem{
 	},
 }
 
-// projectedDisplay is one display projection of a Matched Quantity and a
-// protein amount, used to compare the full-precision pipeline with naive
-// early-rounding pipelines.
 type projectedDisplay struct {
 	matchedQuantity int64
 	protein         float64
 }
 
-// displayOf projects one Matched Quantity and the protein scaled to it.
 func displayOf(mq, protein float64) projectedDisplay {
 	return projectedDisplay{
 		matchedQuantity: int64(math.Round(mq)),
@@ -142,19 +76,6 @@ func displayOf(mq, protein float64) projectedDisplay {
 	}
 }
 
-// TestSubstituteProjectionIntegration exercises the final display
-// projection of the concrete Find Substitute Page Run operation against
-// real PostgreSQL through the SELECT-only runtime credential (P04-G4):
-// artificial boundary fixtures prove full-precision ranking and scaling,
-// the solid g and liquid ml Matched Quantity units, whole-unit, one-decimal,
-// and whole-percentage projection, exact-half-up behavior at every target
-// precision — including an exact whole-percentage half through Run — a
-// positive value that displays as zero, and a fixture that fails if any
-// intermediate value is rounded early. Exact-half boundaries that no
-// top-ranked fixture can reach are additionally asserted directly on the
-// private projection helpers, and the schema-valid extreme pair whose whole
-// Matched Quantity exceeds the int64 display range is classified as the
-// stable INTERNAL_ERROR after exactly one fresh SELECT and no retry.
 func TestSubstituteProjectionIntegration(t *testing.T) {
 	_, module, tracer, wantSQL, owner := setupSubstituteFixture(t)
 	ctx := context.Background()
@@ -235,9 +156,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		t.Fatalf("projectMatchedQuantity(2.5e19, solid) = %+v, want the int64 display-range failure", got)
 	}
 
-	// Artificial boundary fixtures (ISSUE-002, ARCH-018): all projection
-	// evidence uses isolated fixture rows inserted by the schema owner, never
-	// the production seed.
 	insert(100, "Projection input", "Wprowadzenie projekcji", stateSolid, 0.1, 1, 1)
 	insert(101, "Projection half g", "Projekcja polowa g", stateSolid, 0.08, 0.8, 0.8)
 	insert(102, "Projection adversary", "Projekcja przeciwnik", stateSolid, 0.08, 0.8, 0.8001)
@@ -249,9 +167,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	insert(130, "Projection extreme input", "Ekstremalne wprowadzenie", stateSolid, 2.5e16, 0, 0)
 	insert(131, "Projection extreme candidate", "Ekstremalny kandydat", stateSolid, 0.1, 0, 0)
 
-	// One request-local catalog snapshot through the real private Catalog
-	// Loader supplies the Macro Profiles for the full-precision helper
-	// checks below.
 	profiles := loadProfiles(t, module, ctx)
 
 	assertScenario := func(inputID int32, wants []wantProjectionItem) {
@@ -271,19 +186,11 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 			}
 			candidateProfile := profiles[want.id]
 			mq := matchedQuantity(inputCal, calories(candidateProfile))
-			// Full precision until the final projection (REQ-040): the
-			// ranking similarity, the equal-calorie Matched Quantity, and
-			// the scaled macronutrients match the recorded full-precision
-			// expectations within ISSUE-005's absolute 1e-12 tolerance.
 			assertNearEqual(t, "cosineSimilarity", cosineSimilarity(inputProfile, candidateProfile), want.cosine)
 			assertNearEqual(t, "matchedQuantity", mq, want.mq)
 			assertNearEqual(t, "scaled protein", candidateProfile.protein*mq/100, want.protein)
 			assertNearEqual(t, "scaled carbohydrate", candidateProfile.carbohydrate*mq/100, want.carbohydrate)
 			assertNearEqual(t, "scaled fat", candidateProfile.fat*mq/100, want.fat)
-			// The final display projection (REQ-039): whole Matched Quantity
-			// in the candidate base unit, 0.1 g macronutrients, whole
-			// similarity percentage, exact halves rounded up, positive
-			// values permitted to display as zero.
 			if item.MatchedQuantity != (MatchedQuantity{Value: want.matchedQuantity, Unit: want.unit}) {
 				t.Fatalf("item %d: Matched Quantity is %+v, want %+v", want.id, item.MatchedQuantity, MatchedQuantity{Value: want.matchedQuantity, Unit: want.unit})
 			}
@@ -298,9 +205,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 				t.Fatalf("item %d: similarity percent is %d, want %d", want.id, item.SimilarityPercent, want.similarityPercent)
 			}
 		}
-		// Full-precision ranking (REQ-034): the page-0 order is the strictly
-		// decreasing order of the unrounded similarities; rounding similarity
-		// for ranking would break this check.
 		for i := 1; i < len(page.Items); i++ {
 			prev := cosineSimilarity(inputProfile, profiles[page.Items[i-1].FoodObjectID])
 			curr := cosineSimilarity(inputProfile, profiles[page.Items[i].FoodObjectID])
@@ -310,18 +214,10 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		}
 	}
 
-	// Solid g scenario: whole-unit and 0.1 g exact-half-up projection, the g
-	// Matched Quantity unit, a positive protein that displays as zero, and
-	// the early-rounding adversary, all through the concrete Run operation.
 	assertScenario(100, scenarioAProjections)
 
-	// Liquid ml scenario: the ml Matched Quantity unit, whole-unit and 0.1 g
-	// exact-half-up projection, and ordinary whole-unit, one-decimal, and
-	// whole-percentage projection, all through the concrete Run operation.
 	assertScenario(110, scenarioBProjections)
 
-	// Exact whole-calorie half: projectCalories(46.5) rounds up to 47 and
-	// projectCalories(46.49999999999999) rounds to 46 (REQ-078).
 	if cal, err := projectCalories(46.5); err != nil || cal != 47 {
 		t.Fatalf("projectCalories(46.5) = %d, %v, want 47, nil", cal, err)
 	}
@@ -332,26 +228,10 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		t.Fatalf("projectCalories(0.04) = %d, %v, want 0, nil", cal, err)
 	}
 
-	// Exact whole-percentage half through Run (P04-G4, REQ-039): fixture
-	// 108's loaded full-precision cosine satisfies 100 × similarity == 94.5
-	// exactly in float64 (0.94500000000000006 × 100 == 94.5), so Run must
-	// round SimilarityPercent up to 95 — concrete-Run exact-half-up evidence
-	// at the whole-percentage target precision. The page-0 item assertion in
-	// the liquid scenario above checks the projected 95; this check pins the
-	// exact-half property of the loaded cosine itself.
 	if half := cosineSimilarity(profiles[110], profiles[108]) * 100; half != 94.5 {
 		t.Fatalf("fixture 108 cosine × 100 = %.17g, want the exact half 94.5", half)
 	}
 
-	// Early-rounding adversary (P04-G4, REQ-040): fixture 102's
-	// full-precision display is 437 g and 0.3 g protein. Rounding any
-	// intermediate value before the final projection — the input calories
-	// (46.9 → 47), the candidate calories (10.7209 → 10.7), or the Matched
-	// Quantity (437.463… → 437.5) — projects to 438 g and 0.4 g instead, so
-	// the fixture fails any implementation that rounds early. The
-	// recomputed naive pipelines below prove each one differs from the
-	// full-precision display; the page-0 item itself is asserted through
-	// Run in the solid scenario above.
 	inputCal := calories(profiles[100]) * 350 / 100
 	adversary := profiles[102]
 	candCal := calories(adversary)
@@ -372,13 +252,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 		}
 	}
 
-	// Schema-valid extreme range (task 17): the whole projected Matched
-	// Quantity must fit the int64 display range. Input 130 at 100 g has
-	// 1e17 derived calories; the equal-calorie amount of its top-ranked
-	// candidate 131 is 2.5e19 g, beyond the int64 range, so Run classifies
-	// the pair as the stable INTERNAL_ERROR after exactly one fresh SELECT
-	// and no retry instead of returning a wrapped or overflowed display
-	// value.
 	tracer.reset()
 	extremePage, err := module.Run(ctx, SubstituteInput{FoodObjectID: 130, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}}, 0)
 	if err == nil {
@@ -390,10 +263,6 @@ func TestSubstituteProjectionIntegration(t *testing.T) {
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
-	// The projection never persists derived values: the catalog still holds
-	// exactly the 38 seeded rows plus the 10 artificial boundary fixtures,
-	// and the production schema keeps only the ARCH-013 source fields
-	// (asserted by TestFindSubstitutePageIntegration).
 	if n := countFoodObjects(t, owner); n != 48 {
 		t.Fatalf("catalog has %d Food Objects after the Runs, want the 38 seeded rows plus 10 projection fixtures", n)
 	}

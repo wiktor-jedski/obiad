@@ -1,19 +1,5 @@
 package repository
 
-// Integration tests for Phase 3 (task 11): the concrete Suggest Food Objects
-// Run operation over the private Catalog Loader (ARCH-004, ARCH-006,
-// ARCH-017, ARCH-022). They require a real PostgreSQL server: each test
-// creates its isolated disposable database plus the schema-owner, SELECT-only
-// runtime, and unprivileged login roles through the shared testdb support,
-// runs the real setup command against it, grants the runtime catalog read
-// through the same embedded privilege SQL the local deployment setup applies,
-// and drives the real Suggest Module through the SELECT-only runtime
-// credential. A query tracer on the runtime connection proves that every Run
-// performs exactly one fresh embedded SELECT and that validation failures
-// never touch PostgreSQL. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables; no
-// credential is committed and tests skip when no server is reachable.
-
 import (
 	"context"
 	"errors"
@@ -27,12 +13,6 @@ import (
 	"obiad/backend/internal/testdb"
 )
 
-// setupSuggestFixture creates the disposable database, runs the real setup
-// command against it, grants the runtime role catalog SELECT exactly as the
-// local deployment setup does, connects the SELECT-only runtime credential
-// with a statement tracer, and builds a Suggest Module over that connection.
-// It returns the Module, the tracer, the embedded SELECT text, and the
-// schema-owner connection (for owner-made fixture changes, ARCH-016).
 func setupSuggestFixture(t *testing.T) (db *testdb.DB, suggest *Suggest, tracer *stmtTracer, wantSQL string, owner *pgx.Conn) {
 	t.Helper()
 	db = testdb.NewDB(t)
@@ -53,7 +33,6 @@ func setupSuggestFixture(t *testing.T) (db *testdb.DB, suggest *Suggest, tracer 
 	return db, suggest, tracer, wantSQL, owner
 }
 
-// assertIDs checks the exact ordered suggestion ID sequence.
 func assertIDs(t *testing.T, suggestions []Suggestion, want ...int32) {
 	t.Helper()
 	if len(suggestions) != len(want) {
@@ -66,7 +45,6 @@ func assertIDs(t *testing.T, suggestions []Suggestion, want ...int32) {
 	}
 }
 
-// suggestionIDs returns the ordered Food Object IDs of the suggestions.
 func suggestionIDs(suggestions []Suggestion) []int32 {
 	ids := make([]int32, len(suggestions))
 	for i, s := range suggestions {
@@ -75,8 +53,6 @@ func suggestionIDs(suggestions []Suggestion) []int32 {
 	return ids
 }
 
-// assertDistinctFive checks that the operation returned exactly five
-// distinct suggestions, each carrying both required localized names.
 func assertDistinctFive(t *testing.T, suggestions []Suggestion) {
 	t.Helper()
 	if len(suggestions) != 5 {
@@ -94,8 +70,6 @@ func assertDistinctFive(t *testing.T, suggestions []Suggestion) {
 	}
 }
 
-// assertSuggestion checks the exact localized names and default Food Quantity
-// of one suggestion.
 func assertSuggestion(t *testing.T, s Suggestion, en, pl string, quantityValue int, quantityUnit Unit) {
 	t.Helper()
 	if s.Names.En != en || s.Names.Pl != pl {
@@ -106,11 +80,6 @@ func assertSuggestion(t *testing.T, s Suggestion, en, pl string, quantityValue i
 	}
 }
 
-// assertSameSuggestions checks that two result slices are identical item for
-// item (IDs, names, quantities, and allowed quantities), proving that two
-// query variants are normalized to the same comparison.
-// reflect.DeepEqual compares the whole domain Suggestion, including its
-// allowed-quantities slice.
 func assertSameSuggestions(t *testing.T, got, want []Suggestion) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -123,8 +92,6 @@ func assertSameSuggestions(t *testing.T, got, want []Suggestion) {
 	}
 }
 
-// assertStableError checks the exact stable failure code and field of the
-// operation error.
 func assertStableError(t *testing.T, err error, wantCode Code, wantField string) {
 	t.Helper()
 	var suggestErr *Error
@@ -139,16 +106,6 @@ func assertStableError(t *testing.T, err error, wantCode Code, wantField string)
 	}
 }
 
-// TestSuggestFoodObjectsIntegration exercises the concrete Suggest Run
-// operation and the fresh Catalog Loader against real PostgreSQL through the
-// SELECT-only runtime credential: exactly five distinct suggestions for
-// normal and no-close-match queries in both languages; all three default Food
-// Quantities; normalization of case, Unicode whitespace, and canonically
-// equivalent (NFC/NFD) text; Polish-diacritic distance; exact, prefix,
-// substring, and fallback tier order; within-tier raw-distance,
-// active-language, and ID tie order; stable validation failures; the fresh
-// loader; and storage-failure classification. Every successful Run executes
-// exactly one fresh embedded SELECT and no mutating statement.
 func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	db, suggest, tracer, wantSQL, owner := setupSuggestFixture(t)
 	ctx := context.Background()
@@ -166,10 +123,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		return suggestions, nil
 	}
 
-	// Normal query, both languages: the same query text is compared against
-	// the English names in English mode and the Polish names in Polish mode
-	// (REQ-013). Each language yields exactly five distinct suggestions in
-	// deterministic match-tier order (REQ-076).
 	enPizza, err := run("pizza margherita", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(pizza margherita, English): %v", err)
@@ -190,7 +143,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		t.Fatalf("Run(pierogi, English): %v", err)
 	}
 	assertDistinctFive(t, enPierogi)
-	// Distance-5 tie broken by English collation: gyros < paella < pho.
 	assertIDs(t, enPierogi, 4, 16, 29, 30, 13)
 
 	plPierogi, err := run("pierogi", LanguagePolish)
@@ -198,13 +150,8 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		t.Fatalf("Run(pierogi, Polish): %v", err)
 	}
 	assertDistinctFive(t, plPierogi)
-	// Distance-5 tie broken by Polish collation: gyros < mleko < paella <
-	// sernik.
 	assertIDs(t, plPierogi, 4, 16, 10, 29, 36)
 
-	// Prefix intent outranks raw length-biased distance (REQ-076): the
-	// normalized Polish name "owsianka" starts with "ows", so it ranks before
-	// shorter unrelated names such as "gyros", "masło", and "omlet".
 	plOws, err := run("ows", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(ows, Polish): %v", err)
@@ -214,10 +161,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		t.Fatalf("Run(ows, Polish) first ID = %d, want Owsianka ID 28 (full order %v)", plOws[0].FoodObjectID, suggestionIDs(plOws))
 	}
 
-	// No-close-match query, both languages: "zzzzzz" matches nothing, yet a
-	// valid catalog returns exactly five distinct suggestions (REQ-012). The
-	// English and Polish result sets differ because each language compares
-	// its own names (REQ-013).
 	enNone, err := run("zzzzzz", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(zzzzzz, English): %v", err)
@@ -232,10 +175,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertDistinctFive(t, plNone)
 	assertIDs(t, plNone, 38, 16, 15, 3, 18)
 
-	// Default Food Quantities: 1 serving for a Food Object with a Serving
-	// (REQ-023), otherwise the 100 g Nutrition Basis of a solid and the
-	// 100 ml Nutrition Basis of a liquid (REQ-007, REQ-024). Both localized
-	// names are always returned.
 	chicken, err := run("chicken breast", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(chicken breast, English): %v", err)
@@ -252,10 +191,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertIDs(t, milk, 10, 14, 30, 13, 16)
 	assertSuggestion(t, milk[0], "Milk", "Mleko", 100, UnitMillilitre)
 
-	// Normalization (REQ-014, ARCH-017): letter-case and whitespace variants
-	// and canonically equivalent (NFC/NFD) text produce identical ordered
-	// suggestions. Unicode whitespace (here non-breaking spaces U+00A0) is
-	// trimmed and collapsed to ASCII spaces.
 	caseVariant, err := run("  PiZzA  MARGHERITA ", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(case and space variant, English): %v", err)
@@ -269,7 +204,7 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertSameSuggestions(t, nbVariant, enPizza)
 
 	nfcQuery := "pierś z kurczaka"
-	nfdQuery := "pier" + "s\u0301" + " z kurczaka" // decomposed ś: s + combining acute
+	nfdQuery := "pier" + "s\u0301" + " z kurczaka"
 	nfc, err := run(nfcQuery, LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(NFC query, Polish): %v", err)
@@ -283,11 +218,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertSameSuggestions(t, nfd, nfc)
 	assertSuggestion(t, nfc[0], "Chicken breast", "Pierś z kurczaka", 100, UnitGram)
 
-	// Polish diacritics (REQ-015): "z" and "ż" are distinct code points one
-	// edit apart. Replacing ż with z in the query costs exactly one
-	// substitution: "Pierożki gyoza" stays the top suggestion at distance 1,
-	// but the distances of the remaining names shift (23 versus 4 trade
-	// ranks), so the two queries rank differently.
 	zForm, err := run("pierozki gyoza", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(pierozki gyoza, Polish): %v", err)
@@ -305,10 +235,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		t.Fatalf("the z-form and ż-form queries must rank differently: both put %v at rank 2", suggestionIDs(zForm)[1])
 	}
 
-	// Tie order (REQ-017, ISSUE-004): the schema owner inserts four fixture
-	// Food Objects: two with identical localized names (IDs 39 and 40) and
-	// two whose names "źle" and "żaba" tie at the same distance but order
-	// differently under the pinned English and Polish collations.
 	fixtureNames := []struct {
 		id int32
 		en string
@@ -328,8 +254,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		}
 	}
 
-	// Equal distance and equal collation (identical names) fall back to the
-	// stable Food Object ID: 39 before 40 in both languages.
 	dupEn, err := run("sernik duplikat", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(sernik duplikat, English): %v", err)
@@ -345,12 +269,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertDistinctFive(t, dupPl)
 	assertIDs(t, dupPl, 39, 40, 36, 34, 23)
 
-	// Equal distance within the same fallback tier breaks by the pinned
-	// active-language collation of the normalized names. For query "ac",
-	// "źle" and "żaba" both have distance 3 and neither contains the query:
-	// the English collator orders "żaba" before "źle" (ID 42 before 41),
-	// while the Polish collator orders "źle" before "żaba" (ID 41 before
-	// 42) — the same pair ranks differently per language.
 	acEn, err := run("ac", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(ac, English): %v", err)
@@ -367,9 +285,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	assertDistinctFive(t, acPl)
 	assertIDs(t, acPl, 41, 42, 15, 18, 38)
 
-	// Stable validation failures: invalid UTF-8, normalized-empty queries
-	// (ASCII and Unicode whitespace), and an over-128-code-point query are
-	// rejected with the stable code and field, before any catalog read.
 	if _, err := run("pizza\xff\xfe", LanguageEnglish); err == nil {
 		t.Fatal("Run with invalid UTF-8 succeeded, want INVALID_SEARCH_QUERY")
 	} else {
@@ -396,19 +311,12 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		assertStableError(t, err, CodeUnsupportedLanguage, "language")
 	}
 
-	// The 128-code-point boundary: a query of exactly 128 code points is the
-	// longest accepted query and still returns exactly five distinct
-	// suggestions.
 	boundary, err := run(strings.Repeat("a", maxQueryCodePoints), LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run with the 128-code-point boundary query: %v", err)
 	}
 	assertDistinctFive(t, boundary)
 
-	// Fresh loader: the schema owner updates Food Object 1's English name
-	// while the same Suggest Module instance stays alive. The next Run
-	// observes the change immediately — one fresh embedded SELECT per
-	// operation, no runtime cache (ARCH-006).
 	if _, err := owner.Exec(ctx, `UPDATE food_objects SET names = '{"en": "Pizza Margherita Fresca", "pl": "Pizza margherita"}'::jsonb WHERE id = 1`); err != nil {
 		t.Fatalf("owner fixture name update: %v", err)
 	}
@@ -422,10 +330,6 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 		t.Fatalf("fresh Run did not observe the owner-updated name: got %+v", fresh[0].Names)
 	}
 
-	// Storage failure: the schema owner revokes the runtime role's SELECT
-	// grant, so the next fresh read fails inside PostgreSQL. The Module must
-	// classify it as the stable CATALOG_UNAVAILABLE failure with no field,
-	// after exactly one SELECT attempt and no retry.
 	if _, err := owner.Exec(ctx, "REVOKE SELECT ON food_objects FROM "+db.RuntimeRole); err != nil {
 		t.Fatalf("revoke runtime catalog read: %v", err)
 	}
@@ -438,11 +342,8 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	tracer.assertSingleSelect(t, wantSQL)
 }
 
-// allocBytesPerRun returns the average number of bytes allocated per run of f
-// (runtime.MemStats.TotalAlloc is monotonic, so garbage collection does not
-// affect the measurement). f is executed once as a warm-up before measuring.
 func allocBytesPerRun(runs int, f func()) float64 {
-	f() // warm-up
+	f()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	for i := 0; i < runs; i++ {
@@ -452,30 +353,12 @@ func allocBytesPerRun(runs int, f func()) float64 {
 	return float64(after.TotalAlloc-before.TotalAlloc) / float64(runs)
 }
 
-// maxRankingMemoryGrowth is the largest accepted per-run allocation growth
-// when the long database name doubles from 8192 to 16384 code points under a
-// 128-code-point query. Bounded-row ranking allocates only two distance rows
-// sized to the 128-code-point shorter input, so the growth is just the
-// O(name-length) scan and normalization delta (~100 KiB); a full distance
-// matrix would grow by 129 × 8192 × 8 bytes ≈ 8.1 MiB per run, far above
-// this bound.
 const maxRankingMemoryGrowth = 512 << 10
 
-// TestSuggestionRankingMemoryBound verifies the ARCH-017 quality constraint
-// against real PostgreSQL: the concrete Run operation computes raw
-// code-point Levenshtein distance with working memory bounded by the shorter
-// input. With a 128-code-point query (the accepted boundary) against a
-// database name of 8192 then 16384 code points, the per-run allocation
-// growth must stay within the bounded-row delta; a full-matrix distance
-// implementation would grow by roughly 8 MiB per run and fail. The owner-made
-// name change between the two measurements also exercises the fresh loader.
 func TestSuggestionRankingMemoryBound(t *testing.T) {
 	_, suggest, _, _, owner := setupSuggestFixture(t)
 	ctx := context.Background()
 
-	// The schema owner inserts a Food Object whose English name is a long run
-	// of code points, far longer than the 128-code-point query, so the query
-	// is always the shorter input of the distance computation.
 	namesJSON := func(codePoints int) string {
 		return `{"en": "` + strings.Repeat("a", codePoints) + `", "pl": "Długi"}`
 	}
@@ -486,7 +369,7 @@ func TestSuggestionRankingMemoryBound(t *testing.T) {
 		t.Fatalf("owner fixture insert: %v", err)
 	}
 
-	query := strings.Repeat("a", maxQueryCodePoints) // exactly 128 code points
+	query := strings.Repeat("a", maxQueryCodePoints)
 	runOnce := func() {
 		suggestions, err := suggest.Run(ctx, query, LanguageEnglish)
 		if err != nil {
@@ -504,22 +387,20 @@ func TestSuggestionRankingMemoryBound(t *testing.T) {
 		}
 	}
 
-	runOnce() // warm-up (statement description cache and steady state)
+	runOnce()
 	allocsShort := allocBytesPerRun(3, runOnce)
 
-	// The same Suggest Module instance must observe the fresh snapshot on the
-	// next Run (no runtime cache): the long name doubles to 16384 code points.
 	if _, err := owner.Exec(ctx,
 		`UPDATE food_objects SET names = $1::jsonb WHERE id = 39`,
 		namesJSON(16384),
 	); err != nil {
 		t.Fatalf("owner fixture name update: %v", err)
 	}
-	runOnce() // warm-up on the fresh snapshot
+	runOnce()
 	allocsLong := allocBytesPerRun(3, runOnce)
 
 	if growth := allocsLong - allocsShort; growth > maxRankingMemoryGrowth {
-		fullMatrixGrowth := float64((maxQueryCodePoints + 1) * 8192 * 8) // 129 rows × 8192 extra code points × 8 bytes
+		fullMatrixGrowth := float64((maxQueryCodePoints + 1) * 8192 * 8)
 		t.Fatalf("ranking memory grew by %.0f KiB per run when the long database name doubled from 8192 to 16384 code points under a 128-code-point query; want at most %d KiB. Bounded-row ranking allocates only two rows of the shorter input, so the growth is the O(name-length) scan delta; a full distance matrix would grow by about %.0f MiB per run",
 			growth/1024, maxRankingMemoryGrowth/1024, fullMatrixGrowth/(1024*1024))
 	}
