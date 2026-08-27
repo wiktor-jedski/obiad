@@ -352,6 +352,26 @@ async function runStep(
   return promise;
 }
 
+/** Throws when one unbounded lifecycle step did not exit successfully. */
+function assertStepSucceeded(status: number, description: string): void {
+  if (status !== 0) {
+    throw new Error(`${description} failed with status ${status}`);
+  }
+}
+
+/** Throws when one bounded lifecycle step did not exit successfully. */
+function assertBoundedStepSucceeded(
+  result: BoundedResult,
+  description: string,
+): void {
+  if (result.status === 0) {
+    return;
+  }
+  const status = result.status ?? "timeout";
+  const timeout = result.timedOut ? ", timed out" : "";
+  throw new Error(`${description} (docker status ${status}${timeout})`);
+}
+
 /**
  * Runs one bounded one-shot command (every Docker CLI invocation and tool
  * check): the child is registered as a process group, killed through an
@@ -620,37 +640,52 @@ async function dockerPublishedPort(
  */
 function unquoteShellWord(word: string): string {
   if (word.startsWith("'")) {
-    const end = word.indexOf("'", 1);
-    if (end === -1) {
-      throw new Error(`malformed single-quoted credential value: ${word}`);
-    }
-    return word.slice(1, end);
+    return unquoteSingleQuotedShellWord(word);
   }
   if (word.startsWith('"')) {
-    let out = "";
-    for (let i = 1; i < word.length; i++) {
-      const char = word[i];
-      if (char === '"' && (i === word.length - 1 || word[i + 1] === "\n")) {
-        break;
-      }
-      if (char === "\\" && i + 1 < word.length) {
-        const next = word[i + 1];
-        if (
-          next === '"' ||
-          next === "\\" ||
-          next === "$" ||
-          next === "`" ||
-          next === "\n"
-        ) {
-          out += next === "\n" ? "" : next;
-          i++;
-          continue;
-        }
-      }
-      out += char;
-    }
-    return out;
+    return unquoteDoubleQuotedShellWord(word);
   }
+  return unquoteBareShellWord(word);
+}
+
+/** Unquotes one single-quoted bash shell word. */
+function unquoteSingleQuotedShellWord(word: string): string {
+  const end = word.indexOf("'", 1);
+  if (end === -1) {
+    throw new Error(`malformed single-quoted credential value: ${word}`);
+  }
+  return word.slice(1, end);
+}
+
+/** Unquotes one double-quoted bash shell word. */
+function unquoteDoubleQuotedShellWord(word: string): string {
+  let out = "";
+  for (let i = 1; i < word.length; i++) {
+    const char = word[i];
+    if (char === '"' && (i === word.length - 1 || word[i + 1] === "\n")) {
+      break;
+    }
+    if (char === "\\" && i + 1 < word.length) {
+      const next = word[i + 1];
+      if (
+        next === '"' ||
+        next === "\\" ||
+        next === "$" ||
+        next === "`" ||
+        next === "\n"
+      ) {
+        out += next === "\n" ? "" : next;
+        i++;
+        continue;
+      }
+    }
+    out += char;
+  }
+  return out;
+}
+
+/** Unquotes one bare bash shell word with backslash escapes. */
+function unquoteBareShellWord(word: string): string {
   let out = "";
   for (let i = 0; i < word.length; i++) {
     if (word[i] === "\\" && i + 1 < word.length) {
@@ -913,7 +948,8 @@ function requestShutdown(
   void ensureCleanup(resources);
 }
 
-async function verifyClean(resources: OwnedResources): Promise<boolean> {
+/** Reports every process group that remains alive after cleanup. */
+function processGroupCleanupProblems(resources: OwnedResources): string[] {
   const problems: string[] = [];
   for (const [pgid, group] of resources.groups) {
     if (groupAlive(pgid)) {
@@ -922,6 +958,14 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
       );
     }
   }
+  return problems;
+}
+
+/** Reports every owned container that remains present after cleanup. */
+async function containerCleanupProblems(
+  resources: OwnedResources,
+): Promise<string[]> {
+  const problems: string[] = [];
   for (const name of resources.containers) {
     const inspect = await runBounded(
       resources,
@@ -933,6 +977,12 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
       problems.push(`container ${name} is still present after cleanup`);
     }
   }
+  return problems;
+}
+
+/** Reports generated outputs or temporary files left in the wrong state. */
+function outputCleanupProblems(resources: OwnedResources): string[] {
+  const problems: string[] = [];
   for (const output of resources.outputs) {
     const present = existsSync(output.path);
     if (output.preExisted && !present) {
@@ -947,18 +997,40 @@ async function verifyClean(resources: OwnedResources): Promise<boolean> {
   if (resources.tempDir && existsSync(resources.tempDir)) {
     problems.push(`temporary directory ${resources.tempDir} still exists`);
   }
-  const ownedPorts: number[] = [];
+  return problems;
+}
+
+/** Reports application ports that remain occupied after cleanup. */
+async function portCleanupProblems(
+  resources: OwnedResources,
+): Promise<string[]> {
+  const ports: number[] = [];
   if (resources.fiberStarted) {
-    ownedPorts.push(FIBER_PORT);
+    ports.push(FIBER_PORT);
   }
   if (resources.previewStarted) {
-    ownedPorts.push(PREVIEW_PORT);
+    ports.push(PREVIEW_PORT);
   }
-  for (const port of ownedPorts) {
+  const problems: string[] = [];
+  for (const port of ports) {
     if (await tcpPortInUse(port)) {
       problems.push(`application port ${port} is still occupied after cleanup`);
     }
   }
+  return problems;
+}
+
+async function verifyClean(resources: OwnedResources): Promise<boolean> {
+  const [containerProblems, portProblems] = await Promise.all([
+    containerCleanupProblems(resources),
+    portCleanupProblems(resources),
+  ]);
+  const problems = [
+    ...processGroupCleanupProblems(resources),
+    ...containerProblems,
+    ...outputCleanupProblems(resources),
+    ...portProblems,
+  ];
   if (problems.length === 0) {
     log(
       "cleanup verified: no owned process group, container, credential file, or generated output remains",
@@ -1018,11 +1090,10 @@ async function runOutageSuite(
     ],
     { env: { ...process.env, POSTGRES_PASSWORD: outagePostgresPassword } },
   );
-  if (outageDockerRun.status !== 0) {
-    throw new Error(
-      `failed to start the outage PostgreSQL container (docker status ${outageDockerRun.status ?? "timeout"}${outageDockerRun.timedOut ? ", timed out" : ""})`,
-    );
-  }
+  assertBoundedStepSucceeded(
+    outageDockerRun,
+    "failed to start the outage PostgreSQL container",
+  );
   assertRunning();
   log(`started outage PostgreSQL container ${outageContainerName}`);
   await waitForPostgresReady(resources, outageContainerName);
@@ -1051,11 +1122,7 @@ async function runOutageSuite(
     },
   });
   assertRunning();
-  if (setupStatus !== 0) {
-    throw new Error(
-      `outage scripts/setup_local_database.sh failed with status ${setupStatus}`,
-    );
-  }
+  assertStepSucceeded(setupStatus, "outage scripts/setup_local_database.sh");
   const outageCredentialContent = readFileSync(outageCredentialFile, "utf8");
   const outageRuntimeDatabaseUrl = readCredentialLine(
     outageCredentialContent,
@@ -1148,9 +1215,7 @@ async function runStack(
     cwd: FRONTEND,
   });
   assertRunning();
-  if (status !== 0) {
-    throw new Error(`bun run generate:api failed with status ${status}`);
-  }
+  assertStepSucceeded(status, "bun run generate:api");
   log("generated client written to src/client");
   const browserClientBundle = join(tempDir, "browser-client.js");
   log(
@@ -1172,11 +1237,7 @@ async function runStack(
     { cwd: FRONTEND },
   );
   assertRunning();
-  if (status !== 0) {
-    throw new Error(
-      `bundling the browser client entry failed with status ${status}`,
-    );
-  }
+  assertStepSucceeded(status, "bundling the browser client entry");
 
   // 4. Build the optimized client before preview (ARCH-016: acceptance uses
   // the optimized Vite build through Vite preview).
@@ -1189,9 +1250,7 @@ async function runStack(
     { cwd: FRONTEND },
   );
   assertRunning();
-  if (status !== 0) {
-    throw new Error(`bun run build failed with status ${status}`);
-  }
+  assertStepSucceeded(status, "bun run build");
   log("optimized build emitted");
 
   // 5. Disposable loopback-only PostgreSQL 17 container on a random port.
@@ -1215,11 +1274,10 @@ async function runStack(
     ],
     { env: { ...process.env, POSTGRES_PASSWORD: postgresPassword } },
   );
-  if (dockerRun.status !== 0) {
-    throw new Error(
-      `failed to start the PostgreSQL container (docker status ${dockerRun.status ?? "timeout"}${dockerRun.timedOut ? ", timed out" : ""})`,
-    );
-  }
+  assertBoundedStepSucceeded(
+    dockerRun,
+    "failed to start the PostgreSQL container",
+  );
   assertRunning();
   log(`started PostgreSQL container ${containerName}`);
   await waitForPostgresReady(resources, containerName);
@@ -1244,11 +1302,7 @@ async function runStack(
     },
   });
   assertRunning();
-  if (status !== 0) {
-    throw new Error(
-      `scripts/setup_local_database.sh failed with status ${status}`,
-    );
-  }
+  assertStepSucceeded(status, "scripts/setup_local_database.sh");
   const credentialContent = readFileSync(credentialFile, "utf8");
   const runtimeDatabaseUrl = readCredentialLine(
     credentialContent,
@@ -1267,9 +1321,7 @@ async function runStack(
     cwd: BACKEND,
   });
   assertRunning();
-  if (status !== 0) {
-    throw new Error(`go generate ./... failed with status ${status}`);
-  }
+  assertStepSucceeded(status, "go generate ./...");
   log(`building the Fiber server into ${serverBinary}`);
   status = await runStep(
     resources,
@@ -1278,11 +1330,7 @@ async function runStack(
     { cwd: BACKEND },
   );
   assertRunning();
-  if (status !== 0) {
-    throw new Error(
-      `go build of the Fiber server failed with status ${status}`,
-    );
-  }
+  assertStepSucceeded(status, "go build of the Fiber server");
   const fiber = spawnOwned(resources, serverBinary, [], {
     cwd: BACKEND,
     env: { ...process.env, OBIAD_RUNTIME_DATABASE_URL: runtimeDatabaseUrl },
@@ -1347,9 +1395,7 @@ async function runStack(
     { cwd: FRONTEND },
   );
   assertRunning();
-  if (status !== 0) {
-    throw new Error(`playwright install chromium failed with status ${status}`);
-  }
+  assertStepSucceeded(status, "playwright install chromium");
 
   // 10p. Performance-only mode (task 54, Phase 18, ARCH-022): instead of
   // the standard suite, run only the serial Search performance scenario,

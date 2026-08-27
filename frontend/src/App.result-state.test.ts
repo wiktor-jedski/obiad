@@ -153,6 +153,93 @@ async function expectZeroResultWcagAAndAaClean(label: string): Promise<void> {
   ).toEqual([]);
 }
 
+/** Returns the text content of the first element matching `selector`. */
+function elementText(selector: string): string | null {
+  return document.querySelector(selector)?.textContent ?? null;
+}
+
+/** Checks that only the empty quantity-editor status remains live. */
+function expectOnlyEmptyEditorLiveRegion(): void {
+  const liveRegions = document.querySelectorAll(
+    '[aria-live], [role="status"], [role="alert"]',
+  );
+  expect(liveRegions).toHaveLength(1);
+  const liveRegion = liveRegions.item(0);
+  expect(liveRegion.getAttribute("data-editor-status")).not.toBeNull();
+  expect(liveRegion.textContent).toBe("");
+}
+
+/** Checks the complete English zero-result presentation and focus state. */
+function expectEnglishZeroResultSurface(zeroMessage: Element): void {
+  expect(
+    document.querySelector("main")?.getAttribute("data-interaction-state"),
+  ).toBe("zeroResults");
+  expect(document.querySelector("[data-selected-input-region]")).not.toBeNull();
+  expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
+  expect(document.querySelectorAll("[data-result-region]")).toHaveLength(0);
+  expect(zeroMessage.textContent).toBe("No substitutes found");
+  expect(document.activeElement).toBe(zeroMessage);
+  expect(zeroMessage.hasAttribute("aria-live")).toBe(false);
+  expect(zeroMessage.hasAttribute("role")).toBe(false);
+  expectOnlyEmptyEditorLiveRegion();
+  expect(elementText("[data-selected-name]")).toBe("Butter");
+  const srOnly = Array.from(
+    document.querySelectorAll("[data-selected-food-summary] .sr-only"),
+  ).map((element) => element.textContent);
+  expect(srOnly).toContain("Selected food: Butter · 100 g");
+  expect(srOnly).toContain("Quantity");
+  expect(srOnly).toContain("Unit");
+  expect(
+    Array.from(document.querySelectorAll("[data-input-macronutrients] dt")).map(
+      (element) => element.textContent,
+    ),
+  ).toEqual(["Protein", "Carbohydrates", "Fat"]);
+  expect(elementText("[data-input-macro-protein]")).toBe("35.0 g");
+  expect(
+    document.querySelector("[data-input-calories]")?.getAttribute("aria-label"),
+  ).toBe("Calories");
+  expect(elementText("[data-input-calories]")).toBe("875 kcal");
+  expect(elementText("[data-quantity-static-unit]")).toBe("g");
+}
+
+/** Checks the complete Polish zero-result presentation and retained state. */
+function expectPolishZeroResultSurface(
+  zeroMessage: Element,
+  postUrls: readonly string[],
+): void {
+  expect(elementText("[data-zero-result-region]")).toBe(
+    "Nie znaleziono zamienników",
+  );
+  expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
+  expect(
+    document.querySelector("main")?.getAttribute("data-interaction-state"),
+  ).toBe("zeroResults");
+  expect(document.activeElement).toBe(zeroMessage);
+  expect(zeroMessage.textContent).toBe("Nie znaleziono zamienników");
+  expectOnlyEmptyEditorLiveRegion();
+  expect(elementText("[data-selected-name]")).toBe("Masło");
+  const srOnly = Array.from(
+    document.querySelectorAll("[data-selected-food-summary] .sr-only"),
+  ).map((element) => element.textContent);
+  expect(srOnly).toContain("Wybrany produkt: Masło · 100 g");
+  expect(srOnly).toContain("Ilość");
+  expect(srOnly).toContain("Jednostka");
+  expect(
+    Array.from(document.querySelectorAll("[data-input-macronutrients] dt")).map(
+      (element) => element.textContent,
+    ),
+  ).toEqual(["Białko", "Węglowodany", "Tłuszcz"]);
+  expect(elementText("[data-input-macro-protein]")).toBe("35,0 g");
+  expect(
+    document.querySelector("[data-input-calories]")?.getAttribute("aria-label"),
+  ).toBe("Kalorie");
+  expect(elementText("[data-quantity-static-unit]")).toBe("g");
+  expect(
+    postUrls,
+    "the language change in zeroResults performs no additional fetch",
+  ).toHaveLength(1);
+}
+
 describe("the root result-state composition", () => {
   beforeEach(() => {
     // Deterministic shared stores before each rendered test: the persisted
@@ -205,76 +292,11 @@ describe("the root result-state composition", () => {
       render(App);
       await settle();
       expect(postUrls, "one POST for the selection").toHaveLength(1);
-      expect(
-        document.querySelector("main")?.getAttribute("data-interaction-state"),
-      ).toBe("zeroResults");
-
-      // The read-only Substitution Input region is still present after a
-      // selection (task 28), and the result area is replaced by the
-      // localized zero-result message with zero cards (REQ-044).
-      expect(document.querySelector("[data-selected-input-region]")).not.toBe(
-        null,
-      );
-      expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
-      expect(document.querySelectorAll("[data-result-region]")).toHaveLength(0);
-
-      // REQ-084 (task 46, P15-G4): after the successful empty page-0
-      // response renders zero cards, the localized zero-result message is
-      // the stable programmatically focusable active element.
       const zeroMessage = document.querySelector("[data-zero-result-message]");
-      expect(zeroMessage).not.toBeNull();
-      expect(zeroMessage?.textContent).toBe("No substitutes found");
-      expect(document.activeElement).toBe(zeroMessage);
-
-      // REQ-085 (task 46, P15-G5, P15-G7): the successful zero-result
-      // transition inserts or updates no result-count or result-status
-      // live-region message. The message itself carries no live-region
-      // semantics, and the only live region in the zero-result surface is
-      // the established empty loading-status span (ISSUE-010), which holds
-      // no result message.
-      expect(zeroMessage?.hasAttribute("aria-live")).toBe(false);
-      expect(zeroMessage?.hasAttribute("role")).toBe(false);
-      const liveRegions = Array.from(
-        document.querySelectorAll(
-          '[aria-live], [role="status"], [role="alert"]',
-        ),
-      );
-      expect(liveRegions).toHaveLength(1);
-      expect(liveRegions[0]?.getAttribute("data-editor-status")).not.toBeNull();
-      expect(liveRegions[0]?.textContent).toBe("");
-
-      // The complete English zero-result surface (task 44, P14-G4,
-      // REQ-044, REQ-055, REQ-058): the retained selected Food Object and
-      // the localized sr-only region value, quantity and unit accessible
-      // names, macronutrient labels, and one-decimal values.
-      expect(document.querySelector("[data-selected-name]")?.textContent).toBe(
-        "Butter",
-      );
-      const englishSrOnly = Array.from(
-        document.querySelectorAll("[data-selected-food-summary] .sr-only"),
-      ).map((element) => element.textContent);
-      expect(englishSrOnly).toContain("Selected food: Butter · 100 g");
-      expect(englishSrOnly).toContain("Quantity");
-      expect(englishSrOnly).toContain("Unit");
-      expect(
-        Array.from(
-          document.querySelectorAll("[data-input-macronutrients] dt"),
-        ).map((element) => element.textContent),
-      ).toEqual(["Protein", "Carbohydrates", "Fat"]);
-      expect(
-        document.querySelector("[data-input-macro-protein]")?.textContent,
-      ).toBe("35.0 g");
-      expect(
-        document
-          .querySelector("[data-input-calories]")
-          ?.getAttribute("aria-label"),
-      ).toBe("Calories");
-      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
-        "875 kcal",
-      );
-      expect(
-        document.querySelector("[data-quantity-static-unit]")?.textContent,
-      ).toBe("g");
+      if (zeroMessage === null) {
+        throw new Error("The zero-result message did not render");
+      }
+      expectEnglishZeroResultSurface(zeroMessage);
 
       // Task 48 (ISSUE-015, P15-G2): the English zero-result component
       // surface reports no definite WCAG 2.1 Level A or AA axe violation.
@@ -288,63 +310,7 @@ describe("the root result-state composition", () => {
       // (P14-G4, REQ-044, REQ-055, REQ-058, ISSUE-014).
       interfaceLanguage.set("pl");
       await tick();
-      expect(
-        document.querySelector("[data-zero-result-region]")?.textContent,
-      ).toBe("Nie znaleziono zamienników");
-      expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
-      expect(
-        document.querySelector("main")?.getAttribute("data-interaction-state"),
-      ).toBe("zeroResults");
-
-      // REQ-084 (task 46, P15-G4): the zero-result message stays the
-      // active element in Polish — the language change re-renders the
-      // localized text in place without replacing the stable
-      // programmatically focusable element, so the same node keeps focus.
-      expect(document.activeElement).toBe(zeroMessage);
-      expect(zeroMessage?.textContent).toBe("Nie znaleziono zamienników");
-      // REQ-085 (task 46, P15-G5, P15-G7): the language change still
-      // emits no result-count or result-status live-region message; the
-      // established loading-status span stays the only live region and
-      // remains empty.
-      const polishLiveRegions = Array.from(
-        document.querySelectorAll(
-          '[aria-live], [role="status"], [role="alert"]',
-        ),
-      );
-      expect(polishLiveRegions).toHaveLength(1);
-      expect(
-        polishLiveRegions[0]?.getAttribute("data-editor-status"),
-      ).not.toBeNull();
-      expect(polishLiveRegions[0]?.textContent).toBe("");
-      expect(document.querySelector("[data-selected-name]")?.textContent).toBe(
-        "Masło",
-      );
-      const polishSrOnly = Array.from(
-        document.querySelectorAll("[data-selected-food-summary] .sr-only"),
-      ).map((element) => element.textContent);
-      expect(polishSrOnly).toContain("Wybrany produkt: Masło · 100 g");
-      expect(polishSrOnly).toContain("Ilość");
-      expect(polishSrOnly).toContain("Jednostka");
-      expect(
-        Array.from(
-          document.querySelectorAll("[data-input-macronutrients] dt"),
-        ).map((element) => element.textContent),
-      ).toEqual(["Białko", "Węglowodany", "Tłuszcz"]);
-      expect(
-        document.querySelector("[data-input-macro-protein]")?.textContent,
-      ).toBe("35,0 g");
-      expect(
-        document
-          .querySelector("[data-input-calories]")
-          ?.getAttribute("aria-label"),
-      ).toBe("Kalorie");
-      expect(
-        document.querySelector("[data-quantity-static-unit]")?.textContent,
-      ).toBe("g");
-      expect(
-        postUrls,
-        "the language change in zeroResults performs no additional fetch",
-      ).toHaveLength(1);
+      expectPolishZeroResultSurface(zeroMessage, postUrls);
 
       // Task 48 (ISSUE-015, P15-G2, P15-G7): the Polish zero-result
       // component surface also reports no definite WCAG 2.1 Level A or AA

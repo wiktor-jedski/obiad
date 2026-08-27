@@ -717,98 +717,101 @@ interface SRGB {
 }
 
 /**
- * Parses one computed color string: `rgb()`, `rgba()`, `oklch()`, or
- * `transparent`. Tailwind v4 emits the default gray palette as `oklch()`
- * (the pinned `DISABLED_MORE_*` constants above), while the style.md hex
- * tokens compute to `rgb()`, so the parser accepts both serializations.
+ * Parses one computed color string: `rgb()`, `rgba()`, `oklch()`, `oklab()`,
+ * or `transparent`. Tailwind v4 emits the default gray palette as `oklch()`,
+ * while the style.md hex tokens compute to `rgb()`.
  */
 function parseComputedColor(value: string): SRGB {
   const trimmed = value.trim();
   if (trimmed === "transparent") {
     return { r: 0, g: 0, b: 0, a: 0 };
   }
-  // The style.md hex tokens compute to `rgb()` / `rgba()`.
   const rgb = trimmed.match(/^rgba?\(([^)]+)\)$/);
   if (rgb !== null) {
-    const parts = rgb[1].split(/[ ,/]+/).map((part) => Number.parseFloat(part));
-    return {
-      r: parts[0] ?? 0,
-      g: parts[1] ?? 0,
-      b: parts[2] ?? 0,
-      a: parts.length > 3 ? (parts[3] ?? 1) : 1,
-    };
+    return parseComputedRgb(rgb[1]);
   }
-  // Tailwind v4 emits its default gray palette as `oklch()` (the pinned
-  // Tailwind v4 emits its default gray palette as `oklch()` (the pinned
-  // `DISABLED_MORE_*` constants above), so the parser accepts the oklch
-  // serialization of the computed disabled colors.
   const oklch = trimmed.match(/^oklch\(([^)]+)\)$/);
   if (oklch !== null) {
-    const parts = oklch[1]
-      .split(/[ ,/]+/)
-      .map((part) => Number.parseFloat(part));
-    const lightness = parts[0] ?? 0;
-    const chroma = parts[1] ?? 0;
-    const hue = parts[2] ?? 0;
-    const alpha = parts.length > 3 ? (parts[3] ?? 1) : 1;
-    const a = chroma * Math.cos((hue * Math.PI) / 180);
-    const b = chroma * Math.sin((hue * Math.PI) / 180);
-    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
-    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
-    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
-    const l = l_ ** 3;
-    const m = m_ ** 3;
-    const s = s_ ** 3;
-    const rLin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-    const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-    const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
-    const encode = (v: number): number => {
-      const c = Math.min(1, Math.max(0, v));
-      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-    };
-    return {
-      r: encode(rLin) * 255,
-      g: encode(gLin) * 255,
-      b: encode(bLin) * 255,
-      a: alpha,
-    };
+    return parseComputedOklch(oklch[1]);
   }
-  // Chromium serializes colors interpolated during a CSS transition in
-  // the default interpolation space (`oklab(...)`): the MORE! control's
-  // 200ms `transition-colors` produces such values mid-flight. The audit
-  // samples settled presentations only, but the parser accepts the
-  // serialization so a stray mid-transition sample fails with a readable
-  // contrast message instead of a parse error.
   const oklab = trimmed.match(/^oklab\(([^)]+)\)$/);
   if (oklab !== null) {
-    const parts = oklab[1]
-      .split(/[ ,/]+/)
-      .map((part) => Number.parseFloat(part));
-    const lightness = parts[0] ?? 0;
-    const a = parts[1] ?? 0;
-    const b = parts[2] ?? 0;
-    const alpha = parts.length > 3 ? (parts[3] ?? 1) : 1;
-    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
-    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
-    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
-    const l = l_ ** 3;
-    const m = m_ ** 3;
-    const s = s_ ** 3;
-    const rLin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-    const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-    const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
-    const encode = (v: number): number => {
-      const c = Math.min(1, Math.max(0, v));
-      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-    };
-    return {
-      r: encode(rLin) * 255,
-      g: encode(gLin) * 255,
-      b: encode(bLin) * 255,
-      a: alpha,
-    };
+    return parseComputedOklab(oklab[1]);
   }
   throw new Error(`unparsed computed color: ${value}`);
+}
+
+/** Parses the numeric channels from one computed CSS color function. */
+function parseColorChannels(value: string): number[] {
+  return value.split(/[ ,/]+/).map((part) => Number.parseFloat(part));
+}
+
+/** Parses one computed `rgb()` or `rgba()` argument list. */
+function parseComputedRgb(value: string): SRGB {
+  const parts = parseColorChannels(value);
+  return {
+    r: parts[0] ?? 0,
+    g: parts[1] ?? 0,
+    b: parts[2] ?? 0,
+    a: parts[3] ?? 1,
+  };
+}
+
+/** Parses one computed `oklch()` argument list and converts it to sRGB. */
+function parseComputedOklch(value: string): SRGB {
+  const parts = parseColorChannels(value);
+  const lightness = parts[0] ?? 0;
+  const chroma = parts[1] ?? 0;
+  const hue = parts[2] ?? 0;
+  const radians = (hue * Math.PI) / 180;
+  return oklabToSrgb(
+    lightness,
+    chroma * Math.cos(radians),
+    chroma * Math.sin(radians),
+    parts[3] ?? 1,
+  );
+}
+
+/** Parses one computed `oklab()` argument list and converts it to sRGB. */
+function parseComputedOklab(value: string): SRGB {
+  const parts = parseColorChannels(value);
+  return oklabToSrgb(
+    parts[0] ?? 0,
+    parts[1] ?? 0,
+    parts[2] ?? 0,
+    parts[3] ?? 1,
+  );
+}
+
+/** Converts one OKLab color to clipped, gamma-encoded sRGB channels. */
+function oklabToSrgb(
+  lightness: number,
+  a: number,
+  b: number,
+  alpha: number,
+): SRGB {
+  const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
+  const l = l_ ** 3;
+  const m = m_ ** 3;
+  const s = s_ ** 3;
+  return {
+    r: encodeSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    g: encodeSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    b: encodeSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+    a: alpha,
+  };
+}
+
+/** Clips and gamma-encodes one linear sRGB channel to the 0..255 range. */
+function encodeSrgb(value: number): number {
+  const clipped = Math.min(1, Math.max(0, value));
+  const encoded =
+    clipped <= 0.0031308
+      ? 12.92 * clipped
+      : 1.055 * clipped ** (1 / 2.4) - 0.055;
+  return encoded * 255;
 }
 
 /** Composites one foreground color with `alpha` over one opaque background. */

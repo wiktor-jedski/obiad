@@ -23,6 +23,13 @@ export default defineConfig({
     },
   ],
   rules: {
+    complexity: [
+      "error",
+      {
+        max: 15,
+        variant: "modified",
+      },
+    ],
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-known-value-widening": "error",
