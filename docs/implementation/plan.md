@@ -760,11 +760,11 @@ None.
 
 **Implement**
 
-- Add a standalone Go analysis command. Keep its analyzer in `comment-analyzer.go`. Check every handwritten Go comment group for a maximum of two content lines and for repository issue, requirement, architecture, phase, task, and planning-document references.
-- Pin `golangci-lint`. Make the backend CI path run `golangci-lint` and the Go comment analyzer before the backend tests.
-- Add a separate local Oxlint comment-analyzer plugin under `frontend/tools/oxlint/`. Do not put the rule in the anti-slop plugin. Apply the same two-line and forbidden-reference policy to every handwritten frontend comment.
+- Add a standalone Go analysis command. Keep its analyzer in `comment-analyzer.go`. Check every handwritten Go comment group for a maximum of two content lines and for repository issue, requirement, architecture, phase, task, and planning-document references. Pin `golangci-lint` and add command-level analyzer fixtures.
+- Add a separate local Oxlint comment-analyzer plugin under `frontend/tools/oxlint/`. Do not put the rule in the anti-slop plugin. Apply the same two-line and forbidden-reference policy to every handwritten frontend comment. Add command-level plugin fixtures.
+- Clean the existing backend comments, then make the backend CI path run `golangci-lint` and the Go comment analyzer before the backend tests.
+- Clean the existing frontend comments, then enable the comment-analyzer plugin in the frontend lint command used by CI.
 - Exclude generated files and machine directives from the line limit. Do not use the analyzers to infer historical rationale; remove that rationale when current violations are reviewed.
-- Add command-level integration fixtures for accepted comments, comments longer than two content lines, forbidden references, generated files, and machine directives. Clean the existing backend and frontend comments until all new checks pass.
 
 **Requirements that become testable**
 
