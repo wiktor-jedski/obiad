@@ -746,7 +746,7 @@ Run `go test ./...` from `backend/`. Regenerate and compile both API clients. Ru
 
 **Review stop**
 
-Read the Phase 19 diff. Record REQ-078 and REQ-079 as verified. The implementation plan is complete.
+Read the Phase 19 diff. Record REQ-078 and REQ-079 as verified before Phase 20 tasks are generated.
 
 ## Phase 20 — Comment quality enforcement
 
@@ -776,4 +776,54 @@ Run `uv run python scripts/check_comments.py backend --extension .go --max-comme
 
 **Review stop**
 
-Read the Phase 20 diff. Confirm that one Python tool checks all three source extensions, ignore patterns are defined in the script, and CI runs one backend invocation plus two frontend invocations.
+Read the Phase 20 diff. Confirm that one Python tool checks all three source extensions, ignore patterns are defined in the script, and CI runs one backend invocation plus two frontend invocations before Phase 21 tasks are generated.
+
+## Phase 21 — Browser quantity reprojection
+
+**Goal**
+
+Reproject the selected quantity and the current result values in the browser without a new HTTP request, a pending state, or a spinner.
+
+**Depends on**
+
+Phase 20.
+
+**Implement**
+
+- Resolve IDEA-001 in the requirements, architecture, and authoritative OpenAPI document before application code changes.
+- Keep each stored Macro Profile in its existing canonical per-100 g or per-100 ml form. Do not add stored per-unit coefficients, a second nutrition representation, or a browser copy of the Food Catalog.
+- Keep exclusion, Nutritional Similarity, deterministic rank order, paging, and catalog access in the Find Substitute Page Module.
+- Remove Food Quantity from the Substitute Search request and query identity because quantity does not change eligibility, order, or the requested page.
+- Replace quantity-dependent display values in the Substitute response with the current page's calculation basis: the selected Food Object Macro Profile, base unit, exact optional Serving base quantity, and each returned Substitute's Macro Profile and base unit.
+- Keep the exact Serving base quantity in browser state for calculation only. Do not render it as a separate value.
+- Add one pure browser projection function. Use it for the initial default quantity and every later valid quantity commit.
+- Convert a Serving count to the selected Food Object base quantity. Derive input calories, equal-calorie Matched Quantities, and input and Substitute macronutrients from the returned per-100 Macro Profiles.
+- Use full calculation precision and round only the projected display values: calories and Matched Quantity to whole numbers and macronutrients to 0.1 g.
+- Keep backend-derived similarity percentages unchanged during reprojection.
+- Make a valid quantity commit synchronous and local. It must not change the Substitute query key, start or cancel a request, acquire the Substitution Search lock, enter a pending interaction state, or queue later intent.
+- Remove quantity-recalculation placeholder data, card pending props, retained-content hiding, and selected-food and result-card spinners. Keep the established new-Search and MORE! request behavior.
+- Preserve current result IDs, rank order, page, images, card identity, motion state, focus, active Interface Language, and localized text during reprojection.
+- Update generated clients, integration coverage, and browser coverage for the new transport and ownership split. Remove superseded backend display-projection and quantity-recalculation paths and tests.
+
+**Requirements that are revised and reverified**
+
+- [REQ-025](../requirements/requirements.md#req-025--quantity-syntax)
+- [REQ-026](../requirements/requirements.md#req-026--invalid-quantity)
+- [REQ-027](../requirements/requirements.md#req-027--quantity-editing)
+- [REQ-028](../requirements/requirements.md#req-028--quantity-recalculation)
+- [REQ-029](../requirements/requirements.md#req-029--derived-calories)
+- [REQ-031](../requirements/requirements.md#req-031--matched-quantity)
+- [REQ-037](../requirements/requirements.md#req-037--card-data)
+- [REQ-038](../requirements/requirements.md#req-038--base-unit-matched-quantity)
+- [REQ-039](../requirements/requirements.md#req-039--display-precision)
+- [REQ-040](../requirements/requirements.md#req-040--calculation-precision)
+- [REQ-078](../requirements/requirements.md#req-078--displayed-calories)
+- [REQ-081](../requirements/requirements.md#req-081--single-card-loading-spinner)
+
+**Phase gate**
+
+Run `python3 scripts/ci_check.py` from the repository root. Run `bun run test:e2e` from `frontend/`. Select a Food Object and record the completed initial Substitute Search request count. Commit changed valid base-unit and Serving quantities and prove that the browser starts zero additional Substitute Search requests. Verify the selected-food summary and all current cards use the returned source Macro Profiles, match known initial and changed-quantity calculation fixtures, and apply the specified final rounding. Verify result IDs, rank order, page, card identity, motion state, focus, language, and localized text do not change. Verify no selected-food or result-card spinner appears and no quantity-recalculation pending state or request lock occurs. Activate MORE! and select a new Food Object to prove that each action still starts its specified request and that the returned page uses the same browser projection function.
+
+**Review stop**
+
+Read the Phase 21 diff. Record the revised requirements as verified. The implementation plan is complete.
