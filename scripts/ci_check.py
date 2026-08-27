@@ -116,6 +116,7 @@ def run_frontend_checks() -> None:
     run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "typecheck"], cwd=FRONTEND_ROOT)
     run_checked(["bun", "run", "format:check"], cwd=FRONTEND_ROOT)
+    run_checked(["bun", "run", "lint"], cwd=FRONTEND_ROOT)
 
 
 def run_backend_checks() -> None:
