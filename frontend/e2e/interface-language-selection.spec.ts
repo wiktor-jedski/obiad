@@ -2,15 +2,6 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-/**
- * Real-stack Interface Language dropdown scenario.
- *
- * The optimized application runs over the disposable PostgreSQL, Fiber, and
- * Vite stack. These checks cover selection, persistence, native keyboard
- * interaction, the borderless language-and-chevron presentation, responsive
- * placement, Search geometry, and the absence of application API requests.
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const STORAGE_KEY = "obiad.interfaceLanguage";
 const PRIMARY_RGB = "rgb(74, 222, 128)";
@@ -135,17 +126,10 @@ test.describe("Interface Language selection", () => {
       name: COPY.en.control,
     });
 
-    // Task 27: a focused nonempty Search Query starts exactly one live
-    // suggestion request, so the suggestion panel opens while the field is
-    // focused (ARCH-010, REQ-012).
     await searchInput.fill("abc");
     await expect(page.getByRole("listbox")).toBeVisible();
     const requestsAfterTyping = requestUrls.length;
 
-    // Moving focus to the language control closes the suggestion list
-    // (REQ-059); the language change retains the unfinished text, leaves
-    // focus on the dropdown, and starts no further application request
-    // because the Search field is not focused.
     await languageSelect.focus();
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(searchInput).not.toHaveAttribute("aria-activedescendant");
@@ -207,12 +191,10 @@ async function assertControlAtViewport(
   await expect(chevron).toHaveText("⌄");
   await expect(page.locator("button")).toHaveCount(0);
 
-  const wrapperBox = (await wrapper.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const wrapperBox = await wrapper.boundingBox();
+  if (wrapperBox === null) {
+    throw new Error(`${viewport.name}: language wrapper has no bounding box`);
+  }
   expect(Math.abs(wrapperBox.y - CONTROL_TOP_PX)).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
@@ -220,10 +202,10 @@ async function assertControlAtViewport(
     ),
   ).toBeLessThanOrEqual(1);
 
-  const selectBox = (await languageSelect.boundingBox()) as {
-    width: number;
-    height: number;
-  };
+  const selectBox = await languageSelect.boundingBox();
+  if (selectBox === null) {
+    throw new Error(`${viewport.name}: language select has no bounding box`);
+  }
   expect(selectBox.width).toBeGreaterThanOrEqual(MIN_TARGET_PX);
   expect(selectBox.height).toBeGreaterThanOrEqual(MIN_TARGET_PX);
   await expect(languageSelect).toHaveCSS("border-top-width", "0px");
@@ -252,12 +234,10 @@ async function assertControlAtViewport(
   ).toHaveValue("pl");
   await expectStored(page, "pl");
 
-  const searchBox = (await searchInput.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const searchBox = await searchInput.boundingBox();
+  if (searchBox === null) {
+    throw new Error(`${viewport.name}: Search input has no bounding box`);
+  }
   const expectedWidth = Math.min(
     viewport.width - 2 * viewport.gutterPx,
     FIELD_MAX_WIDTH_PX,

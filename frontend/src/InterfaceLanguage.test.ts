@@ -1,12 +1,3 @@
-/**
- * Interface Language dropdown component integration.
- *
- * The happy-dom boundary proves the native select's localized accessible name,
- * fixed options, active value, shared-dictionary update, exact persistence, and
- * storage-failure behavior. Native keyboard interaction and responsive layout
- * remain covered by the real-stack Playwright scenario.
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
@@ -43,6 +34,14 @@ function installStorageSetItem(impl: Storage["setItem"]): () => void {
   };
 }
 
+function getLanguageSelect(name: string): HTMLSelectElement {
+  const select = screen.getByRole("combobox", { name });
+  if (!(select instanceof HTMLSelectElement)) {
+    throw new TypeError("Interface Language combobox must be a select element");
+  }
+  return select;
+}
+
 describe("the Interface Language dropdown", () => {
   beforeEach(() => {
     interfaceLanguage.set("en");
@@ -55,9 +54,7 @@ describe("the Interface Language dropdown", () => {
   test("renders one localized native dropdown with fixed PL-then-EN options", async () => {
     render(App);
 
-    const select = screen.getByRole("combobox", {
-      name: COPY.en.control,
-    }) as HTMLSelectElement;
+    const select = getLanguageSelect(COPY.en.control);
     expect(select.value).toBe("en");
     expect(
       screen.getAllByRole("option").map((option) => option.textContent),
@@ -82,15 +79,16 @@ describe("the Interface Language dropdown", () => {
       calls.push([key, value]);
     });
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (() => {
-      throw new Error("unexpected network call in component integration");
-    }) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(
+      function unexpectedFetch() {
+        throw new Error("unexpected network call in component integration");
+      },
+      { preconnect: originalFetch.preconnect },
+    );
 
     try {
       render(App);
-      const select = screen.getByRole("combobox", {
-        name: COPY.en.control,
-      }) as HTMLSelectElement;
+      const select = getLanguageSelect(COPY.en.control);
 
       await fireEvent.change(select, { target: { value: "pl" } });
       expect(screen.getByPlaceholderText(COPY.pl.placeholder)).toBeTruthy();
@@ -119,9 +117,7 @@ describe("the Interface Language dropdown", () => {
 
     try {
       render(App);
-      const select = screen.getByRole("combobox", {
-        name: COPY.en.control,
-      }) as HTMLSelectElement;
+      const select = getLanguageSelect(COPY.en.control);
 
       await expect(
         fireEvent.change(select, { target: { value: "pl" } }),

@@ -19,61 +19,12 @@
   } from "../interactionState";
   import { substitutionSearchLock } from "../substitutionSearch";
   /**
-   * ISSUE-010 editable selected-food summary (task 34; ARCH-001, ARCH-002,
-   * ARCH-003, ARCH-008, ARCH-011, ARCH-018, ARCH-019, ARCH-020, ARCH-022,
-   * REQ-025, REQ-026, REQ-027, REQ-028, REQ-081).
-   *
-   * From selection onward the region renders one unbordered five-row
-   * summary at every supported width: the active localized food name; the
-   * number field with a current-unit-first selector when two units are
-   * allowed or static `g`/`ml` text when only one is allowed; then the
-   * backend-provided protein, carbohydrate, and fat rows using active-language
-   * labels and one-decimal formatting. The `Selected food` / `Wybrany
-   * produkt` region name, the number field's `Quantity` / `Ilość` name, and
-   * the unit control's `Unit` / `Jednostka` name stay visually hidden
-   * accessible text; the selector options are labeled `g`, `ml`, `servings`,
-   * or `porcje`. The `localized name · quantity unit` accessible value
-   * updates with the active Interface Language (REQ-058).
-   *
-   * During the initial new Search the complete summary keeps its settled
-   * layout but hides its non-image content behind one centered, aria-hidden
-   * `16px` spinner. The region stays busy and makes one polite announcement
-   * of `Loading nutrition values` / `Ładowanie wartości odżywczych`. After
-   * success the spinner is removed and the enabled quantity editor and
-   * response values become visible (REQ-081).
-   *
-   * The number control is a text input so every invalid raw value remains
-   * visible. The exact raw text stays in the interaction state until Enter
-   * or focus leaves the complete quantity editor (the number field plus
-   * the unit selector together) commits it; moving focus inside the editor
-   * never commits an old unit before a selector change. A unit selection
-   * replaces the draft with `1` for Serving or `100` for a base unit and
-   * commits immediately. A syntactically valid value above the selected
-   * maximum is silently replaced by that whole maximum before commit with
-   * no visible or assistive clamp notice; a draft that resolves to the
-   * committed value clears validation but starts no request. An invalid
-   * commit keeps the exact text, starts no request, sets `aria-invalid`,
-   * and shows the localized `Enter a valid quantity.` / `Wpisz prawidłową
-   * ilość.` message through an associated polite live element; natural
-   * focus is unchanged, and the error clears as soon as the draft becomes
-   * syntactically valid.
-   *
-   * While a valid recalculation is pending, the controls stay enabled,
-   * the region stays busy, the summary macronutrient values are replaced
-   * by aria-hidden `16px` spinners, and one polite `Updating quantities`
-   * / `Aktualizowanie ilości` announcement fires. The summary renders only
-   * the current response's backend values. After a terminal new-search
-   * failure (task 41, REQ-050), the region is not busy: the retained
-   * Substitution Input renders without value spinners and the ISSUE-013
-   * retry message appears in the result area. After a MORE! failure
-   * (task 42, REQ-051) the region is also not busy: the retained
-   * Substitution Input and its stored values stay visible while the
-   * quantity editor remains non-operable, because the retry path is the
-   * retained MORE! control or a fresh suggestion selection.
+   * Editable selected-food summary with localized quantity and nutrition values.
+   * Draft validation, busy states, and accessible status stay in one region.
    */
 
   interface Props {
-    /** The current non-empty interaction state (ARCH-002). */
+    /** Current non-empty interaction state. */
     interaction:
       | LoadingNewInteractionState
       | LoadingMoreInteractionState
@@ -82,7 +33,7 @@
       | NewSearchFailureInteractionState
       | MoreFailureInteractionState;
     data: SubstituteSearchResponse | undefined;
-    /** Whether a valid quantity recalculation is pending (ISSUE-010). */
+    /** Whether a valid quantity recalculation is pending. */
     recalculating: boolean;
   }
 
@@ -92,48 +43,33 @@
   const dictionary = $derived(getDictionary($interfaceLanguage));
   /** The selected Food Object name in the active Interface Language. */
   const selectedName = $derived(interaction.selected.names[$interfaceLanguage]);
-  /**
-   * The selected Food Object's accessible value in the active Interface
-   * Language (REQ-058).
-   */
+  /** Accessible selected-food value in the active language. */
   const selectedValue = $derived(
     `${selectedName} · ${formatFoodQuantityValue(
       { value: interaction.committedValue, unit: interaction.committedUnit },
       $interfaceLanguage,
     )}`,
   );
-  /** The selected suggestion's allowed quantity-editor units (task 33). */
+  /** Allowed quantity-editor units for the selected suggestion. */
   const allowedQuantities = $derived(interaction.selected.allowedQuantities);
   /** Whether two units are allowed; one base unit renders as static text. */
   const twoUnitsAllowed = $derived(allowedQuantities.length === 2);
-  /**
-   * The selector options in current-unit-first order (ISSUE-010): the
-   * committed unit first, then the other allowed unit. The option order
-   * follows the committed quantity so the selector always leads with the
-   * current unit.
-   */
+  /** Allowed units ordered with the committed unit first. */
   const orderedUnits = $derived(
     twoUnitsAllowed
-      ? ([
+      ? [
           interaction.draftUnit,
           ...allowedQuantities
             .map((allowed) => allowed.unit)
             .filter((unit) => unit !== interaction.draftUnit),
-        ] as QuantityUnit[])
-      : ([allowedQuantities[0].unit] as QuantityUnit[]),
+        ]
+      : [allowedQuantities[0].unit],
   );
   /** Whether the summary shows the initial new-Search pending interaction. */
   const initial = $derived(interaction.name === "loadingNew");
   /** Whether any quantity-dependent value is pending (initial or recalculation). */
   const busy = $derived(initial || recalculating);
-  /**
-   * Whether the quantity editor is non-operable (ARCH-011, ARCH-019,
-   * REQ-048): the global substitution request lock, the initial new
-   * Search, a pending recalculation, or the MORE! failure transition.
-   * After a MORE! failure (task 42, REQ-051) the retry path is the
-   * retained MORE! control or a fresh suggestion selection, so the
-   * quantity editor stays non-operable like during a pending request.
-   */
+  /** Whether quantity editing is blocked by loading, recalculation, or failure. */
   const locked = $derived(
     $substitutionSearchLock ||
       initial ||
@@ -141,38 +77,25 @@
       interaction.name === "moreFailure",
   );
   /**
-   * Whether the locked quantity editor can be removed from the tab order
-   * (task 48, REQ-068): the initial new Search, a pending MORE! page, and
-   * the MORE! failure transition lock the editor while focus stays on the
-   * initiating control (Search or the retained MORE! control), so the
-   * number field and unit selector present the native `disabled` state.
-   * A screen reader and the tab order skip them entirely, and the guarded
-   * handlers still discard dispatched activation (REQ-048, ARCH-019).
+   * Whether a locked editor is removed from the tab order.
+   * Recalculation keeps its controls focusable but non-operable.
    */
   const removableLock = $derived(locked && !recalculating);
   /**
-   * Whether the locked quantity editor retains focus (task 48, REQ-068):
-   * a pending valid recalculation is initiated by the editor itself —
-   * Enter keeps number-field focus and a unit selection keeps selector
-   * focus — so the controls stay focusable but non-operable with
-   * `aria-disabled` plus the native `readonly` and `tabindex="-1"`
-   * guards. Pointer, keyboard, blur, and dispatched activation remain
-   * blocked by the guarded handlers (REQ-048, ARCH-019).
+   * Whether a locked editor retains focus during recalculation.
+   * Its controls remain focusable but non-operable.
    */
   const focusRetainingLock = $derived(locked && recalculating);
   const inputMacros = $derived(data?.inputMacronutrients);
   /** The response's input calories at the committed quantity, when present. */
   const inputCalories = $derived(data?.inputCalories);
   const QUANTITY_ERROR_ID = "quantity-error";
-  /** The stable id of the polite editor status live region (ISSUE-010). */
+  /** Stable id for the polite editor status region. */
   const EDITOR_STATUS_ID = "quantity-editor-status";
 
   /**
-   * The polite busy announcement currently held by the editor status live
-   * region. It is set exactly once per busy period — `Loading nutrition
-   * values` while the initial new Search is pending and `Updating
-   * quantities` while a recalculation is pending — and cleared when the
-   * period ends, so a screen reader announces the status once (ISSUE-010).
+   * One localized busy announcement per loading period.
+   * The message is cleared when the period ends.
    */
   let announcement = $state("");
   let previousBusyKind: "initial" | "recalculating" | null = $state(null);
@@ -189,34 +112,23 @@
     }
   });
 
-  /**
-   * The localized option label of one allowed unit (ISSUE-010): `g` and
-   * `ml` stay invariant, and the Serving unit uses the plural selector
-   * label `servings` / `porcje`.
-   */
+  /** Returns the localized label for an allowed quantity unit. */
   function unitOptionLabel(unit: QuantityUnit): string {
     return unit === "serving" ? dictionary.servingsLabel() : unit;
   }
 
-  /**
-   * Applies draft number text from the quantity editor. The exact raw text
-   * stays in the interaction state; the validation state follows the
-   * ISSUE-010 syntax of the current unit, and an error clears as soon as
-   * the draft becomes syntactically valid without committing it.
-   */
+  /** Applies draft number text and updates validation without committing. */
   function onNumberInput(event: Event): void {
-    if (locked) {
+    const field = event.currentTarget;
+    if (locked || !(field instanceof HTMLInputElement)) {
       return;
     }
-    interactionState.setQuantityText(
-      (event.currentTarget as HTMLInputElement).value,
-    );
+    interactionState.setQuantityText(field.value);
   }
 
   /**
-   * Commits the draft number on Enter while retaining number-field focus
-   * (ISSUE-010, REQ-048). Enter never blurs the field; a valid commit that resolves
-   * to the committed value starts no request.
+   * Commits a valid draft on Enter without moving focus.
+   * An unchanged value starts no request.
    */
   function onNumberKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter") {
@@ -228,33 +140,31 @@
     }
   }
 
-  /**
-   * Applies a unit selection: the draft is replaced with `1` for Serving
-   * or `100` for a base unit and committed immediately (ISSUE-010, REQ-048).
-   */
+  /** Applies a unit selection and commits its reset value immediately. */
   function onUnitChange(event: Event): void {
-    if (locked) {
+    const selector = event.currentTarget;
+    if (locked || !(selector instanceof HTMLSelectElement)) {
       return;
     }
-    interactionState.selectUnit(
-      (event.currentTarget as HTMLSelectElement).value as QuantityUnit,
+    const selected = allowedQuantities.find(
+      (allowed) => allowed.unit === selector.value,
     );
+    if (selected !== undefined) {
+      interactionState.selectUnit(selected.unit);
+    }
   }
 
   /**
-   * Commits the draft number when focus leaves the complete quantity
-   * editor (the number field and the unit selector together). Moving focus
-   * inside the editor — for example from the number field to the selector
-   * — never commits an old unit before a selector change, so the
-   * `relatedTarget` check commits only on a real exit (ISSUE-010, REQ-048).
+   * Commits the draft when focus leaves the complete quantity editor.
+   * Focus changes within the editor do not commit.
    */
   function onEditorFocusOut(event: FocusEvent): void {
-    if (locked) {
+    const editor = event.currentTarget;
+    if (locked || !(editor instanceof HTMLElement)) {
       return;
     }
-    const editor = event.currentTarget as HTMLElement;
-    const next = event.relatedTarget as Node | null;
-    if (next === null || !editor.contains(next)) {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !editor.contains(next)) {
       interactionState.commitQuantity();
     }
   }
@@ -272,16 +182,12 @@
     class:opacity-0={busy}
     class:pointer-events-none={busy}
   >
-    <!--
-    Visually hidden region label and localized selection summary (REQ-058).
-    The active dictionary and Food Object name update together when the
-    Interface Language changes.
-  -->
+    <!-- Localized accessible summary updates with the active language. -->
     <span class="sr-only"
       >{dictionary.selectedFoodLabel()}: {selectedValue}</span
     >
 
-    <!-- Row 1: the active localized Food Object name (REQ-058). -->
+    <!-- The active localized Food Object name. -->
     <div
       data-selected-name
       class="text-center text-base font-medium text-dark-text-primary"
@@ -289,13 +195,7 @@
       {selectedName}
     </div>
 
-    <!--
-    Row 2: the quantity editor. A text input keeps every invalid raw value
-    visible (REQ-025, REQ-026); the unit control is a native selector with
-    the committed unit first when two units are allowed, or static `g`/`ml`
-    text when only one is allowed (ISSUE-010). During the initial new
-    Search the complete editor is disabled.
-  -->
+    <!-- Text input preserves invalid drafts; the disabled editor stays in place. -->
     <div
       data-quantity-editor
       onfocusout={onEditorFocusOut}
@@ -342,13 +242,7 @@
           {/each}
         </select>
       {:else}
-        <!--
-        One-unit static presentation (ISSUE-010): the visible `g` or `ml`
-        value keeps the visually hidden localized `Unit` / `Jednostka`
-        label associated through `aria-labelledby`, mirroring the label
-        the two-unit selector receives, so a screen reader never hears an
-        unlabeled adjacent unit text.
-      -->
+        <!-- Associate static units with the visually hidden localized label. -->
         <span
           data-quantity-unit-presentation
           role="group"
@@ -366,14 +260,7 @@
         </span>
       {/if}
     </div>
-    <!--
-    The calories row (task 35, REQ-078) carries the localized `Calories` /
-    `Kalorie` accessible name through `aria-label`. The explicit `group`
-    role keeps that association without the implicit paragraph role, whose
-    `aria-label` is prohibited (axe aria-prohibited-attr, task 48,
-    ISSUE-015) — the same named-group pattern the one-unit static
-    presentation uses; the visible centered value and layout are unchanged.
-  -->
+    <!-- Use a labeled group because paragraph aria-label is not allowed. -->
     <p
       data-input-calories
       role="group"
@@ -386,12 +273,7 @@
     </p>
 
     {#if interaction.quantityInvalid}
-      <!--
-      The associated polite live quantity error (REQ-026, ISSUE-010): the
-      exact localized message is visible, announced politely, referenced by
-      the number field's `aria-describedby`, and removed as soon as the
-      draft becomes syntactically valid. Natural focus never moves.
-    -->
+      <!-- The polite error is associated with the number field. -->
       <p
         id={QUANTITY_ERROR_ID}
         data-quantity-error
@@ -402,12 +284,7 @@
       </p>
     {/if}
 
-    <!--
-      The backend-provided input macronutrients at the committed quantity use
-      active-language labels and one-decimal formatting (REQ-058). Pending
-      presentation is owned by the single card-level spinner; the browser
-      never calculates or rerounds nutrition (REQ-040, REQ-081).
-    -->
+    <!-- Values come from the backend; pending state uses the card spinner. -->
     <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
         <dt class="font-medium text-dark-text-muted">
@@ -460,12 +337,7 @@
     </div>
   {/if}
 
-  <!--
-    The polite busy status live region (ISSUE-010): it carries exactly one
-    localized announcement per pending period — `Loading nutrition values`
-    for the initial new Search and `Updating quantities` for a
-    recalculation — so a screen reader announces the status once.
-  -->
+  <!-- Announce one localized busy status for each pending period. -->
   <span
     id={EDITOR_STATUS_ID}
     data-editor-status

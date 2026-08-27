@@ -7,24 +7,8 @@
   import { interfaceLanguage } from "../interfaceLanguage";
 
   /**
-   * Borderless Interface Language dropdown.
-   *
-   * The native select exposes the active language code and a small visual
-   * chevron while preserving native pointer and keyboard interaction. It is
-   * absolutely positioned `16px` from the viewport top and at the responsive
-   * right page gutter, so it does not move the Search field from its
-   * established vertical center.
-   *
-   * Task 43 completes the Search-side Interface Language change
-   * collaboration (ARCH-012, REQ-059): a real selection of the control
-   * updates the one persisted language store and removes any Search text
-   * selection. The real pointer or keyboard interaction itself moves focus
-   * to the control, so the Search field's native blur already closes the
-   * live suggestion list and removes Search focus from the interaction
-   * state; the exact unfinished Search Query stays retained. The language
-   * action itself starts no HTTP request, and the next Search focus starts
-   * one fresh suggestion GET with the retained query and the selected
-   * language instead of reusing inactive data.
+   * Borderless language selector that preserves Search focus and layout.
+   * Selection updates the language store and clears Search text selection.
    */
 
   /** The active Interface Language from the persisted store. */
@@ -32,36 +16,21 @@
   /** The active dictionary used for the dropdown's accessible name. */
   const dictionary = $derived(getDictionary(active));
 
-  /**
-   * Removes any Search text selection (REQ-059): the selection range
-   * collapses to the end of the retained query. The Search field keeps its
-   * internal selection after losing focus (the click-to-select action of
-   * the Search control), so the language selection explicitly collapses it.
-   */
+  /** Collapse the Search selection to the end of its retained text. */
   function clearSearchTextSelection(): void {
-    const field = document.getElementById(
-      "food-search",
-    ) as HTMLInputElement | null;
-    if (field !== null) {
+    const field = document.getElementById("food-search");
+    if (field instanceof HTMLInputElement) {
       field.setSelectionRange(field.value.length, field.value.length);
     }
   }
 
-  /**
-   * Applies one real selection from the Interface Language control
-   * (task 43, ARCH-012, REQ-059). The selection updates the one persisted
-   * language store, closes the live suggestion list and removes Search
-   * focus through the focus transfer of the real interaction, removes any
-   * Search text selection, and retains the exact unfinished Search Query.
-   * Because the suggestion query stays disabled once the Search field lost
-   * focus, the language action itself starts no suggestion GET, Substitute
-   * POST, retry, or other HTTP request (P14-G5, REQ-013); the next Search
-   * focus uses the selected language and starts one fresh suggestion GET.
-   * No parallel interaction state, language store, request path, or
-   * automatic focus return is added.
-   */
+  /** Applies a valid language selection and clears the Search text selection. */
   function selectLanguage(event: Event): void {
-    const language = (event.currentTarget as HTMLSelectElement).value;
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const language = target.value;
     if (!isInterfaceLanguage(language)) {
       return;
     }

@@ -1,8 +1,7 @@
 //go:build tools
 
-// Package tools pins command-line tool dependencies that are not imported by
-// the compiled backend. The pinned versions are the reproducible source for
-// `go generate ./...` (ISSUE-004).
+// Package tools pins command-line tool dependencies.
+// The versions support reproducible code generation.
 package tools
 
 import (

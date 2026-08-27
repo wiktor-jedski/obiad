@@ -1,19 +1,3 @@
-// Request logging for the Fiber application (ARCH-019): every request is
-// emitted as one structured log record with request ID, method, route
-// template, HTTP status, duration, the stable error code, and the internal
-// cause when an error occurred. Sensitive values never reach the log: the
-// Search Query text, quantities, request bodies, SQL parameters, database
-// credentials, and stack details are excluded, and every logged value is
-// sanitized against log injection (ARCH-019, golang-security logging
-// guidance).
-//
-// The request-log middleware emits the record for requests whose handler
-// chain completes without an error. Every error outcome — router-level
-// not-found or method-not-allowed, requests whose request line fasthttp could
-// not parse (malformed query encoding), and unexpected handler failures — is
-// answered and logged by the app error handler (errorHandler), so exactly one
-// record is emitted per request.
-
 package server
 
 import (
@@ -30,31 +14,20 @@ import (
 	"obiad/backend/internal/transport"
 )
 
-// Request-log context keys. Handlers store the stable error code and the
-// internal cause on the Fiber context; the request-log middleware picks them
-// up and emits them. The keys are package-private and no client input is
-// ever stored under them.
+// Request log keys carry error details between handlers.
 const (
-	// requestLogCodeKey holds the stable error code of a failed request.
-	requestLogCodeKey = "obiad.request.error_code"
-	// requestLogCauseKey holds the sanitized internal cause of a failed
-	// request. It never appears in a response (ARCH-008).
+	requestLogCodeKey  = "obiad.request.error_code"
 	requestLogCauseKey = "obiad.request.error_cause"
 )
 
-// newRequestID returns a fresh unpredictable request ID: 16 bytes from
-// crypto/rand encoded as 32 hex characters (golang-security: crypto/rand, not
-// math/rand, for identifiers an attacker must not be able to predict).
+// newRequestID returns a random request identifier.
 func newRequestID() string {
 	var b [16]byte
 	rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 
-// sanitizeLogText removes control characters and other non-printable runes
-// from a value before it reaches the log sink so user-influenced input can
-// never inject log structure (golang-security logging guidance). slog's JSON
-// handler also escapes values; this is the second, explicit layer.
+// sanitizeLogText removes control characters from log text.
 func sanitizeLogText(s string) string {
 	if !strings.ContainsFunc(s, unicode.IsControl) {
 		return s
@@ -69,20 +42,12 @@ func sanitizeLogText(s string) string {
 	return b.String()
 }
 
-// routeTemplate returns the registered route template of the matched route
-// for the request log (ARCH-019): static patterns log the pattern itself
-// ("/api/v1/food-suggestions"), and parameterized patterns would log their
-// ":param" placeholders. A request that never matched a route has no
-// template, so the empty string is logged.
+// routeTemplate returns the matched route path.
 func routeTemplate(c fiber.Ctx) string {
 	return c.Route().Path
 }
 
-// logRequest emits one structured request record (ARCH-019). code is the
-// stable error code of a failed request and cause its sanitized internal
-// cause; both are omitted on success. Query text, quantities, request
-// bodies, SQL parameters, credentials, and stack details are never passed
-// in by callers.
+// logRequest emits one structured request record.
 func logRequest(logger *slog.Logger, requestID, method, route string, status int, duration time.Duration, code, cause string) {
 	attrs := []any{
 		"request_id", requestID,
@@ -100,33 +65,16 @@ func logRequest(logger *slog.Logger, requestID, method, route string, status int
 	logger.Info("request", attrs...)
 }
 
-// requestLogger returns the Fiber middleware that emits one structured log
-// record per successful request (ARCH-019): request ID, method, route
-// template, status, duration, stable error code, and internal cause, with
-// query text, quantities, request bodies, SQL parameters, credentials, and
-// stack details excluded.
-//
-// The middleware logs only outcomes the handler chain fully determines
-// without an error: a handler either wrote the response (success) or the
-// chain returned no error but never matched a route (the fasthttp error
-// path). Every error outcome — router-level not-found or method-not-allowed,
-// malformed request lines, and unexpected handler failures — is deferred to
-// the app error handler (errorHandler), which owns the record and the stable
-// response for those requests, so exactly one record is emitted per request.
+// requestLogger logs completed requests.
 func requestLogger(logger *slog.Logger) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		start := time.Now()
 		requestID := newRequestID()
 		err := c.Next()
 		if err != nil {
-			// The app error handler answers and logs this request (router
-			// 404/405, unexpected handler failure).
 			return err
 		}
 		if !c.Matched() {
-			// No handler wrote a response: the request line could not be
-			// parsed by fasthttp (malformed query encoding), and the app
-			// error handler answers and logs the request.
 			return nil
 		}
 		code, _ := c.Locals(requestLogCodeKey).(string)
@@ -136,26 +84,7 @@ func requestLogger(logger *slog.Logger) fiber.Handler {
 	}
 }
 
-// errorHandler is the app-level error handler. It answers and logs every
-// request whose outcome the middleware could not determine, so exactly one
-// record is emitted per request:
-//
-//   - malformed requests whose request line fasthttp could not parse (a
-//     control byte in the request-target) are answered with the stable
-//     400 INVALID_REQUEST JSON error without a field (ISSUE-004);
-//   - requests whose body exceeds the substitute search route's pre-read
-//     4 KiB ingress limit are answered with the exact stable
-//     413 {"code":"REQUEST_BODY_TOO_LARGE"} error without a field: the
-//     fasthttp HeaderReceived cap rejects the body while the request is
-//     read, before any Fiber handler runs, so no route matches and this
-//     handler owns the response and the log record (task 20, ISSUE-005);
-//   - router-level not-found (404) and method-not-allowed (405) errors keep
-//     the Fiber default behavior and have no stable error code;
-//   - every other error — an unexpected handler failure — is answered with
-//     the exact stable 500 {"code":"INTERNAL_ERROR"} response with no field
-//     and no internal cause; the sanitized internal cause appears only in
-//     the request log (ARCH-008, golang-security: log details server-side,
-//     return generic messages).
+// errorHandler logs failures and returns stable responses.
 func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		start := time.Now()
@@ -171,10 +100,6 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 			logRequest(logger, requestID, c.Method(), route, fiber.StatusBadRequest, time.Since(start), codeInvalidRequest, sanitizeLogText(err.Error()))
 			return c.Status(fiber.StatusBadRequest).JSON(transport.Error{Code: codeInvalidRequest})
 		case matched && fiberErr != nil && fiberErr.Code == fiber.StatusRequestEntityTooLarge:
-			// The pre-read 4 KiB ingress limit fired (task 20): the body was
-			// rejected while the request was read, before any handler ran,
-			// so the route template is unknown and the record carries the
-			// fixed sanitized cause instead of the generic Fiber message.
 			logRequest(logger, requestID, c.Method(), route, fiber.StatusRequestEntityTooLarge, time.Since(start), string(transport.REQUESTBODYTOOLARGE), "request body exceeds the 4 KiB limit")
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(transport.Error{Code: transport.REQUESTBODYTOOLARGE})
 		case matched && fiberErr != nil && (fiberErr.Code == fiber.StatusNotFound || fiberErr.Code == fiber.StatusMethodNotAllowed):

@@ -1,38 +1,5 @@
 package repository
 
-// Integration test for Phase 4 (task 16) and Phase 11 (task 36): the concrete
-// Find Substitute Page Run operation over the private Catalog Loader
-// (ARCH-005, ARCH-006, ARCH-013, ARCH-018, ARCH-022, P11-G1). It requires a
-// real PostgreSQL server: the test creates its isolated disposable database
-// plus the schema-owner, SELECT-only runtime, and unprivileged login roles
-// through the shared testdb support, runs the real setup command against it,
-// grants the runtime catalog read through the same embedded privilege SQL the
-// local deployment setup applies, and drives the real Find Substitute Page
-// Module through the SELECT-only runtime credential. A query tracer on the
-// runtime connection proves that every Run performs exactly one fresh
-// embedded SELECT and no mutating statement.
-//
-// The test verifies the designated seeded calories, Matched Quantities,
-// eligible counts, page traversal for all pages of Pizza Margherita, Chicken
-// breast, and Milk, hasMore, input and Food Family exclusions, decreasing
-// full-precision order, English-name and stable-ID ties, the raw stored-name
-// collation tie rule (case and whitespace remain significant), unique results
-// across all pages, one fresh SELECT per request, no mutation or derived-value
-// persistence, the Serving conversion branch, the final display projection
-// of the three scaled macro fields and the whole Matched Quantity and
-// similarity percentage, the zero-result contract on page 0, the out-of-range
-// behavior for first page after last page and math.MaxInt32, and the
-// finite-boundary classification of schema-valid extreme Macro Profiles. In the
-// same test, Macro Profiles loaded by the real private Catalog Loader are passed
-// directly to the private production calorie, cosine, and Matched Quantity
-// helpers and compared with independently recorded full-precision expectations
-// using abs(got - want) <= 1e-12 (ISSUE-005: the absolute 1e-12 tolerance is a
-// test comparison only, never a production tie or ranking threshold). No
-// exported seam, fake, or test hook is added: the helpers stay private and
-// the test sits in the same package. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables;
-// no credential is committed and tests skip when no server is reachable.
-
 import (
 	"context"
 	"errors"
@@ -44,14 +11,8 @@ import (
 	"obiad/backend/internal/testdb"
 )
 
-// nearEqual is ISSUE-005's absolute comparison tolerance for full-precision
-// calculation expectations: abs(got - want) <= 1e-12. It is used only by
-// tests; production ranking and calculations never apply a tolerance.
 const nearEqual = 1e-12
 
-// wantCalories records the independently derived seeded calories per
-// Nutrition Basis (4p + 4c + 9f, REQ-029) for every ISSUE-002 Food Object,
-// as full-precision float64 expectations.
 var wantCalories = map[int32]float64{
 	1:  250.0,
 	2:  255.0,
@@ -93,13 +54,6 @@ var wantCalories = map[int32]float64{
 	38: 174.0,
 }
 
-// wantCandidate is one independently recorded full-precision expectation for
-// one eligible Substitute of a designated input: its seeded calories per
-// Nutrition Basis, its cosine Nutritional Similarity to the input, its
-// equal-calorie Matched Quantity in the candidate base unit, the three
-// unrounded macronutrients scaled to that Matched Quantity, and the
-// candidate base unit of that Matched Quantity (g for a solid, ml for a
-// liquid, ARCH-013).
 type wantCandidate struct {
 	id              int32
 	calories        float64
@@ -111,8 +65,6 @@ type wantCandidate struct {
 	unit            Unit
 }
 
-// wantSubstituteInput records the independently computed full-precision
-// expectations across all pages for one ISSUE-002 designated acceptance input.
 type wantSubstituteInput struct {
 	inputID       int32
 	quantity      FoodQuantity
@@ -123,148 +75,141 @@ type wantSubstituteInput struct {
 
 var wantSubstituteInputs = []wantSubstituteInput{
 	{
-		inputID:       1, // Pizza Margherita, one Serving = 350 g
+		inputID:       1,
 		quantity:      FoodQuantity{Value: 1, Unit: UnitServing},
 		baseQuantity:  350,
 		totalCalories: 875.0,
 		candidates: []wantCandidate{
-			/* rank  0, page  0 */ {id: 13, calories: 200, cosine: 0.99999999999999989, matchedQuantity: 437.5, protein: 35, carbohydrate: 105, fat: 35, unit: UnitGram}, // Gyoza
-			/* rank  1, page  0 */ {id: 29, calories: 157, cosine: 0.99534144489797338, matchedQuantity: 557.32484076433116, protein: 44.585987261146492, carbohydrate: 111.46496815286623, fat: 27.866242038216559, unit: UnitGram}, // Paella
-			/* rank  2, page  0 */ {id: 26, calories: 199, cosine: 0.99212296718022097, matchedQuantity: 439.69849246231155, protein: 26.38190954773869, carbohydrate: 123.11557788944724, fat: 30.778894472361809, unit: UnitGram}, // Pancakes
-			/* rank  3, page  1 */ {id: 30, calories: 57.5, cosine: 0.99059302410933336, matchedQuantity: 1521.7391304347825, protein: 45.652173913043477, carbohydrate: 121.7391304347826, fat: 22.826086956521738, unit: UnitMillilitre}, // Pho
-			/* rank  4, page  1 */ {id: 3, calories: 180, cosine: 0.98849752162647253, matchedQuantity: 486.11111111111109, protein: 43.75, carbohydrate: 87.5, fat: 38.888888888888886, unit: UnitGram}, // Lasagna
-			/* rank  5, page  1 */ {id: 35, calories: 286, cosine: 0.98319847464190124, matchedQuantity: 305.94405594405595, protein: 15.297202797202797, carbohydrate: 107.08041958041959, fat: 42.832167832167833, unit: UnitGram}, // Pastel de nata
-			/* rank  6, page  2 */ {id: 14, calories: 45.5, cosine: 0.98023086290149108, matchedQuantity: 1923.0769230769231, protein: 19.23076923076923, carbohydrate: 134.61538461538461, fat: 28.846153846153847, unit: UnitMillilitre}, // Oat milk
-			/* rank  7, page  2 */ {id: 4, calories: 197, cosine: 0.97942811387419959, matchedQuantity: 444.16243654822335, protein: 26.649746192893399, carbohydrate: 142.13197969543148, fat: 22.208121827411169, unit: UnitGram}, // Pierogi
-			/* rank  8, page  2 */ {id: 21, calories: 265, cosine: 0.97736466830340329, matchedQuantity: 330.18867924528303, protein: 42.924528301886795, carbohydrate: 79.245283018867923, fat: 42.924528301886795, unit: UnitGram}, // Beef cheeseburger
-			/* rank  9, page  3 */ {id: 28, calories: 71.5, cosine: 0.97662700047796813, matchedQuantity: 1223.7762237762238, protein: 30.594405594405593, carbohydrate: 146.85314685314685, fat: 18.356643356643357, unit: UnitGram}, // Oatmeal
-			/* rank 10, page  3 */ {id: 24, calories: 11.800000000000001, cosine: 0.97532602772189436, matchedQuantity: 7415.2542372881353, protein: 37.076271186440678, carbohydrate: 148.30508474576271, fat: 14.830508474576272, unit: UnitGram}, // Pickled cucumbers
-			/* rank 11, page  3 */ {id: 25, calories: 21, cosine: 0.96303230673730089, matchedQuantity: 4166.666666666667, protein: 37.500000000000007, carbohydrate: 162.5, fat: 8.3333333333333357, unit: UnitGram}, // Tomatoes
-			/* rank 12, page  4 */ {id: 10, calories: 50.799999999999997, cosine: 0.96089336670421754, matchedQuantity: 1722.4409448818899, protein: 58.562992125984259, carbohydrate: 82.677165354330725, fat: 34.4488188976378, unit: UnitMillilitre}, // Milk
-			/* rank 13, page  4 */ {id: 31, calories: 36.5, cosine: 0.95701367263300507, matchedQuantity: 2397.2602739726026, protein: 23.972602739726025, carbohydrate: 167.80821917808217, fat: 11.986301369863012, unit: UnitMillilitre}, // Beetroot borscht
-			/* rank 14, page  4 */ {id: 36, calories: 290, cosine: 0.95441748441655705, matchedQuantity: 301.72413793103448, protein: 21.120689655172413, carbohydrate: 75.431034482758619, fat: 54.310344827586206, unit: UnitGram}, // Cheesecake
-			/* rank 15, page  5 */ {id: 34, calories: 263, cosine: 0.94593161370340229, matchedQuantity: 332.69961977186313, protein: 39.923954372623577, carbohydrate: 66.539923954372625, fat: 49.904942965779462, unit: UnitGram}, // Bandeja paisa
-			/* rank 16, page  5 */ {id: 8, calories: 56.5, cosine: 0.93815987573180126, matchedQuantity: 1548.6725663716813, protein: 15.486725663716813, carbohydrate: 185.84070796460176, fat: 7.7433628318584065, unit: UnitGram}, // Mixed berries
-			/* rank 17, page  5 */ {id: 37, calories: 44.599999999999994, cosine: 0.92921089993463635, matchedQuantity: 1961.883408071749, protein: 13.733183856502242, carbohydrate: 196.18834080717491, fat: 3.9237668161434982, unit: UnitMillilitre}, // Orange juice
-			/* rank 18, page  6 */ {id: 33, calories: 96, cosine: 0.92913077810332301, matchedQuantity: 911.45833333333337, protein: 63.802083333333343, carbohydrate: 72.916666666666671, fat: 36.458333333333336, unit: UnitMillilitre}, // Mondongo
-			/* rank 19, page  6 */ {id: 15, calories: 240, cosine: 0.92773097920446679, matchedQuantity: 364.58333333333331, protein: 54.6875, carbohydrate: 65.625, fat: 43.75, unit: UnitGram}, // Kebab
-			/* rank 20, page  6 */ {id: 32, calories: 116, cosine: 0.91543242728538932, matchedQuantity: 754.31034482758616, protein: 7.5431034482758612, carbohydrate: 75.431034482758619, fat: 60.34482758620689, unit: UnitGram}, // Coleslaw
-			/* rank 21, page  7 */ {id: 9, calories: 45.299999999999997, cosine: 0.90994085956348081, matchedQuantity: 1931.5673289183223, protein: 1.9315673289183224, carbohydrate: 212.47240618101546, fat: 1.9315673289183224, unit: UnitMillilitre}, // Apple juice
-			/* rank 22, page  7 */ {id: 16, calories: 238, cosine: 0.75075719352954817, matchedQuantity: 367.64705882352939, protein: 66.17647058823529, carbohydrate: 36.764705882352935, fat: 51.470588235294116, unit: UnitGram}, // Gyros
-			/* rank 23, page  7 */ {id: 17, calories: 21, cosine: 0.7385489458759964, matchedQuantity: 4166.666666666667, protein: 83.333333333333343, carbohydrate: 41.666666666666671, fat: 41.666666666666671, unit: UnitMillilitre}, // Polish chicken soup
-			/* rank 24, page  8 */ {id: 12, calories: 97, cosine: 0.70973641756239825, matchedQuantity: 902.06185567010311, protein: 81.185567010309285, carbohydrate: 36.082474226804123, fat: 45.103092783505154, unit: UnitGram}, // Greek yogurt
-			/* rank 25, page  8 */ {id: 20, calories: 57, cosine: 0.70352647068144836, matchedQuantity: 1535.0877192982457, protein: 122.80701754385966, carbohydrate: 61.403508771929829, fat: 15.350877192982457, unit: UnitMillilitre}, // Protein shake
-			/* rank 26, page  8 */ {id: 38, calories: 174, cosine: 0.68236777983388608, matchedQuantity: 502.87356321839081, protein: 75.431034482758619, carbohydrate: 30.172413793103452, fat: 50.287356321839077, unit: UnitGram}, // Goulash
-			/* rank 27, page  9 */ {id: 22, calories: 300, cosine: 0.6463137929731515, matchedQuantity: 291.66666666666669, protein: 64.166666666666671, carbohydrate: 23.333333333333336, fat: 58.333333333333343, unit: UnitGram}, // Fried chicken wings
-			/* rank 28, page  9 */ {id: 11, calories: 61.799999999999997, cosine: 0.59754135466993774, matchedQuantity: 1415.8576051779935, protein: 155.74433656957927, carbohydrate: 56.63430420711974, fat: 2.8317152103559868, unit: UnitGram}, // Skyr yogurt
-			/* rank 29, page  9 */ {id: 27, calories: 156, cosine: 0.48065801332024816, matchedQuantity: 560.89743589743591, protein: 61.698717948717949, carbohydrate: 5.6089743589743595, fat: 67.307692307692307, unit: UnitGram}, // Omelette
-			/* rank 30, page 10 */ {id: 7, calories: 239, cosine: 0.41183676957073301, matchedQuantity: 366.10878661087867, protein: 95.188284518828453, carbohydrate: 0, fat: 54.916317991631807, unit: UnitGram}, // Beef steak
-			/* rank 31, page 10 */ {id: 6, calories: 234, cosine: 0.40645890961921988, matchedQuantity: 373.9316239316239, protein: 100.96153846153845, carbohydrate: 0, fat: 52.350427350427346, unit: UnitGram}, // Pork chop
-			/* rank 32, page 10 */ {id: 5, calories: 156.40000000000001, cosine: 0.33427907805525386, matchedQuantity: 559.46291560102304, protein: 173.43350383631713, carbohydrate: 0, fat: 20.14066496163683, unit: UnitGram}, // Chicken breast
-			/* rank 33, page 11 */ {id: 23, calories: 134, cosine: 0.32154147286708462, matchedQuantity: 652.98507462686564, protein: 189.36567164179104, carbohydrate: 0, fat: 13.059701492537313, unit: UnitGram}, // Turkey breast
-			/* rank 34, page 11 */ {id: 18, calories: 742, cosine: 0.30885379676350377, matchedQuantity: 117.9245283018868, protein: 0.589622641509434, carbohydrate: 0.589622641509434, fat: 96.698113207547181, unit: UnitGram}, // Butter
-			/* rank 35, page 11 */ {id: 19, calories: 821.69999999999993, cosine: 0.30151134457776357, matchedQuantity: 106.48655226968481, protein: 0, carbohydrate: 0, fat: 97.222222222222229, unit: UnitMillilitre}, // Olive oil
+			/* rank  0, page  0 */ {id: 13, calories: 200, cosine: 0.99999999999999989, matchedQuantity: 437.5, protein: 35, carbohydrate: 105, fat: 35, unit: UnitGram},
+			/* rank  1, page  0 */ {id: 29, calories: 157, cosine: 0.99534144489797338, matchedQuantity: 557.32484076433116, protein: 44.585987261146492, carbohydrate: 111.46496815286623, fat: 27.866242038216559, unit: UnitGram},
+			/* rank  2, page  0 */ {id: 26, calories: 199, cosine: 0.99212296718022097, matchedQuantity: 439.69849246231155, protein: 26.38190954773869, carbohydrate: 123.11557788944724, fat: 30.778894472361809, unit: UnitGram},
+			/* rank  3, page  1 */ {id: 30, calories: 57.5, cosine: 0.99059302410933336, matchedQuantity: 1521.7391304347825, protein: 45.652173913043477, carbohydrate: 121.7391304347826, fat: 22.826086956521738, unit: UnitMillilitre},
+			/* rank  4, page  1 */ {id: 3, calories: 180, cosine: 0.98849752162647253, matchedQuantity: 486.11111111111109, protein: 43.75, carbohydrate: 87.5, fat: 38.888888888888886, unit: UnitGram},
+			/* rank  5, page  1 */ {id: 35, calories: 286, cosine: 0.98319847464190124, matchedQuantity: 305.94405594405595, protein: 15.297202797202797, carbohydrate: 107.08041958041959, fat: 42.832167832167833, unit: UnitGram},
+			/* rank  6, page  2 */ {id: 14, calories: 45.5, cosine: 0.98023086290149108, matchedQuantity: 1923.0769230769231, protein: 19.23076923076923, carbohydrate: 134.61538461538461, fat: 28.846153846153847, unit: UnitMillilitre},
+			/* rank  7, page  2 */ {id: 4, calories: 197, cosine: 0.97942811387419959, matchedQuantity: 444.16243654822335, protein: 26.649746192893399, carbohydrate: 142.13197969543148, fat: 22.208121827411169, unit: UnitGram},
+			/* rank  8, page  2 */ {id: 21, calories: 265, cosine: 0.97736466830340329, matchedQuantity: 330.18867924528303, protein: 42.924528301886795, carbohydrate: 79.245283018867923, fat: 42.924528301886795, unit: UnitGram},
+			/* rank  9, page  3 */ {id: 28, calories: 71.5, cosine: 0.97662700047796813, matchedQuantity: 1223.7762237762238, protein: 30.594405594405593, carbohydrate: 146.85314685314685, fat: 18.356643356643357, unit: UnitGram},
+			/* rank 10, page  3 */ {id: 24, calories: 11.800000000000001, cosine: 0.97532602772189436, matchedQuantity: 7415.2542372881353, protein: 37.076271186440678, carbohydrate: 148.30508474576271, fat: 14.830508474576272, unit: UnitGram},
+			/* rank 11, page  3 */ {id: 25, calories: 21, cosine: 0.96303230673730089, matchedQuantity: 4166.666666666667, protein: 37.500000000000007, carbohydrate: 162.5, fat: 8.3333333333333357, unit: UnitGram},
+			/* rank 12, page  4 */ {id: 10, calories: 50.799999999999997, cosine: 0.96089336670421754, matchedQuantity: 1722.4409448818899, protein: 58.562992125984259, carbohydrate: 82.677165354330725, fat: 34.4488188976378, unit: UnitMillilitre},
+			/* rank 13, page  4 */ {id: 31, calories: 36.5, cosine: 0.95701367263300507, matchedQuantity: 2397.2602739726026, protein: 23.972602739726025, carbohydrate: 167.80821917808217, fat: 11.986301369863012, unit: UnitMillilitre},
+			/* rank 14, page  4 */ {id: 36, calories: 290, cosine: 0.95441748441655705, matchedQuantity: 301.72413793103448, protein: 21.120689655172413, carbohydrate: 75.431034482758619, fat: 54.310344827586206, unit: UnitGram},
+			/* rank 15, page  5 */ {id: 34, calories: 263, cosine: 0.94593161370340229, matchedQuantity: 332.69961977186313, protein: 39.923954372623577, carbohydrate: 66.539923954372625, fat: 49.904942965779462, unit: UnitGram},
+			/* rank 16, page  5 */ {id: 8, calories: 56.5, cosine: 0.93815987573180126, matchedQuantity: 1548.6725663716813, protein: 15.486725663716813, carbohydrate: 185.84070796460176, fat: 7.7433628318584065, unit: UnitGram},
+			/* rank 17, page  5 */ {id: 37, calories: 44.599999999999994, cosine: 0.92921089993463635, matchedQuantity: 1961.883408071749, protein: 13.733183856502242, carbohydrate: 196.18834080717491, fat: 3.9237668161434982, unit: UnitMillilitre},
+			/* rank 18, page  6 */ {id: 33, calories: 96, cosine: 0.92913077810332301, matchedQuantity: 911.45833333333337, protein: 63.802083333333343, carbohydrate: 72.916666666666671, fat: 36.458333333333336, unit: UnitMillilitre},
+			/* rank 19, page  6 */ {id: 15, calories: 240, cosine: 0.92773097920446679, matchedQuantity: 364.58333333333331, protein: 54.6875, carbohydrate: 65.625, fat: 43.75, unit: UnitGram},
+			/* rank 20, page  6 */ {id: 32, calories: 116, cosine: 0.91543242728538932, matchedQuantity: 754.31034482758616, protein: 7.5431034482758612, carbohydrate: 75.431034482758619, fat: 60.34482758620689, unit: UnitGram},
+			/* rank 21, page  7 */ {id: 9, calories: 45.299999999999997, cosine: 0.90994085956348081, matchedQuantity: 1931.5673289183223, protein: 1.9315673289183224, carbohydrate: 212.47240618101546, fat: 1.9315673289183224, unit: UnitMillilitre},
+			/* rank 22, page  7 */ {id: 16, calories: 238, cosine: 0.75075719352954817, matchedQuantity: 367.64705882352939, protein: 66.17647058823529, carbohydrate: 36.764705882352935, fat: 51.470588235294116, unit: UnitGram},
+			/* rank 23, page  7 */ {id: 17, calories: 21, cosine: 0.7385489458759964, matchedQuantity: 4166.666666666667, protein: 83.333333333333343, carbohydrate: 41.666666666666671, fat: 41.666666666666671, unit: UnitMillilitre},
+			/* rank 24, page  8 */ {id: 12, calories: 97, cosine: 0.70973641756239825, matchedQuantity: 902.06185567010311, protein: 81.185567010309285, carbohydrate: 36.082474226804123, fat: 45.103092783505154, unit: UnitGram},
+			/* rank 25, page  8 */ {id: 20, calories: 57, cosine: 0.70352647068144836, matchedQuantity: 1535.0877192982457, protein: 122.80701754385966, carbohydrate: 61.403508771929829, fat: 15.350877192982457, unit: UnitMillilitre},
+			/* rank 26, page  8 */ {id: 38, calories: 174, cosine: 0.68236777983388608, matchedQuantity: 502.87356321839081, protein: 75.431034482758619, carbohydrate: 30.172413793103452, fat: 50.287356321839077, unit: UnitGram},
+			/* rank 27, page  9 */ {id: 22, calories: 300, cosine: 0.6463137929731515, matchedQuantity: 291.66666666666669, protein: 64.166666666666671, carbohydrate: 23.333333333333336, fat: 58.333333333333343, unit: UnitGram},
+			/* rank 28, page  9 */ {id: 11, calories: 61.799999999999997, cosine: 0.59754135466993774, matchedQuantity: 1415.8576051779935, protein: 155.74433656957927, carbohydrate: 56.63430420711974, fat: 2.8317152103559868, unit: UnitGram},
+			/* rank 29, page  9 */ {id: 27, calories: 156, cosine: 0.48065801332024816, matchedQuantity: 560.89743589743591, protein: 61.698717948717949, carbohydrate: 5.6089743589743595, fat: 67.307692307692307, unit: UnitGram},
+			/* rank 30, page 10 */ {id: 7, calories: 239, cosine: 0.41183676957073301, matchedQuantity: 366.10878661087867, protein: 95.188284518828453, carbohydrate: 0, fat: 54.916317991631807, unit: UnitGram},
+			/* rank 31, page 10 */ {id: 6, calories: 234, cosine: 0.40645890961921988, matchedQuantity: 373.9316239316239, protein: 100.96153846153845, carbohydrate: 0, fat: 52.350427350427346, unit: UnitGram},
+			/* rank 32, page 10 */ {id: 5, calories: 156.40000000000001, cosine: 0.33427907805525386, matchedQuantity: 559.46291560102304, protein: 173.43350383631713, carbohydrate: 0, fat: 20.14066496163683, unit: UnitGram},
+			/* rank 33, page 11 */ {id: 23, calories: 134, cosine: 0.32154147286708462, matchedQuantity: 652.98507462686564, protein: 189.36567164179104, carbohydrate: 0, fat: 13.059701492537313, unit: UnitGram},
+			/* rank 34, page 11 */ {id: 18, calories: 742, cosine: 0.30885379676350377, matchedQuantity: 117.9245283018868, protein: 0.589622641509434, carbohydrate: 0.589622641509434, fat: 96.698113207547181, unit: UnitGram},
+			/* rank 35, page 11 */ {id: 19, calories: 821.69999999999993, cosine: 0.30151134457776357, matchedQuantity: 106.48655226968481, protein: 0, carbohydrate: 0, fat: 97.222222222222229, unit: UnitMillilitre},
 		},
 	},
 	{
-		inputID:       5, // Chicken breast, 100 g Nutrition Basis
+		inputID:       5,
 		quantity:      FoodQuantity{Value: 100, Unit: UnitGram},
 		baseQuantity:  100,
 		totalCalories: 156.4,
 		candidates: []wantCandidate{
-			/* rank  0, page  0 */ {id: 23, calories: 134, cosine: 0.99890719857858201, matchedQuantity: 116.71641791044776, protein: 33.84776119402985, carbohydrate: 0, fat: 2.3343283582089551, unit: UnitGram}, // Turkey breast
-			/* rank  1, page  0 */ {id: 11, calories: 61.799999999999997, cosine: 0.93535433249885147, matchedQuantity: 253.07443365695795, protein: 27.838187702265373, carbohydrate: 10.122977346278319, fat: 0.50614886731391595, unit: UnitGram}, // Skyr yogurt
-			/* rank  2, page  0 */ {id: 6, calories: 234, cosine: 0.93492763601015461, matchedQuantity: 66.837606837606842, protein: 18.046153846153846, carbohydrate: 0, fat: 9.3572649572649578, unit: UnitGram}, // Pork chop
-			/* rank  3, page  1 */ {id: 7, calories: 239, cosine: 0.91804822498748984, matchedQuantity: 65.439330543933053, protein: 17.014225941422595, carbohydrate: 0, fat: 9.8158995815899583, unit: UnitGram}, // Beef steak
-			/* rank  4, page  1 */ {id: 20, calories: 57, cosine: 0.89577217256673414, matchedQuantity: 274.38596491228071, protein: 21.950877192982457, carbohydrate: 10.975438596491228, fat: 2.7438596491228071, unit: UnitMillilitre}, // Protein shake
-			/* rank  5, page  1 */ {id: 12, calories: 97, cosine: 0.86160056181276767, matchedQuantity: 161.23711340206185, protein: 14.511340206185567, carbohydrate: 6.4494845360824744, fat: 8.0618556701030926, unit: UnitGram}, // Greek yogurt
-			/* rank  6, page  2 */ {id: 17, calories: 21, cosine: 0.85813902726377311, matchedQuantity: 744.76190476190482, protein: 14.895238095238096, carbohydrate: 7.4476190476190478, fat: 7.4476190476190478, unit: UnitMillilitre}, // Polish chicken soup
-			/* rank  7, page  2 */ {id: 38, calories: 174, cosine: 0.84491605851046025, matchedQuantity: 89.885057471264375, protein: 13.482758620689657, carbohydrate: 5.3931034482758626, fat: 8.9885057471264371, unit: UnitGram}, // Goulash
-			/* rank  8, page  2 */ {id: 22, calories: 300, cosine: 0.78468728734341198, matchedQuantity: 52.133333333333333, protein: 11.469333333333333, carbohydrate: 4.1706666666666665, fat: 10.426666666666668, unit: UnitGram}, // Fried chicken wings
-			/* rank  9, page  3 */ {id: 16, calories: 238, cosine: 0.78292975774517792, matchedQuantity: 65.714285714285708, protein: 11.828571428571427, carbohydrate: 6.5714285714285712, fat: 9.1999999999999993, unit: UnitGram}, // Gyros
-			/* rank 10, page  3 */ {id: 27, calories: 156, cosine: 0.75482448906251631, matchedQuantity: 100.25641025641026, protein: 11.02820512820513, carbohydrate: 1.0025641025641026, fat: 12.030769230769231, unit: UnitGram}, // Omelette
-			/* rank 11, page  3 */ {id: 33, calories: 96, cosine: 0.65282674601996615, matchedQuantity: 162.91666666666666, protein: 11.404166666666665, carbohydrate: 13.033333333333333, fat: 6.5166666666666666, unit: UnitMillilitre}, // Mondongo
-			/* rank 12, page  4 */ {id: 15, calories: 240, cosine: 0.61858229128418618, matchedQuantity: 65.166666666666671, protein: 9.7750000000000004, carbohydrate: 11.73, fat: 7.8200000000000003, unit: UnitGram}, // Kebab
-			/* rank 13, page  4 */ {id: 10, calories: 50.799999999999997, cosine: 0.58072988739794151, matchedQuantity: 307.87401574803152, protein: 10.467716535433071, carbohydrate: 14.777952755905511, fat: 6.1574803149606305, unit: UnitMillilitre}, // Milk
-			/* rank 14, page  4 */ {id: 34, calories: 263, cosine: 0.49223882873981217, matchedQuantity: 59.467680608365022, protein: 7.1361216730038031, carbohydrate: 11.893536121673005, fat: 8.9201520912547529, unit: UnitGram}, // Bandeja paisa
-			/* rank 15, page  5 */ {id: 21, calories: 265, cosine: 0.47673363382577982, matchedQuantity: 59.018867924528301, protein: 7.6724528301886785, carbohydrate: 14.164528301886792, fat: 7.6724528301886785, unit: UnitGram}, // Beef cheeseburger
-			/* rank 16, page  5 */ {id: 3, calories: 180, cosine: 0.45541951203801828, matchedQuantity: 86.888888888888886, protein: 7.8200000000000003, carbohydrate: 15.640000000000001, fat: 6.9511111111111106, unit: UnitGram}, // Lasagna
-			/* rank 17, page  5 */ {id: 29, calories: 157, cosine: 0.38543987921897471, matchedQuantity: 99.617834394904463, protein: 7.9694267515923567, carbohydrate: 19.923566878980893, fat: 4.9808917197452232, unit: UnitGram}, // Paella
-			/* rank 18, page  6 */ {id: 2, calories: 255, cosine: 0.38073652613741499, matchedQuantity: 61.333333333333336, protein: 6.746666666666667, carbohydrate: 17.173333333333336, fat: 6.746666666666667, unit: UnitGram}, // Pizza Capricciosa
-			/* rank 19, page  6 */ {id: 30, calories: 57.5, cosine: 0.36347227209025246, matchedQuantity: 272, protein: 8.1600000000000001, carbohydrate: 21.760000000000002, fat: 4.0800000000000001, unit: UnitMillilitre}, // Pho
-			/* rank 20, page  6 */ {id: 13, calories: 200, cosine: 0.33427907805525392, matchedQuantity: 78.200000000000003, protein: 6.2560000000000002, carbohydrate: 18.768000000000001, fat: 6.2560000000000002, unit: UnitGram}, // Gyoza
-			/* rank 21, page  7 */ {id: 1, calories: 250, cosine: 0.33427907805525386, matchedQuantity: 62.560000000000002, protein: 6.2560000000000002, carbohydrate: 18.768000000000001, fat: 6.2560000000000002, unit: UnitGram}, // Pizza Margherita
-			/* rank 22, page  7 */ {id: 36, calories: 290, cosine: 0.28582825480619889, matchedQuantity: 53.931034482758619, protein: 3.7751724137931033, carbohydrate: 13.482758620689657, fat: 9.7075862068965506, unit: UnitGram}, // Cheesecake
-			/* rank 23, page  7 */ {id: 24, calories: 11.800000000000001, cosine: 0.25092945495719499, matchedQuantity: 1325.4237288135591, protein: 6.6271186440677958, carbohydrate: 26.508474576271183, fat: 2.6508474576271186, unit: UnitGram}, // Pickled cucumbers
-			/* rank 24, page  8 */ {id: 26, calories: 199, cosine: 0.22956911771261368, matchedQuantity: 78.5929648241206, protein: 4.7155778894472355, carbohydrate: 22.006030150753769, fat: 5.5015075376884424, unit: UnitGram}, // Pancakes
-			/* rank 25, page  8 */ {id: 25, calories: 21, cosine: 0.2288370278298418, matchedQuantity: 744.76190476190482, protein: 6.7028571428571437, carbohydrate: 29.04571428571429, fat: 1.4895238095238097, unit: UnitGram}, // Tomatoes
-			/* rank 26, page  8 */ {id: 28, calories: 71.5, cosine: 0.21510427823253631, matchedQuantity: 218.74125874125875, protein: 5.4685314685314692, carbohydrate: 26.248951048951049, fat: 3.2811188811188812, unit: UnitGram}, // Oatmeal
-			/* rank 27, page  9 */ {id: 4, calories: 197, cosine: 0.1984470913577818, matchedQuantity: 79.390862944162436, protein: 4.7634517766497462, carbohydrate: 25.405076142131978, fat: 3.969543147208122, unit: UnitGram}, // Pierogi
-			/* rank 28, page  9 */ {id: 35, calories: 286, cosine: 0.17307953999582959, matchedQuantity: 54.685314685314687, protein: 2.7342657342657346, carbohydrate: 19.13986013986014, fat: 7.6559440559440564, unit: UnitGram}, // Pastel de nata
-			/* rank 29, page  9 */ {id: 14, calories: 45.5, cosine: 0.16135694984683235, matchedQuantity: 343.73626373626371, protein: 3.4373626373626371, carbohydrate: 24.061538461538458, fat: 5.1560439560439555, unit: UnitMillilitre}, // Oat milk
-			/* rank 30, page 10 */ {id: 32, calories: 116, cosine: 0.14917245987891201, matchedQuantity: 134.82758620689654, protein: 1.3482758620689654, carbohydrate: 13.482758620689653, fat: 10.786206896551723, unit: UnitGram}, // Coleslaw
-			/* rank 31, page 10 */ {id: 31, calories: 36.5, cosine: 0.14826384208245511, matchedQuantity: 428.49315068493149, protein: 4.2849315068493148, carbohydrate: 29.994520547945204, fat: 2.1424657534246574, unit: UnitMillilitre}, // Beetroot borscht
-			/* rank 32, page 10 */ {id: 18, calories: 742, cosine: 0.12140615187084042, matchedQuantity: 21.078167115902964, protein: 0.10539083557951483, carbohydrate: 0.10539083557951483, fat: 17.284097035040432, unit: UnitGram}, // Butter
-			/* rank 33, page 11 */ {id: 19, calories: 821.69999999999993, cosine: 0.11535380918585926, matchedQuantity: 19.033710599975663, protein: 0, carbohydrate: 0, fat: 17.37777777777778, unit: UnitMillilitre}, // Olive oil
-			/* rank 34, page 11 */ {id: 8, calories: 56.5, cosine: 0.087205768302707792, matchedQuantity: 276.81415929203541, protein: 2.7681415929203541, carbohydrate: 33.217699115044255, fat: 1.3840707964601771, unit: UnitGram}, // Mixed berries
-			/* rank 35, page 11 */ {id: 37, calories: 44.599999999999994, cosine: 0.071650166917796534, matchedQuantity: 350.67264573991037, protein: 2.4547085201793721, carbohydrate: 35.067264573991039, fat: 0.70134529147982083, unit: UnitMillilitre}, // Orange juice
-			/* rank 36, page 12 */ {id: 9, calories: 45.299999999999997, cosine: 0.010078060565712477, matchedQuantity: 345.25386313465788, protein: 0.34525386313465789, carbohydrate: 37.977924944812365, fat: 0.34525386313465789, unit: UnitMillilitre}, // Apple juice
+			/* rank  0, page  0 */ {id: 23, calories: 134, cosine: 0.99890719857858201, matchedQuantity: 116.71641791044776, protein: 33.84776119402985, carbohydrate: 0, fat: 2.3343283582089551, unit: UnitGram},
+			/* rank  1, page  0 */ {id: 11, calories: 61.799999999999997, cosine: 0.93535433249885147, matchedQuantity: 253.07443365695795, protein: 27.838187702265373, carbohydrate: 10.122977346278319, fat: 0.50614886731391595, unit: UnitGram},
+			/* rank  2, page  0 */ {id: 6, calories: 234, cosine: 0.93492763601015461, matchedQuantity: 66.837606837606842, protein: 18.046153846153846, carbohydrate: 0, fat: 9.3572649572649578, unit: UnitGram},
+			/* rank  3, page  1 */ {id: 7, calories: 239, cosine: 0.91804822498748984, matchedQuantity: 65.439330543933053, protein: 17.014225941422595, carbohydrate: 0, fat: 9.8158995815899583, unit: UnitGram},
+			/* rank  4, page  1 */ {id: 20, calories: 57, cosine: 0.89577217256673414, matchedQuantity: 274.38596491228071, protein: 21.950877192982457, carbohydrate: 10.975438596491228, fat: 2.7438596491228071, unit: UnitMillilitre},
+			/* rank  5, page  1 */ {id: 12, calories: 97, cosine: 0.86160056181276767, matchedQuantity: 161.23711340206185, protein: 14.511340206185567, carbohydrate: 6.4494845360824744, fat: 8.0618556701030926, unit: UnitGram},
+			/* rank  6, page  2 */ {id: 17, calories: 21, cosine: 0.85813902726377311, matchedQuantity: 744.76190476190482, protein: 14.895238095238096, carbohydrate: 7.4476190476190478, fat: 7.4476190476190478, unit: UnitMillilitre},
+			/* rank  7, page  2 */ {id: 38, calories: 174, cosine: 0.84491605851046025, matchedQuantity: 89.885057471264375, protein: 13.482758620689657, carbohydrate: 5.3931034482758626, fat: 8.9885057471264371, unit: UnitGram},
+			/* rank  8, page  2 */ {id: 22, calories: 300, cosine: 0.78468728734341198, matchedQuantity: 52.133333333333333, protein: 11.469333333333333, carbohydrate: 4.1706666666666665, fat: 10.426666666666668, unit: UnitGram},
+			/* rank  9, page  3 */ {id: 16, calories: 238, cosine: 0.78292975774517792, matchedQuantity: 65.714285714285708, protein: 11.828571428571427, carbohydrate: 6.5714285714285712, fat: 9.1999999999999993, unit: UnitGram},
+			/* rank 10, page  3 */ {id: 27, calories: 156, cosine: 0.75482448906251631, matchedQuantity: 100.25641025641026, protein: 11.02820512820513, carbohydrate: 1.0025641025641026, fat: 12.030769230769231, unit: UnitGram},
+			/* rank 11, page  3 */ {id: 33, calories: 96, cosine: 0.65282674601996615, matchedQuantity: 162.91666666666666, protein: 11.404166666666665, carbohydrate: 13.033333333333333, fat: 6.5166666666666666, unit: UnitMillilitre},
+			/* rank 12, page  4 */ {id: 15, calories: 240, cosine: 0.61858229128418618, matchedQuantity: 65.166666666666671, protein: 9.7750000000000004, carbohydrate: 11.73, fat: 7.8200000000000003, unit: UnitGram},
+			/* rank 13, page  4 */ {id: 10, calories: 50.799999999999997, cosine: 0.58072988739794151, matchedQuantity: 307.87401574803152, protein: 10.467716535433071, carbohydrate: 14.777952755905511, fat: 6.1574803149606305, unit: UnitMillilitre},
+			/* rank 14, page  4 */ {id: 34, calories: 263, cosine: 0.49223882873981217, matchedQuantity: 59.467680608365022, protein: 7.1361216730038031, carbohydrate: 11.893536121673005, fat: 8.9201520912547529, unit: UnitGram},
+			/* rank 15, page  5 */ {id: 21, calories: 265, cosine: 0.47673363382577982, matchedQuantity: 59.018867924528301, protein: 7.6724528301886785, carbohydrate: 14.164528301886792, fat: 7.6724528301886785, unit: UnitGram},
+			/* rank 16, page  5 */ {id: 3, calories: 180, cosine: 0.45541951203801828, matchedQuantity: 86.888888888888886, protein: 7.8200000000000003, carbohydrate: 15.640000000000001, fat: 6.9511111111111106, unit: UnitGram},
+			/* rank 17, page  5 */ {id: 29, calories: 157, cosine: 0.38543987921897471, matchedQuantity: 99.617834394904463, protein: 7.9694267515923567, carbohydrate: 19.923566878980893, fat: 4.9808917197452232, unit: UnitGram},
+			/* rank 18, page  6 */ {id: 2, calories: 255, cosine: 0.38073652613741499, matchedQuantity: 61.333333333333336, protein: 6.746666666666667, carbohydrate: 17.173333333333336, fat: 6.746666666666667, unit: UnitGram},
+			/* rank 19, page  6 */ {id: 30, calories: 57.5, cosine: 0.36347227209025246, matchedQuantity: 272, protein: 8.1600000000000001, carbohydrate: 21.760000000000002, fat: 4.0800000000000001, unit: UnitMillilitre},
+			/* rank 20, page  6 */ {id: 13, calories: 200, cosine: 0.33427907805525392, matchedQuantity: 78.200000000000003, protein: 6.2560000000000002, carbohydrate: 18.768000000000001, fat: 6.2560000000000002, unit: UnitGram},
+			/* rank 21, page  7 */ {id: 1, calories: 250, cosine: 0.33427907805525386, matchedQuantity: 62.560000000000002, protein: 6.2560000000000002, carbohydrate: 18.768000000000001, fat: 6.2560000000000002, unit: UnitGram},
+			/* rank 22, page  7 */ {id: 36, calories: 290, cosine: 0.28582825480619889, matchedQuantity: 53.931034482758619, protein: 3.7751724137931033, carbohydrate: 13.482758620689657, fat: 9.7075862068965506, unit: UnitGram},
+			/* rank 23, page  7 */ {id: 24, calories: 11.800000000000001, cosine: 0.25092945495719499, matchedQuantity: 1325.4237288135591, protein: 6.6271186440677958, carbohydrate: 26.508474576271183, fat: 2.6508474576271186, unit: UnitGram},
+			/* rank 24, page  8 */ {id: 26, calories: 199, cosine: 0.22956911771261368, matchedQuantity: 78.5929648241206, protein: 4.7155778894472355, carbohydrate: 22.006030150753769, fat: 5.5015075376884424, unit: UnitGram},
+			/* rank 25, page  8 */ {id: 25, calories: 21, cosine: 0.2288370278298418, matchedQuantity: 744.76190476190482, protein: 6.7028571428571437, carbohydrate: 29.04571428571429, fat: 1.4895238095238097, unit: UnitGram},
+			/* rank 26, page  8 */ {id: 28, calories: 71.5, cosine: 0.21510427823253631, matchedQuantity: 218.74125874125875, protein: 5.4685314685314692, carbohydrate: 26.248951048951049, fat: 3.2811188811188812, unit: UnitGram},
+			/* rank 27, page  9 */ {id: 4, calories: 197, cosine: 0.1984470913577818, matchedQuantity: 79.390862944162436, protein: 4.7634517766497462, carbohydrate: 25.405076142131978, fat: 3.969543147208122, unit: UnitGram},
+			/* rank 28, page  9 */ {id: 35, calories: 286, cosine: 0.17307953999582959, matchedQuantity: 54.685314685314687, protein: 2.7342657342657346, carbohydrate: 19.13986013986014, fat: 7.6559440559440564, unit: UnitGram},
+			/* rank 29, page  9 */ {id: 14, calories: 45.5, cosine: 0.16135694984683235, matchedQuantity: 343.73626373626371, protein: 3.4373626373626371, carbohydrate: 24.061538461538458, fat: 5.1560439560439555, unit: UnitMillilitre},
+			/* rank 30, page 10 */ {id: 32, calories: 116, cosine: 0.14917245987891201, matchedQuantity: 134.82758620689654, protein: 1.3482758620689654, carbohydrate: 13.482758620689653, fat: 10.786206896551723, unit: UnitGram},
+			/* rank 31, page 10 */ {id: 31, calories: 36.5, cosine: 0.14826384208245511, matchedQuantity: 428.49315068493149, protein: 4.2849315068493148, carbohydrate: 29.994520547945204, fat: 2.1424657534246574, unit: UnitMillilitre},
+			/* rank 32, page 10 */ {id: 18, calories: 742, cosine: 0.12140615187084042, matchedQuantity: 21.078167115902964, protein: 0.10539083557951483, carbohydrate: 0.10539083557951483, fat: 17.284097035040432, unit: UnitGram},
+			/* rank 33, page 11 */ {id: 19, calories: 821.69999999999993, cosine: 0.11535380918585926, matchedQuantity: 19.033710599975663, protein: 0, carbohydrate: 0, fat: 17.37777777777778, unit: UnitMillilitre},
+			/* rank 34, page 11 */ {id: 8, calories: 56.5, cosine: 0.087205768302707792, matchedQuantity: 276.81415929203541, protein: 2.7681415929203541, carbohydrate: 33.217699115044255, fat: 1.3840707964601771, unit: UnitGram},
+			/* rank 35, page 11 */ {id: 37, calories: 44.599999999999994, cosine: 0.071650166917796534, matchedQuantity: 350.67264573991037, protein: 2.4547085201793721, carbohydrate: 35.067264573991039, fat: 0.70134529147982083, unit: UnitMillilitre},
+			/* rank 36, page 12 */ {id: 9, calories: 45.299999999999997, cosine: 0.010078060565712477, matchedQuantity: 345.25386313465788, protein: 0.34525386313465789, carbohydrate: 37.977924944812365, fat: 0.34525386313465789, unit: UnitMillilitre},
 		},
 	},
 	{
-		inputID:       10, // Milk, 100 ml Nutrition Basis
+		inputID:       10,
 		quantity:      FoodQuantity{Value: 100, Unit: UnitMillilitre},
 		baseQuantity:  100,
 		totalCalories: 50.8,
 		candidates: []wantCandidate{
-			/* rank  0, page  0 */ {id: 33, calories: 96, cosine: 0.99482938450652125, matchedQuantity: 52.916666666666664, protein: 3.7041666666666662, carbohydrate: 4.2333333333333334, fat: 2.1166666666666667, unit: UnitMillilitre}, // Mondongo
-			/* rank  1, page  0 */ {id: 3, calories: 180, cosine: 0.98848837741846673, matchedQuantity: 28.222222222222221, protein: 2.54, carbohydrate: 5.0800000000000001, fat: 2.2577777777777777, unit: UnitGram}, // Lasagna
-			/* rank  2, page  0 */ {id: 21, calories: 265, cosine: 0.98705869736992069, matchedQuantity: 19.169811320754718, protein: 2.4920754716981133, carbohydrate: 4.6007547169811325, fat: 2.4920754716981133, unit: UnitGram}, // Beef cheeseburger
-			/* rank  3, page  1 */ {id: 15, calories: 240, cosine: 0.98683208369120634, matchedQuantity: 21.166666666666668, protein: 3.1749999999999998, carbohydrate: 3.8100000000000001, fat: 2.54, unit: UnitGram}, // Kebab
-			/* rank  4, page  1 */ {id: 2, calories: 255, cosine: 0.973837378656768, matchedQuantity: 19.921568627450981, protein: 2.1913725490196079, carbohydrate: 5.5780392156862737, fat: 2.1913725490196079, unit: UnitGram}, // Pizza Capricciosa
-			/* rank  5, page  1 */ {id: 29, calories: 157, cosine: 0.96951859463850432, matchedQuantity: 32.35668789808917, protein: 2.5885350318471336, carbohydrate: 6.4713375796178347, fat: 1.6178343949044587, unit: UnitGram}, // Paella
-			/* rank  6, page  2 */ {id: 34, calories: 263, cosine: 0.96814236323306369, matchedQuantity: 19.315589353612168, protein: 2.3178707224334603, carbohydrate: 3.8631178707224336, fat: 2.8973384030418252, unit: UnitGram}, // Bandeja paisa
-			/* rank  7, page  2 */ {id: 1, calories: 250, cosine: 0.96089336670421754, matchedQuantity: 20.32, protein: 2.032, carbohydrate: 6.0960000000000001, fat: 2.032, unit: UnitGram}, // Pizza Margherita
-			/* rank  8, page  2 */ {id: 13, calories: 200, cosine: 0.96089336670421743, matchedQuantity: 25.399999999999999, protein: 2.032, carbohydrate: 6.0959999999999992, fat: 2.032, unit: UnitGram}, // Gyoza
-			/* rank  9, page  3 */ {id: 30, calories: 57.5, cosine: 0.95742066518632907, matchedQuantity: 88.347826086956516, protein: 2.6504347826086958, carbohydrate: 7.0678260869565213, fat: 1.3252173913043479, unit: UnitMillilitre}, // Pho
-			/* rank 10, page  3 */ {id: 26, calories: 199, cosine: 0.92165609980746077, matchedQuantity: 25.527638190954775, protein: 1.5316582914572865, carbohydrate: 7.1477386934673373, fat: 1.7869346733668343, unit: UnitGram}, // Pancakes
-			/* rank 11, page  3 */ {id: 36, calories: 290, cosine: 0.91607443714257097, matchedQuantity: 17.517241379310345, protein: 1.2262068965517241, carbohydrate: 4.3793103448275863, fat: 3.1531034482758624, unit: UnitGram}, // Cheesecake
-			/* rank 12, page  4 */ {id: 24, calories: 11.800000000000001, cosine: 0.90920865935486916, matchedQuantity: 430.50847457627117, protein: 2.152542372881356, carbohydrate: 8.6101694915254239, fat: 0.86101694915254245, unit: UnitGram}, // Pickled cucumbers
-			/* rank 13, page  4 */ {id: 35, calories: 286, cosine: 0.90157488391175633, matchedQuantity: 17.762237762237763, protein: 0.88811188811188813, carbohydrate: 6.2167832167832167, fat: 2.4867132867132868, unit: UnitGram}, // Pastel de nata
-			/* rank 14, page  4 */ {id: 28, calories: 71.5, cosine: 0.90063635401934694, matchedQuantity: 71.048951048951054, protein: 1.7762237762237763, carbohydrate: 8.5258741258741271, fat: 1.0657342657342659, unit: UnitGram}, // Oatmeal
-			/* rank 15, page  5 */ {id: 4, calories: 197, cosine: 0.89910269944186316, matchedQuantity: 25.786802030456851, protein: 1.547208121827411, carbohydrate: 8.2517766497461924, fat: 1.2893401015228425, unit: UnitGram}, // Pierogi
-			/* rank 16, page  5 */ {id: 17, calories: 21, cosine: 0.89365446758050615, matchedQuantity: 241.9047619047619, protein: 4.8380952380952378, carbohydrate: 2.4190476190476189, fat: 2.4190476190476189, unit: UnitMillilitre}, // Polish chicken soup
-			/* rank 17, page  5 */ {id: 25, calories: 21, cosine: 0.89083058438498153, matchedQuantity: 241.9047619047619, protein: 2.177142857142857, carbohydrate: 9.4342857142857142, fat: 0.4838095238095238, unit: UnitGram}, // Tomatoes
-			/* rank 18, page  6 */ {id: 14, calories: 45.5, cosine: 0.89068305815677939, matchedQuantity: 111.64835164835165, protein: 1.1164835164835165, carbohydrate: 7.8153846153846152, fat: 1.6747252747252748, unit: UnitMillilitre}, // Oat milk
-			/* rank 19, page  6 */ {id: 16, calories: 238, cosine: 0.88687949567358415, matchedQuantity: 21.344537815126049, protein: 3.8420168067226887, carbohydrate: 2.134453781512605, fat: 2.9882352941176471, unit: UnitGram}, // Gyros
-			/* rank 20, page  6 */ {id: 12, calories: 97, cosine: 0.87142018678415756, matchedQuantity: 52.371134020618555, protein: 4.7134020618556702, carbohydrate: 2.0948453608247424, fat: 2.6185567010309279, unit: UnitGram}, // Greek yogurt
-			/* rank 21, page  7 */ {id: 20, calories: 57, cosine: 0.86558395975041902, matchedQuantity: 89.122807017543863, protein: 7.1298245614035087, carbohydrate: 3.5649122807017544, fat: 0.89122807017543859, unit: UnitMillilitre}, // Protein shake
-			/* rank 22, page  7 */ {id: 31, calories: 36.5, cosine: 0.86282339297222865, matchedQuantity: 139.17808219178082, protein: 1.3917808219178083, carbohydrate: 9.742465753424657, fat: 0.69589041095890414, unit: UnitMillilitre}, // Beetroot borscht
-			/* rank 23, page  7 */ {id: 38, calories: 174, cosine: 0.84544096634169896, matchedQuantity: 29.195402298850574, protein: 4.3793103448275863, carbohydrate: 1.7517241379310342, fat: 2.9195402298850577, unit: UnitGram}, // Goulash
-			/* rank 24, page  8 */ {id: 32, calories: 116, cosine: 0.84454787223358119, matchedQuantity: 43.793103448275865, protein: 0.43793103448275866, carbohydrate: 4.3793103448275863, fat: 3.5034482758620693, unit: UnitGram}, // Coleslaw
-			/* rank 25, page  8 */ {id: 8, calories: 56.5, cosine: 0.82801835989513983, matchedQuantity: 89.911504424778755, protein: 0.89911504424778754, carbohydrate: 10.789380530973451, fat: 0.44955752212389377, unit: UnitGram}, // Mixed berries
-			/* rank 26, page  8 */ {id: 37, calories: 44.599999999999994, cosine: 0.81517565841487349, matchedQuantity: 113.90134529147984, protein: 0.79730941704035885, carbohydrate: 11.390134529147984, fat: 0.22780269058295971, unit: UnitMillilitre}, // Orange juice
-			/* rank 27, page  9 */ {id: 22, calories: 300, cosine: 0.8008680059623664, matchedQuantity: 16.933333333333334, protein: 3.7253333333333334, carbohydrate: 1.3546666666666667, fat: 3.3866666666666667, unit: UnitGram}, // Fried chicken wings
-			/* rank 28, page  9 */ {id: 11, calories: 61.799999999999997, cosine: 0.78371386182773795, matchedQuantity: 82.200647249190936, protein: 9.0420711974110031, carbohydrate: 3.2880258899676376, fat: 0.16440129449838189, unit: UnitGram}, // Skyr yogurt
-			/* rank 29, page  9 */ {id: 9, calories: 45.299999999999997, cosine: 0.78042430215501002, matchedQuantity: 112.14128035320088, protein: 0.11214128035320088, carbohydrate: 12.335540838852099, fat: 0.11214128035320088, unit: UnitMillilitre}, // Apple juice
-			/* rank 30, page 10 */ {id: 27, calories: 156, cosine: 0.65331633757277108, matchedQuantity: 32.564102564102562, protein: 3.5820512820512818, carbohydrate: 0.32564102564102559, fat: 3.9076923076923071, unit: UnitGram}, // Omelette
-			/* rank 31, page 10 */ {id: 7, calories: 239, cosine: 0.63488585980185142, matchedQuantity: 21.255230125523013, protein: 5.5263598326359826, carbohydrate: 0, fat: 3.1882845188284521, unit: UnitGram}, // Beef steak
-			/* rank 32, page 10 */ {id: 6, calories: 234, cosine: 0.63400444006631873, matchedQuantity: 21.70940170940171, protein: 5.861538461538462, carbohydrate: 0, fat: 3.0393162393162396, unit: UnitGram}, // Pork chop
-			/* rank 33, page 11 */ {id: 5, calories: 156.40000000000001, cosine: 0.58072988739794151, matchedQuantity: 32.48081841432225, protein: 10.069053708439897, carbohydrate: 0, fat: 1.1693094629156011, unit: UnitGram}, // Chicken breast
-			/* rank 34, page 11 */ {id: 23, calories: 134, cosine: 0.56810073866781585, matchedQuantity: 37.910447761194028, protein: 10.994029850746267, carbohydrate: 0, fat: 0.75820895522388054, unit: UnitGram}, // Turkey breast
-			/* rank 35, page 11 */ {id: 18, calories: 742, cosine: 0.32994690745915994, matchedQuantity: 6.8463611859838274, protein: 0.034231805929919139, carbohydrate: 0.034231805929919139, fat: 5.614016172506739, unit: UnitGram}, // Butter
-			/* rank 36, page 12 */ {id: 19, calories: 821.69999999999993, cosine: 0.32191138998982521, matchedQuantity: 6.1823049774857006, protein: 0, carbohydrate: 0, fat: 5.6444444444444448, unit: UnitMillilitre}, // Olive oil
+			/* rank  0, page  0 */ {id: 33, calories: 96, cosine: 0.99482938450652125, matchedQuantity: 52.916666666666664, protein: 3.7041666666666662, carbohydrate: 4.2333333333333334, fat: 2.1166666666666667, unit: UnitMillilitre},
+			/* rank  1, page  0 */ {id: 3, calories: 180, cosine: 0.98848837741846673, matchedQuantity: 28.222222222222221, protein: 2.54, carbohydrate: 5.0800000000000001, fat: 2.2577777777777777, unit: UnitGram},
+			/* rank  2, page  0 */ {id: 21, calories: 265, cosine: 0.98705869736992069, matchedQuantity: 19.169811320754718, protein: 2.4920754716981133, carbohydrate: 4.6007547169811325, fat: 2.4920754716981133, unit: UnitGram},
+			/* rank  3, page  1 */ {id: 15, calories: 240, cosine: 0.98683208369120634, matchedQuantity: 21.166666666666668, protein: 3.1749999999999998, carbohydrate: 3.8100000000000001, fat: 2.54, unit: UnitGram},
+			/* rank  4, page  1 */ {id: 2, calories: 255, cosine: 0.973837378656768, matchedQuantity: 19.921568627450981, protein: 2.1913725490196079, carbohydrate: 5.5780392156862737, fat: 2.1913725490196079, unit: UnitGram},
+			/* rank  5, page  1 */ {id: 29, calories: 157, cosine: 0.96951859463850432, matchedQuantity: 32.35668789808917, protein: 2.5885350318471336, carbohydrate: 6.4713375796178347, fat: 1.6178343949044587, unit: UnitGram},
+			/* rank  6, page  2 */ {id: 34, calories: 263, cosine: 0.96814236323306369, matchedQuantity: 19.315589353612168, protein: 2.3178707224334603, carbohydrate: 3.8631178707224336, fat: 2.8973384030418252, unit: UnitGram},
+			/* rank  7, page  2 */ {id: 1, calories: 250, cosine: 0.96089336670421754, matchedQuantity: 20.32, protein: 2.032, carbohydrate: 6.0960000000000001, fat: 2.032, unit: UnitGram},
+			/* rank  8, page  2 */ {id: 13, calories: 200, cosine: 0.96089336670421743, matchedQuantity: 25.399999999999999, protein: 2.032, carbohydrate: 6.0959999999999992, fat: 2.032, unit: UnitGram},
+			/* rank  9, page  3 */ {id: 30, calories: 57.5, cosine: 0.95742066518632907, matchedQuantity: 88.347826086956516, protein: 2.6504347826086958, carbohydrate: 7.0678260869565213, fat: 1.3252173913043479, unit: UnitMillilitre},
+			/* rank 10, page  3 */ {id: 26, calories: 199, cosine: 0.92165609980746077, matchedQuantity: 25.527638190954775, protein: 1.5316582914572865, carbohydrate: 7.1477386934673373, fat: 1.7869346733668343, unit: UnitGram},
+			/* rank 11, page  3 */ {id: 36, calories: 290, cosine: 0.91607443714257097, matchedQuantity: 17.517241379310345, protein: 1.2262068965517241, carbohydrate: 4.3793103448275863, fat: 3.1531034482758624, unit: UnitGram},
+			/* rank 12, page  4 */ {id: 24, calories: 11.800000000000001, cosine: 0.90920865935486916, matchedQuantity: 430.50847457627117, protein: 2.152542372881356, carbohydrate: 8.6101694915254239, fat: 0.86101694915254245, unit: UnitGram},
+			/* rank 13, page  4 */ {id: 35, calories: 286, cosine: 0.90157488391175633, matchedQuantity: 17.762237762237763, protein: 0.88811188811188813, carbohydrate: 6.2167832167832167, fat: 2.4867132867132868, unit: UnitGram},
+			/* rank 14, page  4 */ {id: 28, calories: 71.5, cosine: 0.90063635401934694, matchedQuantity: 71.048951048951054, protein: 1.7762237762237763, carbohydrate: 8.5258741258741271, fat: 1.0657342657342659, unit: UnitGram},
+			/* rank 15, page  5 */ {id: 4, calories: 197, cosine: 0.89910269944186316, matchedQuantity: 25.786802030456851, protein: 1.547208121827411, carbohydrate: 8.2517766497461924, fat: 1.2893401015228425, unit: UnitGram},
+			/* rank 16, page  5 */ {id: 17, calories: 21, cosine: 0.89365446758050615, matchedQuantity: 241.9047619047619, protein: 4.8380952380952378, carbohydrate: 2.4190476190476189, fat: 2.4190476190476189, unit: UnitMillilitre},
+			/* rank 17, page  5 */ {id: 25, calories: 21, cosine: 0.89083058438498153, matchedQuantity: 241.9047619047619, protein: 2.177142857142857, carbohydrate: 9.4342857142857142, fat: 0.4838095238095238, unit: UnitGram},
+			/* rank 18, page  6 */ {id: 14, calories: 45.5, cosine: 0.89068305815677939, matchedQuantity: 111.64835164835165, protein: 1.1164835164835165, carbohydrate: 7.8153846153846152, fat: 1.6747252747252748, unit: UnitMillilitre},
+			/* rank 19, page  6 */ {id: 16, calories: 238, cosine: 0.88687949567358415, matchedQuantity: 21.344537815126049, protein: 3.8420168067226887, carbohydrate: 2.134453781512605, fat: 2.9882352941176471, unit: UnitGram},
+			/* rank 20, page  6 */ {id: 12, calories: 97, cosine: 0.87142018678415756, matchedQuantity: 52.371134020618555, protein: 4.7134020618556702, carbohydrate: 2.0948453608247424, fat: 2.6185567010309279, unit: UnitGram},
+			/* rank 21, page  7 */ {id: 20, calories: 57, cosine: 0.86558395975041902, matchedQuantity: 89.122807017543863, protein: 7.1298245614035087, carbohydrate: 3.5649122807017544, fat: 0.89122807017543859, unit: UnitMillilitre},
+			/* rank 22, page  7 */ {id: 31, calories: 36.5, cosine: 0.86282339297222865, matchedQuantity: 139.17808219178082, protein: 1.3917808219178083, carbohydrate: 9.742465753424657, fat: 0.69589041095890414, unit: UnitMillilitre},
+			/* rank 23, page  7 */ {id: 38, calories: 174, cosine: 0.84544096634169896, matchedQuantity: 29.195402298850574, protein: 4.3793103448275863, carbohydrate: 1.7517241379310342, fat: 2.9195402298850577, unit: UnitGram},
+			/* rank 24, page  8 */ {id: 32, calories: 116, cosine: 0.84454787223358119, matchedQuantity: 43.793103448275865, protein: 0.43793103448275866, carbohydrate: 4.3793103448275863, fat: 3.5034482758620693, unit: UnitGram},
+			/* rank 25, page  8 */ {id: 8, calories: 56.5, cosine: 0.82801835989513983, matchedQuantity: 89.911504424778755, protein: 0.89911504424778754, carbohydrate: 10.789380530973451, fat: 0.44955752212389377, unit: UnitGram},
+			/* rank 26, page  8 */ {id: 37, calories: 44.599999999999994, cosine: 0.81517565841487349, matchedQuantity: 113.90134529147984, protein: 0.79730941704035885, carbohydrate: 11.390134529147984, fat: 0.22780269058295971, unit: UnitMillilitre},
+			/* rank 27, page  9 */ {id: 22, calories: 300, cosine: 0.8008680059623664, matchedQuantity: 16.933333333333334, protein: 3.7253333333333334, carbohydrate: 1.3546666666666667, fat: 3.3866666666666667, unit: UnitGram},
+			/* rank 28, page  9 */ {id: 11, calories: 61.799999999999997, cosine: 0.78371386182773795, matchedQuantity: 82.200647249190936, protein: 9.0420711974110031, carbohydrate: 3.2880258899676376, fat: 0.16440129449838189, unit: UnitGram},
+			/* rank 29, page  9 */ {id: 9, calories: 45.299999999999997, cosine: 0.78042430215501002, matchedQuantity: 112.14128035320088, protein: 0.11214128035320088, carbohydrate: 12.335540838852099, fat: 0.11214128035320088, unit: UnitMillilitre},
+			/* rank 30, page 10 */ {id: 27, calories: 156, cosine: 0.65331633757277108, matchedQuantity: 32.564102564102562, protein: 3.5820512820512818, carbohydrate: 0.32564102564102559, fat: 3.9076923076923071, unit: UnitGram},
+			/* rank 31, page 10 */ {id: 7, calories: 239, cosine: 0.63488585980185142, matchedQuantity: 21.255230125523013, protein: 5.5263598326359826, carbohydrate: 0, fat: 3.1882845188284521, unit: UnitGram},
+			/* rank 32, page 10 */ {id: 6, calories: 234, cosine: 0.63400444006631873, matchedQuantity: 21.70940170940171, protein: 5.861538461538462, carbohydrate: 0, fat: 3.0393162393162396, unit: UnitGram},
+			/* rank 33, page 11 */ {id: 5, calories: 156.40000000000001, cosine: 0.58072988739794151, matchedQuantity: 32.48081841432225, protein: 10.069053708439897, carbohydrate: 0, fat: 1.1693094629156011, unit: UnitGram},
+			/* rank 34, page 11 */ {id: 23, calories: 134, cosine: 0.56810073866781585, matchedQuantity: 37.910447761194028, protein: 10.994029850746267, carbohydrate: 0, fat: 0.75820895522388054, unit: UnitGram},
+			/* rank 35, page 11 */ {id: 18, calories: 742, cosine: 0.32994690745915994, matchedQuantity: 6.8463611859838274, protein: 0.034231805929919139, carbohydrate: 0.034231805929919139, fat: 5.614016172506739, unit: UnitGram},
+			/* rank 36, page 12 */ {id: 19, calories: 821.69999999999993, cosine: 0.32191138998982521, matchedQuantity: 6.1823049774857006, protein: 0, carbohydrate: 0, fat: 5.6444444444444448, unit: UnitMillilitre},
 		},
 	},
 }
 
-// setupSubstituteFixture creates the disposable database, runs the real
-// setup command against it, grants the runtime role catalog SELECT exactly
-// as the local deployment setup does, connects the SELECT-only runtime
-// credential with a statement tracer, and builds a Find Substitute Page
-// Module over that connection. It returns the Module, the tracer, the
-// embedded SELECT text, and the schema-owner connection (for owner-made
-// fixture changes, ARCH-016).
 func setupSubstituteFixture(t *testing.T) (db *testdb.DB, module *FindSubstitutePage, tracer *stmtTracer, wantSQL string, owner *pgx.Conn) {
 	t.Helper()
 	db = testdb.NewDB(t)
@@ -285,7 +230,6 @@ func setupSubstituteFixture(t *testing.T) (db *testdb.DB, module *FindSubstitute
 	return db, module, tracer, wantSQL, owner
 }
 
-// pageIDs returns the ordered Food Object IDs of the page items.
 func pageIDs(page *Page) []int32 {
 	ids := make([]int32, len(page.Items))
 	for i, item := range page.Items {
@@ -294,7 +238,6 @@ func pageIDs(page *Page) []int32 {
 	return ids
 }
 
-// assertPageIDs checks the exact ordered page ID sequence.
 func assertPageIDs(t *testing.T, page *Page, want ...int32) {
 	t.Helper()
 	if len(page.Items) != len(want) {
@@ -307,8 +250,6 @@ func assertPageIDs(t *testing.T, page *Page, want ...int32) {
 	}
 }
 
-// assertNearEqual checks one full-precision expectation with ISSUE-005's
-// absolute 1e-12 tolerance, abs(got - want) <= 1e-12.
 func assertNearEqual(t *testing.T, name string, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > nearEqual {
@@ -316,14 +257,6 @@ func assertNearEqual(t *testing.T, name string, got, want float64) {
 	}
 }
 
-// assertProjectedItem checks that one page item carries the final display
-// projection of the independently recorded full-precision candidate
-// expectation (task 17, REQ-039): the whole Matched Quantity in the
-// candidate base unit, the protein, carbohydrate, and fat scaled to the
-// unrounded Matched Quantity and rounded to 0.1 g, and the whole similarity
-// percentage. The full-precision expectation is projected through the
-// private production helpers, which are themselves pinned to exact boundary
-// literals by TestSubstituteProjectionIntegration.
 func assertProjectedItem(t *testing.T, item SubstituteItem, want wantCandidate) {
 	t.Helper()
 	wantMQ := int64(math.Round(want.matchedQuantity))
@@ -352,11 +285,6 @@ func assertProjectedItem(t *testing.T, item SubstituteItem, want wantCandidate) 
 	}
 }
 
-// assertInputMacronutrients checks the ISSUE-010 input macronutrients of one
-// page: the protein, carbohydrate, and fat of the Substitution Input scaled
-// to its committed base quantity (per-Nutrition-Basis values times
-// baseQuantity / 100) and projected to 0.1 g by the same half-up display
-// rule as the result cards.
 func assertInputMacronutrients(t *testing.T, page *Page, protein, carbohydrate, fat float64) {
 	t.Helper()
 	got := page.InputMacronutrients
@@ -365,10 +293,6 @@ func assertInputMacronutrients(t *testing.T, page *Page, protein, carbohydrate, 
 	}
 }
 
-// assertInputCalories checks the REQ-078 input calories of one page: the
-// whole display calories of the Substitution Input at the committed quantity,
-// derived from full-precision macronutrients (4p + 4c + 9f) and rounded to a
-// whole kcal.
 func assertInputCalories(t *testing.T, page *Page, calories int64) {
 	t.Helper()
 	if page.InputCalories != calories {
@@ -376,12 +300,6 @@ func assertInputCalories(t *testing.T, page *Page, calories int64) {
 	}
 }
 
-// assertBitIdenticalTie verifies, through the private production cosine
-// helper, that two tie candidates have bit-identical full-precision
-// similarity to the tie input (REQ-035). The item projection no longer
-// exposes the unrounded similarity, so the test re-derives it from a fresh
-// request-local catalog snapshot that includes the isolated tie fixtures
-// inserted by the caller.
 func assertBitIdenticalTie(t *testing.T, module *FindSubstitutePage, ctx context.Context, inputID, aID, bID int32) {
 	t.Helper()
 	profiles := loadProfiles(t, module, ctx)
@@ -396,9 +314,6 @@ func assertBitIdenticalTie(t *testing.T, module *FindSubstitutePage, ctx context
 	}
 }
 
-// loadProfiles performs one fresh catalog read through the real private
-// Catalog Loader on the runtime connection and returns every Food Object's
-// Macro Profile keyed by stable ID.
 func loadProfiles(t *testing.T, module *FindSubstitutePage, ctx context.Context) map[int32]macroProfile {
 	t.Helper()
 	objects, err := module.loader.load(ctx)
@@ -412,29 +327,6 @@ func loadProfiles(t *testing.T, module *FindSubstitutePage, ctx context.Context)
 	return profiles
 }
 
-// TestFindSubstitutePageIntegration exercises the concrete Find Substitute
-// Page Run operation and the fresh Catalog Loader against real PostgreSQL
-// through the SELECT-only runtime credential (P11-G1): the three designated
-// seeded inputs (Pizza Margherita at one Serving, Chicken breast at 100 g,
-// Milk at 100 ml) traverse every page and assert the complete fixture ID
-// sequence, every documented full-precision similarity, calories, and Matched
-// Quantity, exact eligible counts, page sizes, echoed indices, hasMore, and one
-// fresh SELECT per request (P11-G2, REQ-034, REQ-072). Every traversed page
-// and concatenated result sequence excludes the input and its Food Family and
-// contains no duplicate Food Object ID (P11-G3, REQ-032, REQ-033, REQ-042).
-// Ordering follows decreasing full-precision similarity; identical-similarity
-// ties follow the pinned English collation and stable ID; every Run executes
-// exactly one fresh embedded SELECT and no mutating statement; and no
-// derived value is persisted. Macro Profiles loaded by the real private
-// Catalog Loader are passed directly to the private production calorie,
-// cosine, and Matched Quantity helpers and compared with independently
-// recorded full-precision expectations within the absolute 1e-12 tolerance.
-// The ISSUE-010 input macronutrients of the committed Substitution Input
-// quantity are asserted for 1 serving, 100 g, 100 ml, and changed accepted
-// quantities — including an exact-half 0.75 g case that projects half-up to
-// 0.8 g — with the ranked result IDs and order unchanged (task 33, REQ-028).
-// The zero-result contract on page 0 and out-of-range rejections for the first
-// page after last page and math.MaxInt32 are verified with single fresh SELECTs.
 func TestFindSubstitutePageIntegration(t *testing.T) {
 	_, module, tracer, wantSQL, owner := setupSubstituteFixture(t)
 	ctx := context.Background()
@@ -453,7 +345,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	profiles := loadProfiles(t, module, ctx)
 	excludedByInput := map[int32][]int32{1: {1, 2}, 5: {5}, 10: {10}}
 
-	// Traverse every page for the three designated seeded inputs (P11-G2, P11-G3, REQ-034, REQ-072).
 	for _, want := range wantSubstituteInputs {
 		totalCandidates := len(want.candidates)
 		totalPages := (totalCandidates + pageSize - 1) / pageSize
@@ -495,14 +386,12 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 				pageSeen[item.FoodObjectID] = true
 				concatenatedIDs = append(concatenatedIDs, item.FoodObjectID)
 
-				// Input and Food Family exclusion on traversed page (REQ-032, REQ-033)
 				for _, excludedID := range excludedByInput[want.inputID] {
 					if item.FoodObjectID == excludedID {
 						t.Fatalf("input %d, page %d: excluded Food Object %d appears in page items", want.inputID, p, excludedID)
 					}
 				}
 
-				// Full-precision calculation assertions (REQ-029, REQ-030, REQ-031, REQ-040, REQ-072)
 				candProfile := profiles[cand.id]
 				gotCosine := cosineSimilarity(inputProfile, candProfile)
 				gotCalories := calories(candProfile)
@@ -514,7 +403,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			}
 		}
 
-		// Concatenated result sequence: exact ID sequence, all unique IDs, no excluded IDs (P11-G3, REQ-032, REQ-033, REQ-042)
 		if len(concatenatedIDs) != totalCandidates {
 			t.Fatalf("input %d: concatenated sequence length %d, want %d", want.inputID, len(concatenatedIDs), totalCandidates)
 		}
@@ -534,7 +422,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			}
 		}
 
-		// First page after last page: returns 422 PAGE_OUT_OF_RANGE with pageIndex after 1 SELECT
 		firstAfterLast := int32(totalPages)
 		tracer.reset()
 		outPage, err := module.Run(ctx, SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity}, firstAfterLast)
@@ -544,7 +431,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		assertStableFailure(t, err, CodePageOutOfRange, "pageIndex")
 		tracer.assertSingleSelect(t, wantSQL)
 
-		// math.MaxInt32 page: returns 422 PAGE_OUT_OF_RANGE with pageIndex after 1 SELECT
 		tracer.reset()
 		maxPage, err := module.Run(ctx, SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity}, math.MaxInt32)
 		if maxPage != nil {
@@ -553,7 +439,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		assertStableFailure(t, err, CodePageOutOfRange, "pageIndex")
 		tracer.assertSingleSelect(t, wantSQL)
 
-		// Negative page: returns 422 INVALID_PAGE_INDEX with pageIndex before catalog load (0 statements)
 		tracer.reset()
 		negPage, err := module.Run(ctx, SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity}, -1)
 		if negPage != nil {
@@ -565,7 +450,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 	}
 
-	// Full-precision helpers for all seeded catalog rows (REQ-029)
 	for id, want := range wantCalories {
 		profile, ok := profiles[id]
 		if !ok {
@@ -574,7 +458,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		assertNearEqual(t, "calories(profile 1)", calories(profile), want)
 	}
 
-	// ISSUE-010 input macronutrients (task 33)
 	for _, want := range wantSubstituteInputs {
 		page := run(SubstituteInput{FoodObjectID: want.inputID, Quantity: want.quantity}, 0)
 		profile := profiles[want.inputID]
@@ -594,9 +477,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 	}
 
-	// Designated quantities, exact projected values: Pizza Margherita at
-	// 1 serving (350 g) = 35.0 / 105.0 / 35.0, Chicken breast at 100 g =
-	// 31.0 / 0.0 / 3.6, and Milk at 100 ml = 3.4 / 4.8 / 2.0.
 	oneServing := run(SubstituteInput{FoodObjectID: 1, Quantity: FoodQuantity{Value: 1, Unit: UnitServing}}, 0)
 	assertInputMacronutrients(t, oneServing, 35.0, 105.0, 35.0)
 	assertInputCalories(t, oneServing, 875)
@@ -607,11 +487,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	assertInputMacronutrients(t, hundredMillilitres, 3.4, 4.8, 2.0)
 	assertInputCalories(t, hundredMillilitres, 51)
 
-	// Changed accepted quantities of the same inputs: Pizza Margherita at
-	// 100 g = 10.0 / 30.0 / 10.0 and at 2 servings (700 g) = 70.0 / 210.0 /
-	// 70.0, Chicken breast at 200 g = 62.0 / 0.0 / 7.2, and Milk at 250 ml
-	// = 8.5 / 12.0 / 5.0. The ranked result IDs and order stay exactly the
-	// designated ones (REQ-028).
 	changed := []struct {
 		input    SubstituteInput
 		protein  float64
@@ -632,31 +507,16 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		assertPageIDs(t, page, tc.wantIDs...)
 	}
 
-	// Exact-half projection evidence: Butter (ID 18) at 150 g scales protein
-	// 0.5 × 1.5 = 0.75 and carbohydrate 0.5 × 1.5 = 0.75, whose 0.05 digit
-	// is an exact half that rounds up to 0.8 by the half-up display rule,
-	// and fat 82 × 1.5 = 123.0. The changed quantity leaves the ranked IDs
-	// and order unchanged.
 	butter := run(SubstituteInput{FoodObjectID: 18, Quantity: FoodQuantity{Value: 150, Unit: UnitGram}}, 0)
 	assertInputMacronutrients(t, butter, 0.8, 0.8, 123.0)
 	assertInputCalories(t, butter, 1113)
 
-	// No mutation or derived-value persistence: the fresh Loader reads the
-	// unchanged seeded catalog (exactly 38 Food Objects), and the production
-	// schema stays limited to the ARCH-013 source fields — no derived
-	// calories, Nutritional Similarity, Matched Quantity, page, or rounded
-	// display columns. The per-Run tracer already proves exactly one fresh
-	// embedded SELECT and no mutating statement on the SELECT-only runtime
-	// connection.
 	if n := countFoodObjects(t, owner); n != 38 {
 		t.Fatalf("catalog has %d Food Objects after the Runs, want the unchanged 38 seeded rows", n)
 	}
 	wantColumns := []string{"id", "names", "physical_state", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key"}
 	assertFoodObjectColumns(t, owner, wantColumns)
 
-	// Tie order (REQ-035): the schema owner inserts isolated tie fixtures —
-	// artificial equal-similarity rows kept outside the production seed
-	// (ISSUE-002, ARCH-018 quality constraints).
 	insertTieObject := func(id int32, en, pl string, protein, carbohydrate, fat float64) {
 		t.Helper()
 		if _, err := owner.Exec(ctx,
@@ -667,10 +527,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 	}
 
-	// Stable-ID tie: two candidates with identical Macro Profiles and
-	// identical localized names have bit-identical similarity, so the pinned
-	// English collation cannot separate them and the stable Food Object ID
-	// decides: 44 before 45.
 	insertTieObject(43, "Tie input", "Wprowadzenie wiazania", 10, 20, 5)
 	insertTieObject(44, "Tie duplicate", "Duplikat wiazania", 10, 20, 5)
 	insertTieObject(45, "Tie duplicate", "Duplikat wiazania", 10, 20, 5)
@@ -690,8 +546,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		t.Fatalf("identical-name tie ordered as %v, want [44 45] by stable Food Object ID", pageIDs(idTie)[:2])
 	}
 
-	// English-name tie: two candidates with identical Macro Profiles but
-	// different English names break by the pinned English collation.
 	insertTieObject(53, "Tie zulu input", "Wprowadzenie zulu", 4, 6, 8)
 	insertTieObject(54, "Tie zulu", "Zulu wiazania", 4, 6, 8)
 	insertTieObject(55, "Tie alpha", "Alfa wiazania", 4, 6, 8)
@@ -712,7 +566,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			pageIDs(nameTie)[:2])
 	}
 
-	// Raw stored-name collation (REQ-035, ARCH-018)
 	insertTieObject(66, "Tie case input", "Wprowadzenie wielkosci liter", 2, 2, 2)
 	insertTieObject(67, "Tie case", "Wielkosc liter", 2, 2, 2)
 	insertTieObject(68, "tie case", "wielkosc liter", 2, 2, 2)
@@ -753,9 +606,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 			pageIDs(spaceTie)[:2])
 	}
 
-	// Zero-result contract on page 0: an input with zero eligible candidates
-	// returns page 0 with totalEligibleCount 0, hasMore false, and zero items.
-	// Nonzero pages return PAGE_OUT_OF_RANGE with pageIndex.
 	insertTieObject(95, "Zero result input", "Wprowadzenie zero wynikow", 10, 20, 5)
 	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id) VALUES (99)"); err != nil {
 		t.Fatalf("owner insert food_families 99: %v", err)
@@ -785,7 +635,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	assertStableFailure(t, err, CodePageOutOfRange, "pageIndex")
 	tracer.assertSingleSelect(t, wantSQL)
 
-	// Candidate-calorie overflow classification (ARCH-018, ISSUE-005)
 	runExpectInternalError := func(input SubstituteInput) {
 		t.Helper()
 		tracer.reset()
@@ -803,7 +652,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	insertTieObject(91, "Largest calories candidate", "Kandydat o najwiekszej kalorycznosci", math.MaxFloat64, 0, 0)
 	runExpectInternalError(SubstituteInput{FoodObjectID: 90, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
 
-	// Finite-boundary classification (ARCH-018, ISSUE-005)
 	insertTieObject(88, "Subnormal candidate", "Subnormalny kandydat", math.SmallestNonzeroFloat64, 0, 0)
 	runExpectInternalError(SubstituteInput{FoodObjectID: 43, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
 
@@ -817,8 +665,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	runExpectInternalError(SubstituteInput{FoodObjectID: 86, Quantity: FoodQuantity{Value: 100, Unit: UnitGram}})
 }
 
-// countFoodObjects returns the number of Food Object rows on the owner
-// connection.
 func countFoodObjects(t *testing.T, owner *pgx.Conn) int {
 	t.Helper()
 	var n int
@@ -828,10 +674,6 @@ func countFoodObjects(t *testing.T, owner *pgx.Conn) int {
 	return n
 }
 
-// assertFoodObjectColumns checks that food_objects carries exactly the
-// ARCH-013 source columns in ordinal order — no derived calories,
-// Nutritional Similarity, Matched Quantity, page, or rounded display
-// columns (ARCH-013, task 16).
 func assertFoodObjectColumns(t *testing.T, owner *pgx.Conn, want []string) {
 	t.Helper()
 	rows, err := owner.Query(context.Background(), `SELECT column_name FROM information_schema.columns

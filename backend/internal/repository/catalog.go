@@ -1,43 +1,4 @@
-// Package repository implements the private concrete PostgreSQL Catalog
-// Loader (ARCH-006): one fresh embedded SELECT per operation, executed
-// through pgx from SQL colocated under backend/internal/repository/sql/,
-// mapping rows to private Food Object domain values, validating the ARCH-013
-// catalog invariants, and classifying failures as storage or
-// catalog-invariant. The concrete loader, its constructor and load
-// operation, the mapped catalog and domain values, the error classification
-// type and constants, and the state constants are all private to this
-// package; the Module exposes no exported repository interface, fake
-// Adapter, runtime cache, SQL ranking, automatic retry, or derived-value
-// persistence.
-//
-// The package also implements the concrete Suggest Food Objects Module
-// (ARCH-004). Its one Run operation validates and normalizes a raw Search
-// Query, ranks the request-local snapshot loaded through the private Loader
-// by exact, full-name-prefix, substring, and fallback match tier, then by raw
-// code-point Levenshtein distance, the ISSUE-004-pinned active-language
-// collation, and stable Food Object ID, and returns exactly five distinct
-// suggestions carrying both localized names and the backend-derived default
-// Food Quantity. The Module's exported surface is the concrete Suggest type
-// and its domain values and stable failure codes. The normalization,
-// matching, distance, and ranking internals stay private, and no generated
-// transport value enters the Module.
-//
-// The package also implements the concrete Find Substitute Page Module
-// (ARCH-005). Its one Run operation validates the Food Object ID, page
-// index, and Food Quantity syntax, converts the validated Substitution
-// Input Food Quantity to its base unit, derives calories as 4p + 4c + 9f,
-// computes the full-precision cosine Nutritional Similarity and
-// equal-calorie Matched Quantity of every eligible Substitution candidate,
-// excludes the input and its Food Family, orders the candidates by
-// decreasing unrounded similarity, the ISSUE-004-pinned English collation,
-// and stable Food Object ID, and returns the requested page with total
-// eligible count, hasMore, and zero to three unique items; page 0 is valid
-// when zero eligible Substitutes exist, and a nonzero page whose first rank
-// does not exist returns PAGE_OUT_OF_RANGE. The Module's exported surface
-// is the concrete FindSubstitutePage type, its domain values, and its
-// stable failure codes; the calorie, cosine, and Matched Quantity
-// calculations and the ranking internals stay private, and no generated
-// transport value enters the Module.
+// Package repository loads and validates food catalog data.
 package repository
 
 import (
@@ -53,27 +14,17 @@ import (
 	sqlfiles "obiad/backend/internal/repository/sql"
 )
 
-// catalogSelectPath is the embedded persistence SELECT the loader executes.
 const catalogSelectPath = "catalog/load_food_objects.sql"
 
-// physicalState is the ARCH-013 Physical State of a Food Object: solid or
-// liquid. It determines the Nutrition Basis (REQ-007).
+// physicalState identifies whether quantities use grams or millilitres.
 type physicalState string
 
 const (
-	// stateSolid is the Physical State whose Nutrition Basis is 100 g.
-	stateSolid physicalState = "solid"
-	// stateLiquid is the Physical State whose Nutrition Basis is 100 ml.
+	stateSolid  physicalState = "solid"
 	stateLiquid physicalState = "liquid"
 )
 
-// foodObject is one validated Food Object domain value mapped from one
-// seeded catalog row (ARCH-013). The fields are exactly the ARCH-013 source
-// fields: stable ID, required localized names, Physical State, finite
-// nonnegative Macro Profile, one optional positive Serving, one optional
-// Food Family reference, and one optional opaque image key. Derived values
-// (calories, Nutritional Similarities, Matched Quantities, page data,
-// rounded display values) are never stored and never loaded.
+// foodObject stores one validated catalog row.
 type foodObject struct {
 	id            int32
 	names         LocalizedNames
@@ -86,60 +37,35 @@ type foodObject struct {
 	imageKey      *string
 }
 
-// kind classifies a failed catalog load (ARCH-006): storage or
-// catalog-invariant.
+// kind classifies catalog load failures.
 type kind string
 
 const (
-	// kindStorage reports that the catalog could not be read: PostgreSQL was
-	// unreachable, the SELECT failed (for example a missing table or a
-	// revoked read grant), or the row stream broke. The catalog data itself
-	// was never observed.
 	kindStorage kind = "storage"
 
-	// kindInvariant reports that PostgreSQL returned rows that violate the
-	// ARCH-013 catalog invariants: a nonpositive ID, missing or empty
-	// localized names, an unknown Physical State, a nonfinite or negative
-	// Macro Profile value, an all-zero Macro Profile, a nonpositive or
-	// nonfinite Serving, a Serving whose whole-number allowed maximum (the
-	// floor of 100000 divided by the stored Serving base quantity,
-	// ISSUE-010) is zero or outside the generated int32 display range, a
-	// nonpositive Food Family reference, or an empty image key.
 	kindInvariant kind = "invariant"
 )
 
-// String returns the stable classification name.
 func (k kind) String() string { return string(k) }
 
-// loadError is a classified catalog load failure (ARCH-006). It
-// distinguishes storage failures — PostgreSQL is unreachable or the read
-// fails — from catalog-invariant failures — the returned rows do not
-// satisfy the ARCH-013 structure contract. err holds the underlying cause.
+// loadError records a catalog load failure.
 type loadError struct {
 	kind kind
 	err  error
 }
 
-// Error implements error.
 func (e *loadError) Error() string {
 	return fmt.Sprintf("catalog %s failure: %v", e.kind, e.err)
 }
 
-// Unwrap returns the underlying cause.
 func (e *loadError) Unwrap() error { return e.err }
 
-// loader is the private concrete PostgreSQL Catalog loader (ARCH-006). Each
-// load operation executes one fresh embedded SELECT through pgx from SQL
-// colocated under backend/internal/repository/sql/, maps rows to private Food
-// Object values, validates the ARCH-013 catalog invariants, and classifies
-// failures as storage or catalog-invariant. The loader holds no runtime
-// cache, performs no automatic retry, and never mutates.
+// loader reads a fresh catalog snapshot for each request.
 type loader struct {
 	conn      *pgx.Conn
 	selectSQL string
 }
 
-// newLoader returns a loader that reads the catalog through conn.
 func newLoader(conn *pgx.Conn) (*loader, error) {
 	sqlText, err := loadCatalogSelect()
 	if err != nil {
@@ -148,11 +74,7 @@ func newLoader(conn *pgx.Conn) (*loader, error) {
 	return &loader{conn: conn, selectSQL: sqlText}, nil
 }
 
-// load performs one fresh PostgreSQL read: it executes the embedded SELECT
-// exactly once, maps every row to a Food Object value, validates the ARCH-013
-// catalog invariants, and returns the request-local snapshot in ascending
-// stable ID order. A failure is classified as storage or catalog-invariant
-// (loadError.kind). load never caches, never retries, and never mutates.
+// load executes one fresh catalog SELECT.
 func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 	rows, err := l.conn.Query(ctx, l.selectSQL)
 	if err != nil {
@@ -188,8 +110,6 @@ func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 	return objects, nil
 }
 
-// loadCatalogSelect reads the embedded persistence SELECT from the catalog
-// SQL filesystem.
 func loadCatalogSelect() (string, error) {
 	b, err := fs.ReadFile(sqlfiles.Catalog, catalogSelectPath)
 	if err != nil {
@@ -198,8 +118,7 @@ func loadCatalogSelect() (string, error) {
 	return string(b), nil
 }
 
-// mapFoodObject maps one scanned row to a Food Object value after checking
-// every ARCH-013 catalog invariant.
+// mapFoodObject validates one catalog row.
 func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (foodObject, error) {
 	if id <= 0 {
 		return foodObject{}, fmt.Errorf("food object %d: ID must be positive", id)
@@ -220,13 +139,6 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	if serving != nil && !isPositiveFinite(*serving) {
 		return foodObject{}, fmt.Errorf("food object %d: Serving must be a positive finite number when present", id)
 	}
-	// ARCH-013, ISSUE-010: a stored Serving must also make the whole-number
-	// floor of 100000 divided by it a positive value that fits the generated
-	// int32 display range. The DB constraint accepts any positive finite
-	// Serving, so a Serving above 100000 (whose exact floor is zero) or one
-	// so small that the floor exceeds MaxInt32 is a catalog-invariant
-	// failure: it could never produce a valid allowed quantity, and the
-	// HTTP Adapter's int32 mapping must never wrap (task-33 repair).
 	if serving != nil && !servingMaximumIsRepresentable(*serving) {
 		return foodObject{}, fmt.Errorf("food object %d: Serving %v must make the whole-number maximum of 100000 divided by it a positive value no larger than the int32 display range", id, *serving)
 	}
@@ -249,10 +161,7 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	}, nil
 }
 
-// decodeNames validates and maps the localized-name JSONB value. The value
-// must be a JSON object with nonempty string values for the required "en"
-// and "pl" keys, mirroring the migration-0001 btrim semantics (ADR 0001,
-// REQ-006). Additional language keys are permitted and ignored.
+// decodeNames validates the required localized names.
 func decodeNames(rawJSON []byte) (LocalizedNames, error) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(rawJSON, &m); err != nil {
@@ -281,8 +190,7 @@ func decodeNames(rawJSON []byte) (LocalizedNames, error) {
 	return names, nil
 }
 
-// validateMacroProfile checks the finite, nonnegative, not-all-zero Macro
-// Profile invariant (REQ-010, ARCH-013).
+// validateMacroProfile enforces finite, nonnegative macros.
 func validateMacroProfile(id int32, protein, carbohydrate, fat float64) error {
 	for _, value := range []struct {
 		name  string
@@ -302,7 +210,7 @@ func validateMacroProfile(id int32, protein, carbohydrate, fat float64) error {
 	return nil
 }
 
-// isPositiveFinite reports whether v is strictly positive and finite.
+// isPositiveFinite reports whether v is positive and finite.
 func isPositiveFinite(v float64) bool {
 	return v > 0 && !math.IsInf(v, 0)
 }

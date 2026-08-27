@@ -1,36 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * Real-stack Interface Language initialization scenario (task 25;
- * ARCH-003, ARCH-012, ARCH-014, ARCH-022, REQ-056, ISSUE-006, ISSUE-007).
- *
- * `bun run test:e2e` runs these tests against the complete disposable stack
- * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
- * real setup command, the real Fiber process on the fixed loopback listener
- * 127.0.0.1:8080, and the optimized Vite preview on the strict port 4173.
- * The optimized build resolves the initial Interface Language before the
- * first render: an exact valid `en` or `pl` value under the
- * `obiad.interfaceLanguage` localStorage key wins (ARCH-014); otherwise the
- * first supported primary language in `navigator.languages` order is chosen
- * case-insensitively with English as the default (ARCH-012, REQ-056).
- *
- * The scenarios observe Polish on `pl-PL`, English on `en-US` and `de-DE`,
- * the first supported primary language in an ordered multi-language list,
- * valid saved `en` and `pl` values overriding the browser, and missing or
- * invalid saved values invoking browser resolution (P06-G1, P06-G2). Each
- * scenario also proves the first rendered Search label and placeholder use
- * the resolved dictionary, that browser-derived initialization performs no
- * storage write, and that startup performs no application API request
- * (P06-G3). The Interface Language control is one localized native dropdown
- * with fixed PL-then-EN options and the resolved active value.
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 
-/** The persisted Interface Language key (ARCH-014, ISSUE-007). */
 const STORAGE_KEY = "obiad.interfaceLanguage";
 
-/** The exact ISSUE-007 copy of the two supported dictionaries. */
 const COPY = {
   en: {
     label: "Search",
@@ -44,10 +17,6 @@ const COPY = {
   },
 } as const;
 
-/**
- * Overrides `navigator.languages` before the application scripts run, so an
- * ordered multi-language list can be simulated deterministically.
- */
 async function useBrowserLanguages(
   page: Page,
   languages: string[],
@@ -60,7 +29,6 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-/** Seeds the persisted preference before the application scripts run. */
 async function useStoredLanguage(page: Page, value: string): Promise<void> {
   await page.addInitScript(
     ([key, stored]) => {
@@ -70,11 +38,6 @@ async function useStoredLanguage(page: Page, value: string): Promise<void> {
   );
 }
 
-/**
- * Loads the application and asserts the resolved dictionary on the first
- * rendered Search copy and the localized native language dropdown, plus the
- * startup network contract.
- */
 async function assertInitialCopy(
   page: Page,
   language: "en" | "pl",
@@ -86,8 +49,6 @@ async function assertInitialCopy(
   await page.goto("/");
   await expect(page).toHaveTitle("Obiad");
 
-  // The first rendered Search label and placeholder use the resolved
-  // dictionary (P06-G3).
   const input = page.locator('input[type="search"]');
   await expect(input).toHaveCount(1);
   await expect(input).toHaveAttribute("placeholder", expected.placeholder);
@@ -95,8 +56,6 @@ async function assertInitialCopy(
   await expect(label).toHaveText(expected.label);
   await expect(input).toHaveAccessibleName(expected.label);
 
-  // The borderless native dropdown exposes the localized accessible name,
-  // fixed PL-then-EN options, and resolved active value.
   const languageSelect = page.getByRole("combobox", {
     name: expected.group,
   });
@@ -108,8 +67,6 @@ async function assertInitialCopy(
   await expect(options.nth(1)).toHaveText("EN");
   await expect(options.nth(1)).toHaveAttribute("value", "en");
 
-  // Startup performs no application API request; every request stays on the
-  // preview origin (ARCH-016, P06-G3).
   expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
     expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
@@ -118,7 +75,6 @@ async function assertInitialCopy(
   }
 }
 
-/** Asserts the current persisted value under the Interface Language key. */
 async function expectStored(page: Page, value: string | null): Promise<void> {
   const stored = await page.evaluate(
     (key) => window.localStorage.getItem(key),
@@ -131,7 +87,7 @@ test.describe("browser-derived Interface Language initialization", () => {
   test("renders Polish on pl-PL", async ({ page }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
     await assertInitialCopy(page, "pl");
-    // Browser-derived initialization performs no storage write.
+
     await expectStored(page, null);
   });
 
@@ -205,7 +161,7 @@ test.describe("missing and invalid saved values", () => {
     await useBrowserLanguages(page, ["pl-PL"]);
     await useStoredLanguage(page, "fr");
     await assertInitialCopy(page, "pl");
-    // The invalid value is ignored without rewriting it (ISSUE-007).
+
     await expectStored(page, "fr");
   });
 

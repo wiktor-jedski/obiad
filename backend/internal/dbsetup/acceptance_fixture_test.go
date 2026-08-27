@@ -21,9 +21,6 @@ type catalogCoverageCase struct {
 	eligibleCount int
 }
 
-// TestAcceptanceCatalogCoverage verifies the observable catalog produced by a
-// fresh database setup. It does not predict ranking, similarity, quantity, or
-// paging behavior owned by later application modules.
 func TestAcceptanceCatalogCoverage(t *testing.T) {
 	dbURL := testdb.NewDB(t).OwnerURL
 	runDBSetupCommand(t, dbURL)

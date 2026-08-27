@@ -42,6 +42,7 @@ playwright-report/
 ### Python ###
 __pycache__/
 
+.venv/
 
 ### Other ###
 *.log

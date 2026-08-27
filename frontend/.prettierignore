@@ -3,3 +3,4 @@ dist/
 test-results/
 playwright-report/
 src/client/
+tools/oxlint/anti-slop/**

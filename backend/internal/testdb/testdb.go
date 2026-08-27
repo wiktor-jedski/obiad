@@ -1,18 +1,4 @@
-// Package testdb provides reusable backend integration-test support for the
-// disposable PostgreSQL fixtures the architecture verification mechanism
-// (ARCH-022) requires: creating and cleaning up isolated databases plus the
-// schema-owner, SELECT-only runtime, and unprivileged login roles the local
-// deployment setup creates before dbsetup runs (ARCH-016, ISSUE-001).
-//
-// Each fixture database is uniquely named and gets its own role set with
-// per-run random passwords. The support applies the same embedded privilege
-// SQL the local deployment setup applies, so the tested privilege boundary is
-// exactly the deployed one. The database and all roles are dropped when the
-// test finishes, on success or failure. The admin connection comes from
-// OBIAD_TEST_ADMIN_DATABASE_URL or from libpq-style environment variables
-// (PGHOST, PGPORT, PGUSER, PGDATABASE) with the password supplied by
-// PGPASSWORD or ~/.pgpass; no credential is committed and tests skip when no
-// server is reachable.
+// Package testdb creates disposable PostgreSQL fixtures for integration tests.
 package testdb
 
 import (
@@ -34,11 +20,6 @@ import (
 
 const adminDatabaseURLEnv = "OBIAD_TEST_ADMIN_DATABASE_URL"
 
-// adminDatabaseURL returns the admin connection URL for the fixtures. The
-// credential is never committed: OBIAD_TEST_ADMIN_DATABASE_URL wins when set;
-// otherwise libpq-style environment variables (PGHOST, PGPORT, PGUSER,
-// PGDATABASE) shape a password-free URL and the password comes from PGPASSWORD
-// or the ~/.pgpass file.
 func adminDatabaseURL() string {
 	if u := os.Getenv(adminDatabaseURLEnv); u != "" {
 		return u
@@ -64,37 +45,20 @@ func adminDatabaseURL() string {
 	return u.String()
 }
 
-// DB is one disposable isolated database with the three login roles the local
-// deployment setup creates before dbsetup runs (ARCH-016, ISSUE-001): a
-// schema-owner role, a SELECT-only runtime role, and an unprivileged
-// CONNECT-only role. The database and all three roles are dropped when the
-// test finishes. The exported fields are the owner and runtime controls the
-// later fresh-snapshot, ranking-fixture, database-outage, and deadline
-// scenarios need: the owner URL (dbsetup and fixture writes), the runtime URL
-// (the later Fiber process), the runtime role name (catalog SELECT grants),
-// and the unprivileged role URL (the PUBLIC-revocation proof).
+// DB contains one disposable database and its login credentials.
 type DB struct {
-	// OwnerURL is the schema-owner connection URL: the real setup command
-	// (go run ./cmd/dbsetup) runs against it (ARCH-007).
+	// OwnerURL is the schema-owner connection URL.
 	OwnerURL string
-	// RuntimeURL is the SELECT-only runtime connection URL: the later Fiber
-	// process reads the catalog through it (ARCH-016).
+	// RuntimeURL is the read-only runtime connection URL.
 	RuntimeURL string
-	// RuntimeRole is the runtime role name; the schema owner grants catalog
-	// SELECT to it after dbsetup runs (GrantRuntimeCatalogRead).
+	// RuntimeRole is the runtime database role name.
 	RuntimeRole string
-	// AnonURL is the unprivileged CONNECT-only role URL that proves PUBLIC
-	// object-creation and temporary-table privileges are removed (ARCH-016).
+	// AnonURL is the unprivileged connection URL.
 	AnonURL string
 }
 
-// NewDB creates a uniquely named empty database plus the three login roles
-// the local deployment setup creates before dbsetup runs: a schema-owner
-// role, a SELECT-only runtime role, and an unprivileged CONNECT-only role
-// that proves the PUBLIC revocations (ARCH-016, ISSUE-001). The owner owns
-// the database; PUBLIC object-creation and temporary-table privileges are
-// removed before dbsetup runs. The database and all roles are dropped when
-// the test finishes, on success or failure.
+// NewDB creates a disposable database and its login roles.
+// It registers cleanup with t.
 func NewDB(t testing.TB) *DB {
 	t.Helper()
 	admin := adminDatabaseURL()
@@ -150,9 +114,6 @@ func NewDB(t testing.TB) *DB {
 		t.Fatalf("set database owner: %v", err)
 	}
 
-	// Remove PUBLIC object-creation and temporary-table privileges and grant
-	// the runtime role connection rights before dbsetup runs. The admin
-	// applies the same embedded SQL the local deployment setup applies.
 	applyPrivilegeSQL(t, connect(t, withDatabase(admin, dbName)),
 		"privileges/remove_public_privileges.sql",
 		map[string]string{
@@ -160,8 +121,6 @@ func NewDB(t testing.TB) *DB {
 			"__OBIAD_OWNER_USER__":   ownerRole,
 			"__OBIAD_RUNTIME_USER__": runtimeRole,
 		})
-	// The CONNECT-only role proves the PUBLIC revocations; the local
-	// deployment setup has no such role, so the fixture grants its CONNECT.
 	if _, err := adminConn.Exec(ctx, "GRANT CONNECT ON DATABASE "+dbName+" TO "+anonRole); err != nil {
 		t.Fatalf("grant anon role connect: %v", err)
 	}
@@ -175,17 +134,13 @@ func NewDB(t testing.TB) *DB {
 	}
 }
 
-// GrantRuntimeCatalogRead applies the embedded runtime_catalog_read.sql
-// grants as the schema owner, exactly as the local deployment setup does
-// after dbsetup runs (ARCH-016). owner must be connected with the
-// schema-owner credential.
+// GrantRuntimeCatalogRead grants runtime catalog read access.
 func (d *DB) GrantRuntimeCatalogRead(t testing.TB, owner *pgx.Conn) {
 	t.Helper()
 	applyPrivilegeSQL(t, owner, "privileges/runtime_catalog_read.sql",
 		map[string]string{"__OBIAD_RUNTIME_USER__": d.RuntimeRole})
 }
 
-// withDatabase returns url with its database path replaced by name.
 func withDatabase(raw string, name string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -195,7 +150,6 @@ func withDatabase(raw string, name string) string {
 	return u.String()
 }
 
-// withCredentials returns url with its userinfo replaced by user and password.
 func withCredentials(raw string, user string, password string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -205,9 +159,6 @@ func withCredentials(raw string, user string, password string) string {
 	return u.String()
 }
 
-// randomPassword returns a fresh 32-hex-character password from crypto/rand
-// for a disposable role. Passwords are generated per run, are never committed
-// or logged, and are useless after the disposable database is dropped.
 func randomPassword(t testing.TB) string {
 	t.Helper()
 	buf := make([]byte, 16)
@@ -217,14 +168,11 @@ func randomPassword(t testing.TB) string {
 	return hex.EncodeToString(buf)
 }
 
-// quoteLiteral quotes s as a PostgreSQL string literal.
 func quoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
-// isSQLIdentifier reports whether s is a safe PostgreSQL identifier
-// ([a-z_][a-z0-9_]*). The fixture generates every role and database name, so
-// the check is defense in depth: a placeholder can never inject SQL.
+// isSQLIdentifier accepts only generated safe identifiers.
 func isSQLIdentifier(s string) bool {
 	if s == "" {
 		return false
@@ -243,10 +191,7 @@ func isSQLIdentifier(s string) bool {
 	return true
 }
 
-// applyPrivilegeSQL reads one embedded privilege SQL file, substitutes its
-// identifier placeholders, and executes it on conn. The same files are
-// applied by the local deployment setup script, so the tested SQL is exactly
-// the deployed SQL.
+// applyPrivilegeSQL executes embedded privilege SQL.
 func applyPrivilegeSQL(t testing.TB, conn *pgx.Conn, path string, replacements map[string]string) {
 	t.Helper()
 	body, err := sqlmigrations.Privileges.ReadFile(path)
@@ -260,15 +205,11 @@ func applyPrivilegeSQL(t testing.TB, conn *pgx.Conn, path string, replacements m
 		}
 		replaced = strings.ReplaceAll(replaced, placeholder, value)
 	}
-	// Simple protocol so the multi-statement privilege file executes as one
-	// batch, like the migration runner does.
 	if _, err := conn.Exec(context.Background(), replaced, pgx.QueryExecModeSimpleProtocol); err != nil {
 		t.Fatalf("apply privilege SQL %s: %v", path, err)
 	}
 }
 
-// redactedURL returns raw with any userinfo removed so failure and skip
-// messages never disclose credentials.
 func redactedURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -278,7 +219,6 @@ func redactedURL(raw string) string {
 	return u.String()
 }
 
-// connect opens a database connection closed when the test finishes.
 func connect(t testing.TB, dbURL string) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), dbURL)

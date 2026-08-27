@@ -1,21 +1,5 @@
 package server
 
-// Integration tests for task 12 (ARCH-009, ARCH-016, ARCH-022): they require
-// a real PostgreSQL server. Each test creates its isolated disposable
-// database — plus the schema-owner, SELECT-only runtime, and unprivileged
-// login roles the local deployment setup creates before dbsetup runs
-// (ARCH-016, ISSUE-001) — through the shared testdb support
-// (obiad/backend/internal/testdb), runs the real setup command
-// (go run ./cmd/dbsetup) against it, grants the runtime role catalog SELECT
-// exactly as the local deployment setup does, then composes the real Fiber v3
-// application and serves it on an actual loopback listener (127.0.0.1:0, the
-// ISSUE-004 test-composition address) that real HTTP clients call. The
-// support drops the database and roles afterwards on success or failure. The
-// admin connection comes from OBIAD_TEST_ADMIN_DATABASE_URL or from
-// libpq-style environment variables (PGHOST, PGPORT, PGUSER, PGDATABASE) with
-// the password supplied by PGPASSWORD or ~/.pgpass; no credential is
-// committed and tests skip when no server is reachable.
-
 import (
 	"context"
 	"encoding/json"
@@ -41,7 +25,6 @@ import (
 	"obiad/backend/internal/testdb"
 )
 
-// moduleRoot walks up from the test working directory to the module root.
 func moduleRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -60,8 +43,6 @@ func moduleRoot(t *testing.T) string {
 	}
 }
 
-// runDBSetupCommand executes the real setup command against dbURL and returns
-// its combined output (ARCH-022: tests run the real setup command).
 func runDBSetupCommand(t *testing.T, dbURL string) string {
 	t.Helper()
 	cmd := exec.Command("go", "-C", moduleRoot(t), "run", "./cmd/dbsetup")
@@ -73,7 +54,6 @@ func runDBSetupCommand(t *testing.T, dbURL string) string {
 	return string(out)
 }
 
-// connect opens a database connection closed when the test finishes.
 func connect(t *testing.T, dbURL string) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), dbURL)
@@ -88,8 +68,6 @@ func connect(t *testing.T, dbURL string) *pgx.Conn {
 	return conn
 }
 
-// redactedURL returns raw with any userinfo removed so failure and skip
-// messages never disclose credentials.
 func redactedURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -99,9 +77,6 @@ func redactedURL(raw string) string {
 	return u.String()
 }
 
-// newSetupDB creates the disposable database, runs the real setup command
-// against it, and grants the runtime role catalog SELECT exactly as the local
-// deployment setup does after dbsetup runs (ARCH-016, ISSUE-001).
 func newSetupDB(t *testing.T) *testdb.DB {
 	t.Helper()
 	db := testdb.NewDB(t)
@@ -111,24 +86,11 @@ func newSetupDB(t *testing.T) *testdb.DB {
 	return db
 }
 
-// startServer composes the real Fiber application over the runtime pool and
-// starts an actual loopback listener on 127.0.0.1:0 (ISSUE-004 test
-// composition), discarding request logs. It returns the server base URL and
-// the pool. The listener is closed and the pool released when the test
-// finishes. Tests that must observe the structured request logs use
-// startServerWithLogger instead.
 func startServer(t *testing.T, runtimeURL string) (baseURL string, pool *pgxpool.Pool) {
 	t.Helper()
 	return startServerWithLogger(t, runtimeURL, slog.New(slog.DiscardHandler))
 }
 
-// startServerWithLogger composes the real Fiber application over the runtime
-// pool with the given request-log logger and starts an actual loopback
-// listener on 127.0.0.1:0 (ISSUE-004 test composition). Optional register
-// functions may add routes to the application before the listener starts
-// (used to force unexpected handler errors deterministically). It returns the
-// server base URL and the pool. The listener is closed and the pool released
-// when the test finishes.
 func startServerWithLogger(t *testing.T, runtimeURL string, logger *slog.Logger, register ...func(*fiber.App)) (baseURL string, pool *pgxpool.Pool) {
 	t.Helper()
 	app, pool, err := Compose(runtimeURL, logger)
@@ -162,8 +124,6 @@ func startServerWithLogger(t *testing.T, runtimeURL string, logger *slog.Logger,
 	return "http://" + ln.Addr().String(), pool
 }
 
-// getHealth performs a real GET /health request and returns the status, the
-// raw body, and the Content-Type header.
 func getHealth(t *testing.T, baseURL string) (status int, body string, contentType string) {
 	t.Helper()
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -183,9 +143,6 @@ func getHealth(t *testing.T, baseURL string) (status int, body string, contentTy
 	return resp.StatusCode, string(raw), resp.Header.Get("Content-Type")
 }
 
-// assertExactHealthResponse asserts the exact ready/unavailable contract
-// (ARCH-009): one status field, no configuration, credential, version, or
-// dependency details, delivered as JSON.
 func assertExactHealthResponse(t *testing.T, status int, body string, contentType string, wantStatus string) {
 	t.Helper()
 	if !strings.HasPrefix(contentType, "application/json") {
@@ -204,11 +161,6 @@ func assertExactHealthResponse(t *testing.T, status int, body string, contentTyp
 	}
 }
 
-// adminDatabaseURL returns the admin connection URL for dropping the
-// disposable database mid-test. The rules mirror the testdb support:
-// OBIAD_TEST_ADMIN_DATABASE_URL wins when set; otherwise libpq-style
-// environment variables (PGHOST, PGPORT, PGUSER, PGDATABASE) shape a
-// password-free URL and the password comes from PGPASSWORD or ~/.pgpass.
 func adminDatabaseURL() string {
 	if u := os.Getenv("OBIAD_TEST_ADMIN_DATABASE_URL"); u != "" {
 		return u
@@ -234,8 +186,6 @@ func adminDatabaseURL() string {
 	return u.String()
 }
 
-// isSQLIdentifier reports whether s is a safe PostgreSQL identifier
-// ([a-z_][a-z0-9_]*).
 func isSQLIdentifier(s string) bool {
 	if s == "" {
 		return false
@@ -254,7 +204,6 @@ func isSQLIdentifier(s string) bool {
 	return true
 }
 
-// databaseName returns the database name of a connection URL.
 func databaseName(t *testing.T, dbURL string) string {
 	t.Helper()
 	u, err := url.Parse(dbURL)
@@ -268,33 +217,21 @@ func databaseName(t *testing.T, dbURL string) string {
 	return name
 }
 
-// TestHealthHTTPIntegration verifies the unversioned GET /health endpoint
-// (ARCH-009) over an actual loopback Fiber listener backed by disposable
-// real PostgreSQL: 200 {"status":"ready"} while the runtime credential can
-// ping, 503 {"status":"unavailable"} after the database becomes unusable,
-// and no dependency details in either body (P03-G3).
 func TestHealthHTTPIntegration(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, _ := startServer(t, db.RuntimeURL)
 
-	// Ready: the runtime credential can ping PostgreSQL.
 	status, body, contentType := getHealth(t, baseURL)
 	if status != http.StatusOK {
 		t.Fatalf("GET /health status %d, want 200", status)
 	}
 	assertExactHealthResponse(t, status, body, contentType, "ready")
 
-	// Make the database unusable: the admin drops it, terminating every
-	// backend including the pool's connections. The runtime role survives,
-	// so any new connection attempt fails too.
 	adminConn := connect(t, adminDatabaseURL())
 	if _, err := adminConn.Exec(context.Background(), "DROP DATABASE "+databaseName(t, db.RuntimeURL)+" WITH (FORCE)"); err != nil {
 		t.Fatalf("drop disposable database: %v", err)
 	}
 
-	// Unavailable: both the first request (dead pooled connection) and a
-	// second request (reconnect refused) must report 503 with the exact
-	// unavailable body.
 	for i := 0; i < 2; i++ {
 		status, body, contentType := getHealth(t, baseURL)
 		if status != http.StatusServiceUnavailable {
@@ -304,16 +241,10 @@ func TestHealthHTTPIntegration(t *testing.T) {
 	}
 }
 
-// TestServerRuntimeConstraints verifies the ARCH-016 runtime constraints of
-// the composition over an actual loopback Fiber listener backed by disposable
-// real PostgreSQL: the pgx pool has zero minimum and four maximum connections
-// and is built only from the runtime URL, and the server binds loopback only
-// (production DefaultListenAddr and the actual test listener) (P03-G3).
 func TestServerRuntimeConstraints(t *testing.T) {
 	db := newSetupDB(t)
 	baseURL, pool := startServer(t, db.RuntimeURL)
 
-	// Zero-minimum, four-maximum pool.
 	if got := pool.Config().MinConns; got != 0 {
 		t.Fatalf("pool MinConns = %d, want 0", got)
 	}
@@ -321,8 +252,6 @@ func TestServerRuntimeConstraints(t *testing.T) {
 		t.Fatalf("pool MaxConns = %d, want 4", got)
 	}
 
-	// The pool is built only from the runtime URL: target database, role,
-	// password, host, and port match the runtime credential and nothing else.
 	runtimeURL, err := url.Parse(db.RuntimeURL)
 	if err != nil {
 		t.Fatalf("parse runtime URL: %v", err)
@@ -349,9 +278,6 @@ func TestServerRuntimeConstraints(t *testing.T) {
 		t.Fatalf("pool port %d, want %d from the runtime URL", cc.Port, wantPort)
 	}
 
-	// Loopback-only binding: the production bind constant is the
-	// ISSUE-004-resolved 127.0.0.1:8080, and the actual listener address is
-	// a loopback address, so no non-loopback listener exists.
 	addrHost, addrPort, err := net.SplitHostPort(DefaultListenAddr)
 	if err != nil {
 		t.Fatalf("DefaultListenAddr %q: %v", DefaultListenAddr, err)
@@ -370,8 +296,6 @@ func TestServerRuntimeConstraints(t *testing.T) {
 		t.Fatalf("actual listener address %q is not loopback", base.Hostname())
 	}
 
-	// The constrained pool must actually serve requests through the
-	// loopback listener with the runtime credential.
 	status, body, contentType := getHealth(t, baseURL)
 	if status != http.StatusOK {
 		t.Fatalf("GET /health status %d, want 200", status)

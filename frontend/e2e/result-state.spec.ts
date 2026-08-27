@@ -1,38 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * Real-stack result-state composition scenario (task 30; ARCH-001,
- * ARCH-002, ARCH-003, ARCH-011, ARCH-019, ARCH-020, ARCH-022, REQ-003,
- * REQ-044, REQ-061, REQ-062, ISSUE-008; P07-G1, P07-G3, P07-G4, P07-G16).
- *
- * `bun run test:e2e` runs these tests against the complete disposable stack
- * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
- * real setup command, the real Fiber process on the fixed loopback listener
- * 127.0.0.1:8080, and the optimized Vite preview on the strict port 4173.
- * Each scenario starts in a fresh unauthenticated browser context and runs
- * the complete anonymous pointer flow: it observes the unchanged empty-state
- * Search geometry, selects the seeded Pizza Margherita suggestion with a
- * pointer, and observes the root application's result-state composition —
- * one primary content column containing distinct Search, selected-input,
- * and result regions in that order; the Search field's top edge `64px`
- * from the viewport top; the approved vertical gaps (the new-search
- * spinner `12px` below Search while pending, then the selected-input and
- * result regions at `24px` intervals); the three result cards in three
- * equal desktop columns with Search geometrically above every card; and
- * every food-data request on the Vite origin under `/api` against the
- * seeded PostgreSQL catalog (REQ-002, REQ-003, REQ-044, REQ-061, REQ-062).
- */
-
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
-/** ISSUE-008: the Search field's top edge from the viewport top. */
 const SEARCH_TOP_PX = 64;
-/** ISSUE-008: the interval between the selected-input and result regions. */
+
 const REGION_GAP_PX = 24;
-/** ISSUE-006: the Search field vertical-center line, as a share of 100dvh. */
+
 const VERTICAL_CENTER_DVH = 0.45;
-/** REQ-036: a successful page-0 response renders exactly three cards. */
+
 const CARD_COUNT = 3;
 
 const COPY = {
@@ -40,10 +16,8 @@ const COPY = {
   listbox: "Suggestions",
 } as const;
 
-/** The seeded Pizza Margherita suggestion option id (task 27, REQ-020). */
 const PIZZA_MARGHERITA_OPTION_ID = "food-suggestion-option-1";
 
-/** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
   languages: string[],
@@ -56,11 +30,6 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-/**
- * Runs the complete anonymous pointer flow: fills the Search Query, waits
- * for the five seeded suggestions, selects Pizza Margherita with a pointer,
- * and waits for the successful result transition.
- */
 async function selectPizzaMargherita(page: Page): Promise<void> {
   const search = page.getByRole("combobox", { name: COPY.search });
   await search.fill("margherita");
@@ -75,19 +44,12 @@ async function selectPizzaMargherita(page: Page): Promise<void> {
   );
 }
 
-/**
- * Measures the empty-state Search geometry: the field's vertical center
- * must stay at `45%` of `100dvh` (ISSUE-006), proving task 30 retains the
- * existing empty-state geometry unchanged.
- */
 async function expectEmptyStateGeometry(page: Page): Promise<void> {
   const search = page.getByRole("combobox", { name: COPY.search });
-  const box = (await search.boundingBox()) as {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  const box = await search.boundingBox();
+  if (box === null) {
+    throw new Error("Empty-state Search has no bounding box");
+  }
   const dvhHeight = await page.evaluate(() => {
     const probe = document.createElement("div");
     probe.style.position = "absolute";
@@ -103,20 +65,9 @@ async function expectEmptyStateGeometry(page: Page): Promise<void> {
   ).toBeLessThanOrEqual(1);
 }
 
-/**
- * Asserts the desktop result-state region composition and geometry: one
- * primary column with the distinct Search, selected-input, and result
- * regions in that order; the Search field's top edge `64px` from the
- * viewport top; the `24px` vertical gaps between the regions; exactly
- * three cards in three equal columns; and Search geometrically above every
- * card (REQ-003, REQ-061, REQ-062, ISSUE-008).
- */
 async function expectResultStateComposition(page: Page): Promise<void> {
-  // One semantic primary content column (REQ-003, ARCH-001).
   await expect(page.locator("main")).toHaveCount(1);
 
-  // The distinct Search, selected-input, and result regions appear in that
-  // order inside the primary column (REQ-003).
   const regionSequence = await page.evaluate(() => {
     const regions = Array.from(
       document.querySelectorAll(
@@ -136,30 +87,30 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     "Pizza Margherita · 1 serving",
   );
 
-  // The Search field's top edge sits 64px from the viewport top (ISSUE-008).
   const search = page.getByRole("combobox", { name: COPY.search });
-  const searchBox = (await search.boundingBox()) as {
-    y: number;
-    height: number;
-  };
+  const searchBox = await search.boundingBox();
+  if (searchBox === null) {
+    throw new Error("Search field has no bounding box");
+  }
   expect(
     Math.abs(searchBox.y - SEARCH_TOP_PX),
     "the Search field's top edge is 64px from the viewport top",
   ).toBeLessThanOrEqual(1);
 
-  // The approved vertical gaps: the selected-input region starts 24px below
-  // the Search field and the result region 24px below the selected-input
-  // region (ISSUE-008).
-  const selectedBox = (await page
+  const selectedBox = await page
     .locator("[data-selected-input-region]")
-    .boundingBox()) as { y: number; height: number };
+    .boundingBox();
+  if (selectedBox === null) {
+    throw new Error("Selected-input region has no bounding box");
+  }
   expect(
     Math.abs(selectedBox.y - (searchBox.y + searchBox.height) - REGION_GAP_PX),
     "the selected-input region is 24px below the Search field",
   ).toBeLessThanOrEqual(1);
-  const resultBox = (await page
-    .locator("[data-result-region]")
-    .boundingBox()) as { y: number; height: number };
+  const resultBox = await page.locator("[data-result-region]").boundingBox();
+  if (resultBox === null) {
+    throw new Error("Result region has no bounding box");
+  }
   expect(
     Math.abs(
       resultBox.y - (selectedBox.y + selectedBox.height) - REGION_GAP_PX,
@@ -167,16 +118,17 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     "the result region is 24px below the selected-input region",
   ).toBeLessThanOrEqual(1);
 
-  // A successful three-item page renders exactly three equal card columns
-  // in ranked left-to-right order at the desktop viewport (REQ-036,
-  // REQ-062).
   const cards = page.locator("[data-result-card]");
   await expect(cards).toHaveCount(CARD_COUNT);
-  const cardBoxes = (await Promise.all(
-    Array.from({ length: CARD_COUNT }, (_, index) =>
-      cards.nth(index).boundingBox(),
-    ),
-  )) as Array<{ x: number; y: number; width: number; height: number }>;
+  const cardBoxes = await Promise.all(
+    Array.from({ length: CARD_COUNT }, async (_, index) => {
+      const box = await cards.nth(index).boundingBox();
+      if (box === null) {
+        throw new Error(`Result card ${index + 1} has no bounding box`);
+      }
+      return box;
+    }),
+  );
   for (let index = 1; index < CARD_COUNT; index += 1) {
     expect(
       Math.abs(cardBoxes[index].y - cardBoxes[0].y),
@@ -193,12 +145,8 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     );
   }
 
-  // Search is geometrically above every result card (REQ-061): the field's
-  // bottom edge is above the first card's top edge.
   expect(cardBoxes[0].y).toBeGreaterThan(searchBox.y + searchBox.height);
 
-  // The cards show seeded-catalog data: Pizza Margherita's rank 1 is the
-  // seeded Gyoza (result-cards spec: ranks [13, 29, 26]).
   await expect(cards.first().getByRole("heading")).toHaveText("Gyoza");
 }
 
@@ -213,25 +161,16 @@ test.describe("result state", () => {
 
     await page.goto("/");
 
-    // The existing empty-state Search geometry remains unchanged (ISSUE-006,
-    // REQ-060): the field's vertical center is still 45% of 100dvh before
-    // any selection.
     await expectEmptyStateGeometry(page);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "empty",
     );
 
-    // The complete anonymous pointer flow (REQ-001, REQ-020, REQ-022).
     await selectPizzaMargherita(page);
 
-    // The desktop result-state composition and geometry (REQ-003, REQ-061,
-    // REQ-062, ISSUE-008, P07-G3, P07-G4).
     await expectResultStateComposition(page);
 
-    // REQ-002: every food-data request stays on the Vite origin under
-    // `/api`; none reaches Fiber directly or a third-party host, and the
-    // data comes from the seeded PostgreSQL catalog through the real stack.
     const foodData = requestUrls.filter((url) => url.includes("/api/"));
     expect(foodData.length).toBeGreaterThanOrEqual(1);
     for (const url of foodData) {
@@ -248,9 +187,6 @@ test.describe("result state", () => {
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
 
-    // Hold the first Substitution Search POST at the browser boundary so
-    // the real Fiber and PostgreSQL response stays pending while the
-    // spinner-free Search geometry is measured (REQ-080, ISSUE-008).
     let postCount = 0;
     const { promise: firstGate, resolve: releaseFirst } =
       Promise.withResolvers<void>();
@@ -277,10 +213,16 @@ test.describe("result state", () => {
     await expect(page.locator("[data-selected-input-region]")).toBeVisible();
 
     const selectedGap = await page.evaluate(() => {
-      const input = document.getElementById("food-search") as HTMLElement;
-      const selected = document.querySelector(
-        "[data-selected-input-region]",
-      ) as HTMLElement;
+      const input = document.getElementById("food-search");
+      const selected = document.querySelector("[data-selected-input-region]");
+      if (
+        !(input instanceof HTMLElement) ||
+        !(selected instanceof HTMLElement)
+      ) {
+        throw new Error(
+          "Search and selected-input regions must be HTML elements",
+        );
+      }
       return (
         selected.getBoundingClientRect().top -
         input.getBoundingClientRect().bottom
@@ -291,10 +233,6 @@ test.describe("result state", () => {
       "the selected-input region starts 24px below Search",
     ).toBe(REGION_GAP_PX);
 
-    // Fulfillment completes the transition and the result region renders;
-    // the localized results heading is the active element after the
-    // successful page renders (REQ-083), replacing the superseded
-    // Search-focus success path (REQ-064).
     releaseFirst();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
@@ -312,7 +250,6 @@ test.describe("result state", () => {
     await page.goto("/");
     await selectPizzaMargherita(page);
 
-    // Centered selected-food card and centered substitutions heading (REQ-079)
     const selectedCard = page.locator("[data-selected-food-summary]");
     const selectedBox = (await selectedCard.boundingBox())!;
     const cardCenter = selectedBox.x + selectedBox.width / 2;
@@ -330,14 +267,12 @@ test.describe("result state", () => {
       "the substitutions heading is horizontally centered",
     ).toBeLessThanOrEqual(1);
 
-    // All three cards are visible
     const cards = page.locator("[data-result-card]");
     await expect(cards).toHaveCount(CARD_COUNT);
     for (let index = 0; index < CARD_COUNT; index += 1) {
       await expect(cards.nth(index)).toBeVisible();
     }
 
-    // No vertical scroll at 1920 x 1080 (REQ-079)
     const isScrollable = await page.evaluate(
       () =>
         document.documentElement.scrollHeight >
@@ -345,15 +280,12 @@ test.describe("result state", () => {
     );
     expect(isScrollable, "page has no vertical scrollbar").toBe(false);
 
-    // English calories on the selected card (REQ-078, P19-G5).
     await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
     await expect(page.locator("[data-input-calories]")).toHaveAttribute(
       "aria-label",
       "Calories",
     );
 
-    // REQ-058: switching the Interface Language updates interface and
-    // current Food Object accessibility text without another request.
     await page
       .getByRole("combobox", { name: "Interface language" })
       .selectOption("pl");
@@ -365,8 +297,6 @@ test.describe("result state", () => {
       "Kalorie",
     );
 
-    // A fresh search in Polish keeps the same active-language accessibility
-    // label (P19-G3, P19-G5).
     const searchPl = page.getByRole("combobox", { name: "Szukaj" });
     await searchPl.fill("margherita");
     const panelPl = page.getByRole("listbox", { name: "Podpowiedzi" });

@@ -1,37 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-/**
- * Real-stack pointer-selection and new-search transition scenario
- * (task 28, task 45; ARCH-001, ARCH-002, ARCH-003, ARCH-008, ARCH-010,
- * ARCH-011, ARCH-019, ARCH-020, ARCH-022, REQ-020, REQ-022, REQ-023,
- * REQ-024, REQ-080, REQ-083, ISSUE-005, ISSUE-008; P07-G8, P07-G9,
- * P07-G10, P07-G11, P07-G17, P07-G18, P07-G19).
- *
- * `bun run test:e2e` runs these tests against the complete disposable stack
- * started by `./e2e/launcher.ts`: disposable PostgreSQL 17 seeded by the
- * real setup command, the real Fiber process on the fixed loopback listener
- * 127.0.0.1:8080, and the optimized Vite preview on the strict port 4173.
- * The scenario starts in a fresh unauthenticated browser context and drives
- * real pointer activation: it selects the third displayed suggestion and
- * observes exactly one generated-client `POST /api/v1/substitutes/search`
- * whose body carries that option's Food Object ID, the unchanged default
- * quantity, and page index `0`; the successful page and the read-only
- * selected-input region identify the same Food Object with no second submit
- * action. Separate seeded Pizza Margherita, Chicken breast, and Milk flows
- * show the exact localized label and value, send `1 serving`, `100 g`, and
- * `100 ml`, and update the visible selected Food Object value when the
- * Interface Language changes. One controlled response fetched from real
- * Fiber and PostgreSQL stays pending at the browser boundary while no
- * spinner is rendered below Search; after fulfillment the localized
- * results heading becomes `document.activeElement` once the result page
- * renders (REQ-083), replacing the superseded Search-focus success path
- * (REQ-064). One adversarial network reconnect while results are visible
- * proves
- * the disabled TanStack Query's `refetchOnReconnect` path: exactly one
- * Substitution Search POST remains per selection (ARCH-019, REQ-022, task 28
- * repair; the remount half of the lifecycle coverage lives in the
- * component-integration suite).
- */
+import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const OPTION_COUNT = 5;
 
@@ -50,13 +18,6 @@ const COPY = {
   },
 } as const;
 
-/**
- * The deterministic seeded suggestion lists for the queries the scenario
- * drives (verified against the real Fiber process and the freshly seeded
- * PostgreSQL catalog; seed migration `0005_seed_food_catalog.sql`).
- * `foodObjectId` is the seeded stable ID and `name` is the localized name
- * the panel renders for the active Interface Language (REQ-013).
- */
 const SEEDED_SUGGESTIONS = {
   en: {
     chicken: [
@@ -92,15 +53,6 @@ const SEEDED_SUGGESTIONS = {
   },
 } as const;
 
-/**
- * The backend-derived default Food Quantities the suggestion response
- * carries for the seeded fixtures (verified against the real stack):
- * `1 serving` for Pizza Margherita, the `100 g` Nutrition Basis for the
- * solid Chicken breast and Butter, and the `100 ml` Nutrition Basis for the
- * liquid Milk (REQ-023, REQ-024). The scenarios additionally compare the
- * POST body against the default quantity observed in the real suggestion
- * response, proving the client sends it unchanged.
- */
 const SEEDED_DEFAULTS = {
   1: { value: 1, unit: "serving" },
   17: { value: 1, unit: "serving" },
@@ -109,12 +61,10 @@ const SEEDED_DEFAULTS = {
   18: { value: 100, unit: "g" },
 } as const;
 
-/** The stable option DOM id of one suggestion (suggestions.ts). */
 function optionId(foodObjectId: number): string {
   return `food-suggestion-option-${foodObjectId}`;
 }
 
-/** Overrides `navigator.languages` before the application scripts run. */
 async function useBrowserLanguages(
   page: Page,
   languages: string[],
@@ -127,20 +77,12 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-/** One observed generated-client Substitution Search POST. */
 interface SubstitutePost {
-  /** The parsed JSON request body (closed request object, ISSUE-005). */
-  body: Record<string, unknown>;
-  /** The HTTP status of the real-stack response, once it arrives. */
+  body: SubstituteSearchRequest;
+
   status: number | null;
 }
 
-/**
- * Records every generated-client `POST /api/v1/substitutes/search` request
- * and the status of its real-stack response. The scenario uses the observed
- * bodies to prove exactly one Substitution Search per selection with the
- * expected `foodObjectId`, unchanged quantity, and page `0` (REQ-022).
- */
 function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
@@ -149,7 +91,8 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
       request.url().includes("/api/v1/substitutes/search")
     ) {
       posts.push({
-        body: request.postDataJSON() as Record<string, unknown>,
+        // SAFETY: The request payload matches the generated API contract.
+        body: request.postDataJSON() as SubstituteSearchRequest,
         status: null,
       });
     }
@@ -169,12 +112,6 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   return posts;
 }
 
-/**
- * Records the `defaultQuantity` each Food Object suggestion response carries
- * so the scenarios can prove the POST quantity is unchanged (REQ-023,
- * REQ-024): the request body must equal exactly the default quantity the
- * real suggestion response returned for the clicked Food Object.
- */
 function trackSuggestionDefaults(
   page: Page,
 ): Map<number, { value: number; unit: string }> {
@@ -198,13 +135,6 @@ function trackSuggestionDefaults(
   return defaults;
 }
 
-/**
- * Asserts that the panel renders exactly the expected seeded suggestions in
- * ranked order with the stable option ids and the first option as the
- * active descendant (REQ-018, REQ-013). The full panel geometry and colors
- * belong to `search-suggestions.spec.ts`; here the list is a precondition
- * for pointer selection.
- */
 async function expectSuggestionPanel(
   page: Page,
   expected: readonly { foodObjectId: number; name: string }[],
@@ -230,15 +160,10 @@ async function expectSuggestionPanel(
   await expect(search).toHaveAttribute("aria-expanded", "true");
 }
 
-/** The read-only Substitution Input region (task 28). */
 function selectedInput(page: Page) {
   return page.locator("[data-selected-input]");
 }
 
-/**
- * Asserts the read-only Substitution Input region shows the exact localized
- * label and active `localized name · quantity unit` value (REQ-058).
- */
 async function expectSelectedInput(
   page: Page,
   copy: (typeof COPY)[keyof typeof COPY],
@@ -248,13 +173,6 @@ async function expectSelectedInput(
   await expect(selectedInput(page)).toContainText(value);
 }
 
-/**
- * Asserts that the Substitution Search POST body carries exactly the
- * clicked Food Object ID, the unchanged default quantity (both the seeded
- * default and the one the real suggestion response returned), and page `0`,
- * and that the real-stack response succeeded (REQ-020, REQ-022, REQ-023,
- * REQ-024, ISSUE-005).
- */
 async function expectSubstitutePost(
   posts: SubstitutePost[],
   foodObjectId: number,
@@ -268,13 +186,11 @@ async function expectSubstitutePost(
     quantity: expectedQuantity,
     pageIndex: 0,
   });
-  // The quantity is unchanged: it equals the default the real suggestion
-  // response returned for the same Food Object (REQ-023, REQ-024).
+
   await expect
     .poll(() => observedDefaults.get(foodObjectId))
     .toEqual(expectedQuantity);
-  // The real-stack response status arrives with the response event, which
-  // may follow the request event by a tick; poll instead of asserting once.
+
   await expect.poll(() => posts[0]?.status ?? null).toBe(200);
 }
 
@@ -289,8 +205,6 @@ test.describe("pointer substitution search", () => {
     await page.goto("/");
     const search = page.getByRole("combobox", { name: COPY.en.search });
 
-    // A normal Search Query opens the five seeded suggestions in the empty
-    // interaction state (task 27, REQ-012).
     await search.fill("chicken");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chicken, COPY.en);
     await expect(page.locator("main")).toHaveAttribute(
@@ -298,18 +212,13 @@ test.describe("pointer substitution search", () => {
       "empty",
     );
 
-    // Select the third displayed option (Polish chicken soup, Food Object
-    // 17) with a pointer (REQ-020, P07-G8).
     const options = page
       .getByRole("listbox", { name: COPY.en.listbox })
       .getByRole("option");
     await expect(options.nth(2)).toHaveText("Polish chicken soup");
     await expect(options.nth(2)).toHaveAttribute("id", optionId(17));
     await options.nth(2).click();
-    // The suggestion list closes while Search keeps focus and replaces the
-    // unfinished query with the selected active-language name; the
-    // interaction state moves through loadingNew to results (ARCH-002,
-    // ARCH-010, REQ-077).
+
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(search).toHaveValue("Polish chicken soup");
     await expect(search).not.toHaveAttribute("aria-activedescendant");
@@ -319,9 +228,6 @@ test.describe("pointer substitution search", () => {
       "results",
     );
 
-    // Exactly one generated-client POST with the third option's Food Object
-    // ID, the unchanged one-serving default, and page 0 (REQ-022, REQ-023,
-    // REQ-024, P07-G9, P07-G10).
     await expectSubstitutePost(
       posts,
       17,
@@ -329,12 +235,8 @@ test.describe("pointer substitution search", () => {
       observedDefaults,
     );
 
-    // The read-only Substitution Input retains the selected localized name
-    // and the returned default Food Quantity (ISSUE-008, REQ-023, REQ-024).
     await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
-    // Food Object: the POST body carries Food Object 17 and the region shows
-    // its name, with no second submit action (REQ-020, REQ-022, P07-G11).
     await page.waitForTimeout(400);
     expect(
       posts.length,
@@ -348,9 +250,6 @@ test.describe("pointer substitution search", () => {
     await useBrowserLanguages(page, ["en-US"]);
     const posts = trackSubstitutePosts(page);
 
-    // Hold the first Substitution Search POST at the browser boundary so the
-    // pending Search surface can be observed before the scenario releases
-    // the real Fiber and PostgreSQL response (REQ-080, P07-G17).
     let postCount = 0;
     const { promise: firstGate, resolve: releaseFirst } =
       Promise.withResolvers<void>();
@@ -373,26 +272,16 @@ test.describe("pointer substitution search", () => {
       .nth(2)
       .click();
 
-    // The selection started exactly one pending request and the state is the
-    // loadingNew transition (REQ-022, ARCH-002).
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "loadingNew",
     );
     expect(posts).toHaveLength(1);
 
-    // The pending Search region contains no separate loading spinner
-    // (REQ-080, P07-G17).
     await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
 
-    // The read-only Substitution Input is already visible during the pending
-    // interval (task 28).
     await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
 
-    // Fulfillment completes the transition to results; the localized
-    // results heading is the active element after the result page renders
-    // (REQ-083, P07-G18, P07-G19), replacing the superseded Search-focus
-    // success path (REQ-064).
     releaseFirst();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
@@ -429,11 +318,6 @@ test.describe("pointer substitution search", () => {
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
     expect(posts).toHaveLength(1);
 
-    // Adversarial reconnect: dropping and restoring the browser network
-    // fires the `online` event, which TanStack Query's `refetchOnReconnect`
-    // default would answer with another Substitution Search POST. The
-    // production query disables that path, so exactly one POST remains
-    // (ARCH-019, REQ-022, task 28 repair).
     await context.setOffline(true);
     await page.waitForTimeout(300);
     await context.setOffline(false);
@@ -446,9 +330,7 @@ test.describe("pointer substitution search", () => {
       "data-interaction-state",
       "results",
     );
-    // The successful result page moved focus to the localized results
-    // heading (REQ-083); the reconnect starts no second request and does
-    // not change that focus.
+
     await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
   });
 
@@ -468,13 +350,10 @@ test.describe("pointer substitution search", () => {
       COPY.en,
     );
 
-    // Select the seeded Pizza Margherita (Food Object 1) with a pointer.
     await page.locator(`#${optionId(1)}`).click();
     await expectSubstitutePost(posts, 1, SEEDED_DEFAULTS[1], observedDefaults);
     await expectSelectedInput(page, COPY.en, "Pizza Margherita · 1 serving");
 
-    // REQ-058: a local language change updates the selected Food Object
-    // value and does not start another Substitution Search.
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
@@ -505,7 +384,6 @@ test.describe("pointer substitution search", () => {
       COPY.en,
     );
 
-    // Select the seeded Chicken breast (Food Object 5) with a pointer.
     await page.locator(`#${optionId(5)}`).click();
     await expectSubstitutePost(posts, 5, SEEDED_DEFAULTS[5], observedDefaults);
     await expectSelectedInput(page, COPY.en, "Chicken breast · 100 g");
@@ -524,7 +402,7 @@ test.describe("pointer substitution search", () => {
     const observedDefaults = trackSuggestionDefaults(page);
 
     await page.goto("/");
-    // Switch through the real Interface Language control (task 26).
+
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
@@ -532,8 +410,6 @@ test.describe("pointer substitution search", () => {
     await search.fill("mleko");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.mleko, COPY.pl);
 
-    // Select the seeded Milk (Food Object 10) with a pointer; the default is
-    // the 100 ml Nutrition Basis of the liquid (REQ-024).
     await page.locator(`#${optionId(10)}`).click();
     await expectSubstitutePost(
       posts,
@@ -544,7 +420,6 @@ test.describe("pointer substitution search", () => {
     await expectSelectedInput(page, COPY.pl, "Mleko · 100 ml");
     await expect(search).toHaveValue("Mleko");
 
-    // REQ-058: change the summary value locally, with no new search request.
     await page
       .getByRole("combobox", { name: COPY.pl.languageControl })
       .selectOption("en");
