@@ -747,3 +747,33 @@ Run `go test ./...` from `backend/`. Regenerate and compile both API clients. Ru
 **Review stop**
 
 Read the Phase 19 diff. Record REQ-078 and REQ-079 as verified. The implementation plan is complete.
+
+## Phase 20 — Comment quality enforcement
+
+**Goal**
+
+Make backend and frontend static checks reject comment rot in all handwritten source comments.
+
+**Depends on**
+
+None.
+
+**Implement**
+
+- Add a standalone Go analysis command. Keep its analyzer in `comment-analyzer.go`. Check every handwritten Go comment group for a maximum of two content lines and for repository issue, requirement, architecture, phase, task, and planning-document references.
+- Pin `golangci-lint`. Make the backend CI path run `golangci-lint` and the Go comment analyzer before the backend tests.
+- Add a separate local Oxlint comment-analyzer plugin under `frontend/tools/oxlint/`. Do not put the rule in the anti-slop plugin. Apply the same two-line and forbidden-reference policy to every handwritten frontend comment.
+- Exclude generated files and machine directives from the line limit. Do not use the analyzers to infer historical rationale; remove that rationale when current violations are reviewed.
+- Add command-level integration fixtures for accepted comments, comments longer than two content lines, forbidden references, generated files, and machine directives. Clean the existing backend and frontend comments until all new checks pass.
+
+**Requirements that become testable**
+
+None. This phase adds static-analysis enforcement and does not change product behavior.
+
+**Phase gate**
+
+Run `go test ./...`, `go run ./cmd/comment-analyzer ./...`, and `go tool golangci-lint run ./...` from `backend/`. Run `bun test tools/oxlint/comment-analyzer` and `bun run lint` from `frontend/`. Run `python3 scripts/ci_check.py` from the repository root; both boundary-specific comment analyzers, `golangci-lint`, existing static checks, and the complete test suite must pass with no generated artifacts committed.
+
+**Review stop**
+
+Read the Phase 20 diff. Confirm that the checks cover all handwritten comments, the frontend analyzer is separate from anti-slop, and CI runs both boundary-specific comment analyzers.
