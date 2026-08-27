@@ -760,11 +760,11 @@ None.
 
 **Implement**
 
-- Add a standalone Go analysis command. Keep its analyzer in `comment-analyzer.go`. Check every handwritten Go comment group for a maximum of two content lines and for repository issue, requirement, architecture, phase, task, and planning-document references. Pin `golangci-lint` and add command-level analyzer fixtures.
-- Add a separate local Oxlint comment-analyzer plugin under `frontend/tools/oxlint/`. Do not put the rule in the anti-slop plugin. Apply the same two-line and forbidden-reference policy to every handwritten frontend comment. Add command-level plugin fixtures.
-- Clean the existing backend comments, then make the backend CI path run `golangci-lint` and the Go comment analyzer before the backend tests.
-- Clean the existing frontend comments, then enable the comment-analyzer plugin in the frontend lint command used by CI.
-- Exclude generated files and machine directives from the line limit. Do not use the analyzers to infer historical rationale; remove that rationale when current violations are reviewed.
+- Add one Python comment checker under `scripts/`. Accept one directory, one `.go`, `.ts`, or `.svelte` extension, and a maximum comment-line count per invocation. Keep repository ignore patterns in the script. Use syntax-aware parsers, scan all matching files, print every violating comment as a start-to-finish source range, and exit with status 1 after the complete scan when violations exist.
+- Add command-level fixtures for Go, TypeScript, and Svelte comments, ignored paths, strings that contain comment delimiters, accepted boundaries, excessive lines, complete diagnostics, and exit statuses. Pin and install the parser dependency used by local and CI runs.
+- Make the backend CI path run the checker once for `.go` files and make the frontend CI path run it twice, once for `.ts` files and once for `.svelte` files. Keep the separate pinned `golangci-lint` backend check.
+- Clean the existing backend comments. Remove repository issue, requirement, architecture, phase, task, and planning-document references; shorten every comment to the configured boundary; and remove historical rationale while preserving current behavior and necessary invariants.
+- Clean the existing frontend comments with the same policy. Generated, dependency, cache, and build-output paths remain excluded through the checker constants.
 
 **Requirements that become testable**
 
@@ -772,8 +772,8 @@ None. This phase adds static-analysis enforcement and does not change product be
 
 **Phase gate**
 
-Run `go test ./...`, `go run ./cmd/comment-analyzer ./...`, and `go tool golangci-lint run ./...` from `backend/`. Run `bun test tools/oxlint/comment-analyzer` and `bun run lint` from `frontend/`. Run `python3 scripts/ci_check.py` from the repository root; both boundary-specific comment analyzers, `golangci-lint`, existing static checks, and the complete test suite must pass with no generated artifacts committed.
+Run `python3 scripts/check_comments.py backend --extension .go --max-comment-lines 2`, `go test ./...`, and `go tool golangci-lint run ./...` for the backend. Run `python3 scripts/check_comments.py frontend --extension .ts --max-comment-lines 2`, `python3 scripts/check_comments.py frontend --extension .svelte --max-comment-lines 2`, and `bun run lint` for the frontend. Run `python3 scripts/ci_check.py --backend` and `python3 scripts/ci_check.py --frontend` from the repository root; the three comment-checker invocations, `golangci-lint`, existing static checks, and boundary tests must pass.
 
 **Review stop**
 
-Read the Phase 20 diff. Confirm that the checks cover all handwritten comments, the frontend analyzer is separate from anti-slop, and CI runs both boundary-specific comment analyzers.
+Read the Phase 20 diff. Confirm that one Python tool checks all three source extensions, ignore patterns are defined in the script, and CI runs one backend invocation plus two frontend invocations.
