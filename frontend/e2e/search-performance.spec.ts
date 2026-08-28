@@ -13,8 +13,6 @@ const PIZZA_FOOD_OBJECT_ID = 1;
 
 const PIZZA_QUERY = "margherita";
 
-const PIZZA_QUANTITY = { value: 1, unit: "serving" } as const;
-
 const PIZZA_PAGE_1_IDS = [30, 3, 35] as const;
 
 interface PerfPost {

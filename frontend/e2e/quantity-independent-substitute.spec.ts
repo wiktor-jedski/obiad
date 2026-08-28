@@ -35,7 +35,7 @@ const COPY = {
 
 interface SubstitutePostRecord {
   readonly body: SubstituteSearchRequest;
-  readonly rawBody: Record<string, unknown>;
+  readonly rawBody: { [key: string]: unknown };
   status: number | null;
   response: SubstituteSearchResponse | null;
 }
@@ -47,10 +47,13 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
-      const raw = (request.postDataJSON() ?? {}) as Record<string, unknown>;
+      // SAFETY: The request payload matches the generated API contract.
+      const body = request.postDataJSON() as SubstituteSearchRequest;
+      // SAFETY: The raw payload is a plain JSON object from postDataJSON.
+      const rawBody = (request.postDataJSON() ?? {}) as { [key: string]: unknown };
       posts.push({
-        body: raw as unknown as SubstituteSearchRequest,
-        rawBody: raw,
+        body,
+        rawBody,
         status: null,
         response: null,
       });
@@ -65,6 +68,7 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
       const post = posts.find((entry) => entry.status === null);
       if (post !== undefined) {
         post.status = response.status();
+        // SAFETY: The response body matches the generated API contract.
         post.response = (await response.json()) as SubstituteSearchResponse;
       }
     }
