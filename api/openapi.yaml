@@ -459,6 +459,7 @@ components:
           type: number
           format: double
           minimum: 0
+          exclusiveMinimum: true
     SubstituteItem:
       description: >
         One candidate Substitute: the stable Food Object ID, both localized
@@ -503,6 +504,7 @@ components:
           type: number
           format: double
           minimum: 0
+          exclusiveMinimum: true
         similarityPercent:
           description: >
             The Macro similarity of the candidate to the input, rounded to a

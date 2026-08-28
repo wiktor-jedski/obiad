@@ -13,47 +13,6 @@ import (
 
 const nearEqual = 1e-12
 
-var wantCalories = map[int32]float64{
-	1:  250.0,
-	2:  255.0,
-	3:  180.0,
-	4:  197.0,
-	5:  156.4,
-	6:  234.0,
-	7:  239.0,
-	8:  56.5,
-	9:  45.3,
-	10: 50.8,
-	11: 61.8,
-	12: 97.0,
-	13: 200.0,
-	14: 45.5,
-	15: 240.0,
-	16: 238.0,
-	17: 21.0,
-	18: 742.0,
-	19: 821.6999999999999,
-	20: 57.0,
-	21: 265.0,
-	22: 300.0,
-	23: 134.0,
-	24: 11.8,
-	25: 21.0,
-	26: 199.0,
-	27: 156.0,
-	28: 71.5,
-	29: 157.0,
-	30: 57.5,
-	31: 36.5,
-	32: 116.0,
-	33: 96.0,
-	34: 263.0,
-	35: 286.0,
-	36: 290.0,
-	37: 44.599999999999994,
-	38: 174.0,
-}
-
 type wantCandidate struct {
 	id     int32
 	cosine float64
@@ -452,7 +411,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 				t.Fatalf("input %d: excluded Food Object %d appears in concatenated result sequence", want.inputID, excludedID)
 			}
 		}
-
 		firstAfterLast := int32(totalPages)
 		tracer.reset()
 		outPage, err := module.Run(ctx, want.inputID, firstAfterLast)
@@ -481,14 +439,6 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 		}
 	}
 
-	profiles := loadProfiles(t, module, ctx)
-	for id, want := range wantCalories {
-		profile, ok := profiles[id]
-		if !ok {
-			t.Fatalf("loaded catalog has no Food Object %d", id)
-		}
-		assertNearEqual(t, "calories(profile 1)", calories(profile), want)
-	}
 	if n := countFoodObjects(t, owner); n != 38 {
 		t.Fatalf("catalog has %d Food Objects after the Runs, want the unchanged 38 seeded rows", n)
 	}
@@ -612,34 +562,36 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	assertStableFailure(t, err, CodePageOutOfRange, "pageIndex")
 	tracer.assertSingleSelect(t, wantSQL)
 
-	runExpectInternalError := func(foodObjectID int32) {
-		t.Helper()
-		tracer.reset()
-		page, err := module.Run(ctx, foodObjectID, 0)
-		if err == nil {
-			t.Fatalf("Run(input %d) returned page %+v, want INTERNAL_ERROR for the nonfinite derived arithmetic", foodObjectID, page)
-		}
-		var moduleErr *Error
-		if !errors.As(err, &moduleErr) || moduleErr.Code != CodeInternalError {
-			t.Fatalf("Run(input %d) failure %v, want the stable INTERNAL_ERROR classification", foodObjectID, err)
-		}
-		tracer.assertSingleSelect(t, wantSQL)
-	}
 	insertTieObject(90, "Small normal input", "Maly normalny produkt", 0.1, 0, 0)
-	insertTieObject(91, "Largest calories candidate", "Kandydat o najwiekszej kalorycznosci", math.MaxFloat64, 0, 0)
-	runExpectInternalError(90)
+	insertTieObject(91, "Large candidate", "Duzy kandydat", 1e150, 0, 0)
+	insertTieObject(88, "Small candidate", "Maly kandydat", 1e-150, 0, 0)
 
-	insertTieObject(88, "Subnormal candidate", "Subnormalny kandydat", math.SmallestNonzeroFloat64, 0, 0)
-	runExpectInternalError(43)
+	extremeCandidatePage := run(90, 0)
+	if extremeCandidatePage.TotalEligibleCount != 53 {
+		t.Fatalf("input 90 total eligible count %d, want 53", extremeCandidatePage.TotalEligibleCount)
+	}
+	assertPageIDs(t, extremeCandidatePage, 91, 88, 23)
 
-	insertTieObject(89, "Subnormal input", "Subnormalne wprowadzenie", math.SmallestNonzeroFloat64, 0, 0)
-	runExpectInternalError(89)
+	extremeInputPage := run(91, 0)
+	if extremeInputPage.TotalEligibleCount != 53 {
+		t.Fatalf("input 91 total eligible count %d, want 53", extremeInputPage.TotalEligibleCount)
+	}
+	assertPageIDs(t, extremeInputPage, 88, 90, 23)
 
-	insertTieObject(87, "Largest candidate", "Najwiekszy kandydat", math.MaxFloat64, 0, 0)
-	runExpectInternalError(43)
-
-	insertTieObject(86, "Largest input", "Najwieksze wprowadzenie", math.MaxFloat64, 0, 0)
-	runExpectInternalError(86)
+	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_macro_profile_not_all_zero"); err != nil {
+		t.Fatalf("drop macro profile constraint: %v", err)
+	}
+	insertTieObject(92, "All zero profile", "Wszystko zero", 0, 0, 0)
+	tracer.reset()
+	page, err := module.Run(ctx, 90, 0)
+	if page != nil || err == nil {
+		t.Fatalf("Run(90) with all-zero candidate 92 returned page %+v, want CodeInternalError", page)
+	}
+	var moduleErr *Error
+	if !errors.As(err, &moduleErr) || moduleErr.Code != CodeInternalError {
+		t.Fatalf("Run(90) failure %v, want the stable INTERNAL_ERROR classification", err)
+	}
+	tracer.assertSingleSelect(t, wantSQL)
 }
 
 func countFoodObjects(t *testing.T, owner *pgx.Conn) int {

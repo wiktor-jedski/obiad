@@ -33,11 +33,6 @@ type macroProfile struct {
 	fat          float64
 }
 
-// calories derives calories from a macronutrient profile.
-func calories(p macroProfile) float64 {
-	return 4*p.protein + 4*p.carbohydrate + 9*p.fat
-}
-
 // cosineSimilarity computes full-precision profile similarity.
 func cosineSimilarity(a, b macroProfile) float64 {
 	dot := a.protein*b.protein + a.carbohydrate*b.carbohydrate + a.fat*b.fat
@@ -46,7 +41,6 @@ func cosineSimilarity(a, b macroProfile) float64 {
 	return dot / (normA * normB)
 }
 
-// projectSimilarityPercent rounds a similarity percentage.
 func projectSimilarityPercent(similarity float64) int32 {
 	return int32(math.Round(similarity * 100))
 }
@@ -79,9 +73,6 @@ func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, 
 		similarity := cosineSimilarity(inputProfile, profile)
 		if !isFiniteDerived(similarity) {
 			return nil, fmt.Errorf("food object %d: Nutritional Similarity %v is not finite for the seeded Macro Profile", object.id, similarity)
-		}
-		if candidateCalories := calories(profile); !isFiniteDerived(candidateCalories) {
-			return nil, fmt.Errorf("food object %d: derived calories %v are not finite for the seeded Macro Profile", object.id, candidateCalories)
 		}
 		rankedList = append(rankedList, rankedSubstitute{
 			object:     object,
@@ -159,13 +150,6 @@ func (f *FindSubstitutePage) Run(ctx context.Context, foodObjectID int32, pageIn
 	}
 
 	inputProfile := macroProfile{protein: inputObject.protein, carbohydrate: inputObject.carbohydrate, fat: inputObject.fat}
-	if inputCalories := calories(inputProfile); !isFiniteDerived(inputCalories) {
-		return nil, &Error{
-			Code:  CodeInternalError,
-			cause: fmt.Errorf("input calories %v are not finite for the seeded Macro Profile", inputCalories),
-		}
-	}
-
 	ranked, err := rankEligible(inputObject.id, inputObject.foodFamilyID, inputProfile, objects)
 	if err != nil {
 		return nil, &Error{Code: CodeInternalError, cause: err}
