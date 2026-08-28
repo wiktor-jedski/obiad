@@ -246,13 +246,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-025 — Quantity syntax
 
-**Statement:** The browser quantity control shall accept positive integer grams or millilitres and positive Serving counts that use a dot decimal separator.
+**Statement:** The browser quantity control shall accept positive integer grams or millilitres and positive Serving counts that use a dot decimal separator, converting an entered Serving count to the base grams or millilitres using the returned Serving base quantity.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Playwright: Valid values succeed. Fractional base values, comma decimals, zero, negatives, empty text, and letters fail. |
+| Verification | Playwright: Valid values succeed, an entered Serving count converts using the returned Serving base quantity, and fractional base values, comma decimals, zero, negatives, empty text, and letters fail. |
 
 ## REQ-026 — Invalid quantity
 
@@ -272,7 +272,7 @@ This document is the source of truth for the active product requirements of the 
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: A user changes the quantity after the first result page loads. |
+| Verification | Playwright: A user changes the quantity after the first result page loads, and the current result values stay unchanged until the edited value is committed. |
 
 ## REQ-028 — Quantity recalculation
 
@@ -286,13 +286,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-029 — Derived calories
 
-**Statement:** The browser shall derive calories from the returned canonical per-100 g or per-100 ml Macro Profile as 4 times protein plus 4 times carbohydrate plus 9 times fat.
+**Statement:** The browser shall convert the entered quantity to the base grams or millilitres, using the returned Serving base quantity for a Serving count, then derive calories from the returned canonical per-100 g or per-100 ml Macro Profile as 4 times protein plus 4 times carbohydrate plus 9 times fat.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Browser calculation test: A known per-100 Macro Profile and committed quantity give the expected full-precision input calories before display rounding. |
+| Verification | Browser calculation test: A known per-100 Macro Profile, base quantity, and Serving base give the expected full-precision input calories before display rounding, for base-unit and Serving-count inputs. |
 
 ## REQ-030 — Nutritional Similarity
 
@@ -306,13 +306,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-031 — Matched Quantity
 
-**Statement:** The browser shall compute each candidate equal-calorie Matched Quantity from its returned canonical per-100 g or per-100 ml Macro Profile so that it contains the same derived calories as the entered Substitution Input quantity.
+**Statement:** The browser shall compute each candidate equal-calorie Matched Quantity from its returned canonical per-100 g or per-100 ml Macro Profile so that it contains the same derived calories as the entered Substitution Input quantity, after converting an entered Serving count to the base quantity using the returned Serving base quantity.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Browser calculation test: Known per-100 Macro Profiles give the expected unrounded equal-calorie Matched Quantities before display rounding. |
+| Verification | Browser calculation test: Known per-100 Macro Profiles and Serving base give the expected unrounded equal-calorie Matched Quantities before display rounding, for base-unit and Serving-count inputs. |
 
 ## REQ-032 — Input exclusion
 
