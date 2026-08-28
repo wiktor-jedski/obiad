@@ -596,4 +596,97 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     expect(ddValues[2]).toBe("11.2 g");
     expect(ddValues[3]).toBe("90%");
   });
+
+  test("varied-ratio exact 150.5 g matched quantity half-up boundary rounds to 151 g", async () => {
+    // Selected: 2.8595g protein, 0g carb, 0g fat per 100g -> 11.438 kcal
+    // Candidate: 0.1g protein, 0g carb, 0.8g fat per 100g -> 7.6 kcal/100g
+    // Mathematical matched quantity: (11.438 * 100) / 7.6 = 150.5 g -> 151 g
+    const selected: SelectedFoodObject = {
+      foodObjectId: 108,
+      names: { en: "Selected 150.5g Basis", pl: "Wybrany Produkt" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+
+    const response: SubstituteSearchResponse = {
+      pageIndex: 0,
+      totalEligibleCount: 1,
+      hasMore: false,
+      selectedFood: {
+        foodObjectId: 108,
+        names: { en: "Selected 150.5g Basis", pl: "Wybrany Produkt" },
+        macroProfile: { protein: 2.8595, carbohydrate: 0, fat: 0 },
+        baseUnit: "g",
+      },
+      items: [
+        {
+          foodObjectId: 208,
+          names: { en: "Candidate 150.5g", pl: "Zamiennik" },
+          macroProfile: { protein: 0.1, carbohydrate: 0, fat: 0.8 },
+          baseUnit: "g",
+          similarityPercent: 90,
+        },
+      ],
+    };
+
+    mockSubstituteResponse(response);
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+
+    expect(elementText("[data-input-calories]")).toBe("11 kcal");
+    expect(elementText("[data-result-card-calories]")).toBe("11 kcal");
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("151 g");
+  });
+
+  test("varied-ratio exact 12.05 g candidate macro half-up boundary rounds to 12.1 g", async () => {
+    // Selected: 2.8595g protein -> 11.438 kcal
+    // Candidate: 8.006644518272425g protein, 0.44148245854335887g fat -> 7.6 kcal/100g
+    // Mathematical matched quantity: 150.5 g
+    // Candidate protein: 8.006644518272425 * 150.5 / 100 = 12.05 g -> 12.1 g
+    const candProtein = (12.05 * 100) / 150.5;
+    const candFat = (7.6 - 4 * candProtein) / 9;
+
+    const selected: SelectedFoodObject = {
+      foodObjectId: 109,
+      names: { en: "Selected 12.05g Basis", pl: "Wybrany Produkt" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+
+    const response: SubstituteSearchResponse = {
+      pageIndex: 0,
+      totalEligibleCount: 1,
+      hasMore: false,
+      selectedFood: {
+        foodObjectId: 109,
+        names: { en: "Selected 12.05g Basis", pl: "Wybrany Produkt" },
+        macroProfile: { protein: 2.8595, carbohydrate: 0, fat: 0 },
+        baseUnit: "g",
+      },
+      items: [
+        {
+          foodObjectId: 209,
+          names: { en: "Candidate 12.05g", pl: "Zamiennik" },
+          macroProfile: { protein: candProtein, carbohydrate: 0, fat: candFat },
+          baseUnit: "g",
+          similarityPercent: 90,
+        },
+      ],
+    };
+
+    mockSubstituteResponse(response);
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("151 g");
+
+    const ddValues = Array.from(
+      document.querySelectorAll("[data-result-card] dd"),
+    ).map((element) => element.textContent);
+    expect(ddValues[0]).toBe("12.1 g");
+  });
 });

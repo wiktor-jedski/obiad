@@ -45,6 +45,29 @@ export interface ProjectedSubstitutePage {
 }
 
 /**
+ * Rounds a nonnegative number to the nearest integer with exact halves rounded up,
+ * accounting for IEEE-754 binary floating-point representation drift.
+ */
+function roundWhole(value: number): number {
+  const integer = Math.floor(value);
+  const fraction = value - integer;
+  const tolerance = 4 * Number.EPSILON * Math.max(1, value);
+  return fraction >= 0.5 - tolerance ? integer + 1 : integer;
+}
+
+/**
+ * Rounds a nonnegative macronutrient value to 0.1 g with exact halves rounded up,
+ * accounting for IEEE-754 binary floating-point representation drift.
+ */
+function roundMacronutrient(value: number): number {
+  const scaled = value * 10;
+  const integer = Math.floor(scaled);
+  const fraction = scaled - integer;
+  const tolerance = 4 * Number.EPSILON * Math.max(1, scaled);
+  return (fraction >= 0.5 - tolerance ? integer + 1 : integer) / 10;
+}
+
+/**
  * Converts a Food Quantity to the base unit (g or ml).
  */
 function toBaseQuantity(quantity: FoodQuantity, serving?: number): number {
@@ -105,26 +128,26 @@ export function projectSubstitutePage(
       names: item.names,
       imageKey: item.imageKey,
       matchedQuantity: {
-        value: Math.round(unroundedMatchedQuantity),
+        value: roundWhole(unroundedMatchedQuantity),
         unit: item.baseUnit,
       },
       macronutrients: {
-        protein: Math.round(unroundedCandidateProtein * 10) / 10,
-        carbohydrate: Math.round(unroundedCandidateCarbohydrate * 10) / 10,
-        fat: Math.round(unroundedCandidateFat * 10) / 10,
+        protein: roundMacronutrient(unroundedCandidateProtein),
+        carbohydrate: roundMacronutrient(unroundedCandidateCarbohydrate),
+        fat: roundMacronutrient(unroundedCandidateFat),
       },
-      calories: Math.round(unroundedInputCalories),
+      calories: roundWhole(unroundedInputCalories),
       similarityPercent: item.similarityPercent,
     };
   });
 
   return {
     inputMacronutrients: {
-      protein: Math.round(unroundedInputProtein * 10) / 10,
-      carbohydrate: Math.round(unroundedInputCarbohydrate * 10) / 10,
-      fat: Math.round(unroundedInputFat * 10) / 10,
+      protein: roundMacronutrient(unroundedInputProtein),
+      carbohydrate: roundMacronutrient(unroundedInputCarbohydrate),
+      fat: roundMacronutrient(unroundedInputFat),
     },
-    inputCalories: Math.round(unroundedInputCalories),
+    inputCalories: roundWhole(unroundedInputCalories),
     items: projectedItems,
   };
 }
