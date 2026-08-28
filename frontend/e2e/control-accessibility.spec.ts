@@ -2085,11 +2085,7 @@ test.describe("Control keyboard-only flow", () => {
     await page.keyboard.type("2");
     await page.keyboard.press("Enter");
 
-    await expect.poll(() => posts.length).toBe(2);
-    expect(posts[1]).toEqual({
-      foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      pageIndex: 0,
-    });
+    expect(posts).toHaveLength(1);
 
     await waitForInteractionState(page, "results");
     await expect(numberInput).toBeFocused();
@@ -2098,11 +2094,7 @@ test.describe("Control keyboard-only flow", () => {
     await focusWithTab(page, unitSelect);
     await expect(unitSelect).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect.poll(() => posts.length).toBe(3);
-    expect(posts[2]).toEqual({
-      foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      pageIndex: 0,
-    });
+    expect(posts).toHaveLength(1);
 
     await waitForInteractionState(page, "results");
     await expect(numberInput).toHaveValue("100");
@@ -2114,8 +2106,8 @@ test.describe("Control keyboard-only flow", () => {
     await focusWithTab(page, moreButton);
     await expect(moreButton).toBeFocused();
     await page.keyboard.press("Space");
-    await expect.poll(() => posts.length).toBe(4);
-    expect(posts[3]).toEqual({
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]).toEqual({
       foodObjectId: PIZZA_FOOD_OBJECT_ID,
       pageIndex: 1,
     });
@@ -2143,7 +2135,7 @@ test.describe("Control keyboard-only flow", () => {
     await expect(
       page.getByRole("button", { name: COPY.pl.moreButton }),
     ).toBeVisible();
-    expect(posts).toHaveLength(4);
+    expect(posts).toHaveLength(2);
 
     await page.keyboard.press("Shift+Tab");
     await expect(
@@ -2191,11 +2183,7 @@ test.describe("Control keyboard-only flow", () => {
     await page.keyboard.type("2");
     await page.keyboard.press("Enter");
 
-    await expect.poll(() => posts.length).toBe(2);
-    expect(posts[1]).toEqual({
-      foodObjectId: 22,
-      pageIndex: 0,
-    });
+    expect(posts).toHaveLength(1);
 
     await waitForInteractionState(page, "results");
     await expect(numberInput).toBeFocused();
@@ -2204,11 +2192,7 @@ test.describe("Control keyboard-only flow", () => {
     await focusWithTab(page, unitSelect);
     await expect(unitSelect).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect.poll(() => posts.length).toBe(3);
-    expect(posts[2]).toEqual({
-      foodObjectId: 22,
-      pageIndex: 0,
-    });
+    expect(posts).toHaveLength(1);
 
     await waitForInteractionState(page, "results");
     await expect(numberInput).toHaveValue("100");
@@ -2220,8 +2204,8 @@ test.describe("Control keyboard-only flow", () => {
     await focusWithTab(page, moreButton);
     await expect(moreButton).toBeFocused();
     await page.keyboard.press("Space");
-    await expect.poll(() => posts.length).toBe(4);
-    expect(posts[3]).toEqual({
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]).toEqual({
       foodObjectId: 22,
       pageIndex: 1,
     });
@@ -2247,7 +2231,7 @@ test.describe("Control keyboard-only flow", () => {
     await expect(
       page.getByRole("button", { name: COPY.en.moreButton }),
     ).toBeVisible();
-    expect(posts).toHaveLength(4);
+    expect(posts).toHaveLength(2);
 
     await page.keyboard.press("Shift+Tab");
     await expect(

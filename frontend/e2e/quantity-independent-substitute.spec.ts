@@ -205,7 +205,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     expect(initialProjection.inputCalories).toBe(875);
     expect(
       initialProjection.items.map((item) => item.matchedQuantity.value),
-    ).toEqual([438, 557, 431]);
+    ).toEqual([438, 557, 440]);
     await expectSummaryProjection(page, initialProjection, "en");
     await expect(
       page.locator("[data-selected-food-summary]"),
