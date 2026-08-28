@@ -194,9 +194,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     expect(elementText("[data-input-calories]")).toBe("308 kcal");
     expect(elementText("[data-result-card-matched-quantity]")).toBe("933 ml");
     expect(searches, "a local ml blur starts no additional POST").toBe(1);
-    expect(queryClient.isFetching(), "a local ml blur starts no pending query").toBe(
-      0,
-    );
+    expect(
+      queryClient.isFetching(),
+      "a local ml blur starts no pending query",
+    ).toBe(0);
   });
 
   test("Serving calculation-basis fixture proves Serving count conversion with exact Serving base quantity and full-precision scaling", async () => {

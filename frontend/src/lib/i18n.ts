@@ -25,8 +25,6 @@ export interface Messages {
 
   loadingNutritionValues: () => string;
 
-  updatingQuantities: () => string;
-
   proteinLabel: () => string;
 
   carbohydratesLabel: () => string;
@@ -58,7 +56,6 @@ const en = {
   servingsLabel: () => "servings",
   invalidQuantityMessage: () => "Enter a valid quantity.",
   loadingNutritionValues: () => "Loading nutrition values",
-  updatingQuantities: () => "Updating quantities",
   proteinLabel: () => "Protein",
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
@@ -82,7 +79,6 @@ const pl = {
   servingsLabel: () => "porcje",
   invalidQuantityMessage: () => "Wpisz prawidłową ilość.",
   loadingNutritionValues: () => "Ładowanie wartości odżywczych",
-  updatingQuantities: () => "Aktualizowanie ilości",
   proteinLabel: () => "Białko",
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
