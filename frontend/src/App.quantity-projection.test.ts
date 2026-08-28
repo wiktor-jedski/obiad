@@ -243,7 +243,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
       capturedLanguage: "en",
     };
 
-    // 4*12.5 + 4*12.5 + 9*(0.5/9) = 50 + 50 + 0.5 = 100.5 kcal
+    // 4*12.625 + 4*12.5 + 0 = 50.5 + 50 = 100.5 kcal
     const response: SubstituteSearchResponse = {
       pageIndex: 0,
       totalEligibleCount: 1,
@@ -252,9 +252,9 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
         foodObjectId: 101,
         names: { en: "Test Food", pl: "Test Food" },
         macroProfile: {
-          protein: 12.5,
+          protein: 12.625,
           carbohydrate: 12.5,
-          fat: 0.05555555555555555,
+          fat: 0,
         },
         baseUnit: "g",
       },
@@ -641,13 +641,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("varied-ratio exact 12.05 g candidate macro half-up boundary rounds to 12.1 g", async () => {
-    // Selected: 2.8595g protein -> 11.438 kcal
-    // Candidate: 8.006644518272425g protein, 0.44148245854335887g fat -> 7.6 kcal/100g
-    // Mathematical matched quantity: 150.5 g
-    // Candidate protein: 8.006644518272425 * 150.5 / 100 = 12.05 g -> 12.1 g
-    const candProtein = (12.05 * 100) / 150.5;
-    const candFat = (7.6 - 4 * candProtein) / 9;
-
+    // Selected: 60.25g protein per 100g -> 241 kcal
+    // Candidate: 10g protein, 40g carb per 100g -> 200 kcal/100g
+    // Mathematical matched quantity: 241 * 100 / 200 = 120.5 g -> 121 g
+    // Candidate protein: 10 * 120.5 / 100 = 12.05 g -> 12.1 g
     const selected: SelectedFoodObject = {
       foodObjectId: 109,
       names: { en: "Selected 12.05g Basis", pl: "Wybrany Produkt" },
@@ -663,14 +660,14 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
       selectedFood: {
         foodObjectId: 109,
         names: { en: "Selected 12.05g Basis", pl: "Wybrany Produkt" },
-        macroProfile: { protein: 2.8595, carbohydrate: 0, fat: 0 },
+        macroProfile: { protein: 60.25, carbohydrate: 0, fat: 0 },
         baseUnit: "g",
       },
       items: [
         {
           foodObjectId: 209,
           names: { en: "Candidate 12.05g", pl: "Zamiennik" },
-          macroProfile: { protein: candProtein, carbohydrate: 0, fat: candFat },
+          macroProfile: { protein: 10, carbohydrate: 40, fat: 0 },
           baseUnit: "g",
           similarityPercent: 90,
         },
@@ -682,11 +679,100 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-result-card-matched-quantity]")).toBe("151 g");
-
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("121 g");
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
     expect(ddValues[0]).toBe("12.1 g");
+  });
+
+  test("genuine below-half matched quantity (selected P=37.62499999999997, candidate P=25) renders 150 g not 151 g", async () => {
+    // Selected: 37.62499999999997g protein per 100g -> 150.49999999999988 kcal
+    // Candidate: 25g protein per 100g -> 100 kcal/100g
+    // Mathematical matched quantity: 150.49999999999988 g (< 150.5 g) -> MUST render 150 g
+    const selected: SelectedFoodObject = {
+      foodObjectId: 110,
+      names: { en: "Selected 37.62499999999997g", pl: "Wybrany Produkt" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+
+    const response: SubstituteSearchResponse = {
+      pageIndex: 0,
+      totalEligibleCount: 1,
+      hasMore: false,
+      selectedFood: {
+        foodObjectId: 110,
+        names: { en: "Selected 37.62499999999997g", pl: "Wybrany Produkt" },
+        macroProfile: { protein: 37.62499999999997, carbohydrate: 0, fat: 0 },
+        baseUnit: "g",
+      },
+      items: [
+        {
+          foodObjectId: 210,
+          names: { en: "Candidate 25g", pl: "Zamiennik" },
+          macroProfile: { protein: 25, carbohydrate: 0, fat: 0 },
+          baseUnit: "g",
+          similarityPercent: 90,
+        },
+      ],
+    };
+
+    mockSubstituteResponse(response);
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("150 g");
+  });
+
+  test("genuine below-half candidate macro (12.049999999999995 g) renders 12.0 g", async () => {
+    // Selected: 25g protein per 100g -> 100 kcal
+    // Candidate: 12.049999999999995g protein, 12.950000000000005g carb -> 100 kcal/100g
+    // Matched quantity: 100 g
+    // Candidate protein: 12.049999999999995 g (< 12.05 g) -> MUST render 12.0 g
+    const selected: SelectedFoodObject = {
+      foodObjectId: 111,
+      names: { en: "Selected 100 kcal", pl: "Wybrany Produkt" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+
+    const response: SubstituteSearchResponse = {
+      pageIndex: 0,
+      totalEligibleCount: 1,
+      hasMore: false,
+      selectedFood: {
+        foodObjectId: 111,
+        names: { en: "Selected 100 kcal", pl: "Wybrany Produkt" },
+        macroProfile: { protein: 25, carbohydrate: 0, fat: 0 },
+        baseUnit: "g",
+      },
+      items: [
+        {
+          foodObjectId: 211,
+          names: { en: "Candidate 12.049999999999995g", pl: "Zamiennik" },
+          macroProfile: {
+            protein: 12.049999999999995,
+            carbohydrate: 12.950000000000005,
+            fat: 0,
+          },
+          baseUnit: "g",
+          similarityPercent: 90,
+        },
+      ],
+    };
+
+    mockSubstituteResponse(response);
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+
+    const ddValues = Array.from(
+      document.querySelectorAll("[data-result-card] dd"),
+    ).map((element) => element.textContent);
+    expect(ddValues[0]).toBe("12.0 g");
   });
 });

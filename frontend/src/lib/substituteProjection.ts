@@ -44,42 +44,80 @@ export interface ProjectedSubstitutePage {
   readonly items: readonly ProjectedSubstituteItem[];
 }
 
-/**
- * Rounds a nonnegative number to the nearest integer with exact halves rounded up,
- * accounting for IEEE-754 binary floating-point representation drift.
- */
-function roundWhole(value: number): number {
-  const integer = Math.floor(value);
-  const fraction = value - integer;
-  const tolerance = 4 * Number.EPSILON * Math.max(1, value);
-  return fraction >= 0.5 - tolerance ? integer + 1 : integer;
+interface Rational {
+  readonly num: bigint;
+  readonly den: bigint;
 }
 
-/**
- * Rounds a nonnegative macronutrient value to 0.1 g with exact halves rounded up,
- * accounting for IEEE-754 binary floating-point representation drift.
- */
-function roundMacronutrient(value: number): number {
-  const scaled = value * 10;
-  const integer = Math.floor(scaled);
-  const fraction = scaled - integer;
-  const tolerance = 4 * Number.EPSILON * Math.max(1, scaled);
-  return (fraction >= 0.5 - tolerance ? integer + 1 : integer) / 10;
-}
-
-/**
- * Converts a Food Quantity to the base unit (g or ml).
- */
-function toBaseQuantity(quantity: FoodQuantity, serving?: number): number {
-  if (quantity.unit === "serving") {
-    if (serving === undefined) {
-      throw new Error(
-        "Serving count provided for a food without a Serving base quantity",
-      );
-    }
-    return quantity.value * serving;
+function gcd(a: bigint, b: bigint): bigint {
+  while (b !== 0n) {
+    const t = b;
+    b = a % b;
+    a = t;
   }
-  return quantity.value;
+  return a < 0n ? -a : a;
+}
+
+function makeRational(num: bigint, den = 1n): Rational {
+  if (den === 0n) {
+    throw new Error("Division by zero in Rational");
+  }
+  if (den < 0n) {
+    num = -num;
+    den = -den;
+  }
+  const d = gcd(num < 0n ? -num : num, den);
+  return { num: num / d, den: den / d };
+}
+
+function toRational(v: number): Rational {
+  const s = v.toString();
+  if (s.includes("e") || s.includes("E")) {
+    const [coeff, exp] = s.toLowerCase().split("e");
+    const r = toRational(Number(coeff));
+    const e = BigInt(exp ?? "0");
+    if (e >= 0n) {
+      return makeRational(r.num * 10n ** e, r.den);
+    }
+    return makeRational(r.num, r.den * 10n ** -e);
+  }
+  const parts = s.split(".");
+  if (parts.length === 1) {
+    return makeRational(BigInt(parts[0] ?? "0"), 1n);
+  }
+  const intPart = parts[0] ?? "0";
+  const fracPart = parts[1] ?? "0";
+  const sign = intPart.startsWith("-") ? -1n : 1n;
+  const absIntPart = intPart.replace("-", "");
+  const den = 10n ** BigInt(fracPart.length);
+  const num = sign * (BigInt(absIntPart) * den + BigInt(fracPart));
+  return makeRational(num, den);
+}
+
+function add(a: Rational, b: Rational): Rational {
+  return makeRational(a.num * b.den + b.num * a.den, a.den * b.den);
+}
+
+function mul(a: Rational, b: Rational): Rational {
+  return makeRational(a.num * b.num, a.den * b.den);
+}
+
+function div(a: Rational, b: Rational): Rational {
+  return makeRational(a.num * b.den, a.den * b.num);
+}
+
+function roundToWhole(r: Rational): number {
+  if (r.num <= 0n) {
+    return 0;
+  }
+  return Number((2n * r.num + r.den) / (2n * r.den));
+}
+
+function roundToTenth(r: Rational): number {
+  if (r.num <= 0n) {
+    return 0;
+  }
+  return Number((20n * r.num + r.den) / (2n * r.den)) / 10;
 }
 
 /**
@@ -95,59 +133,92 @@ export function projectSubstitutePage(
   items: readonly SubstituteItem[],
   quantity: FoodQuantity,
 ): ProjectedSubstitutePage {
-  const baseQty = toBaseQuantity(quantity, selectedFood.serving);
+  const serving =
+    selectedFood.serving !== undefined
+      ? toRational(selectedFood.serving)
+      : undefined;
+  const qtyVal = toRational(quantity.value);
+  let baseQty: Rational;
+  if (quantity.unit === "serving") {
+    if (serving === undefined) {
+      throw new Error(
+        "Serving count provided for a food without a Serving base quantity",
+      );
+    }
+    baseQty = mul(qtyVal, serving);
+  } else {
+    baseQty = qtyVal;
+  }
 
-  const unroundedInputProtein =
-    (selectedFood.macroProfile.protein * baseQty) / 100;
-  const unroundedInputCarbohydrate =
-    (selectedFood.macroProfile.carbohydrate * baseQty) / 100;
-  const unroundedInputFat = (selectedFood.macroProfile.fat * baseQty) / 100;
+  const rat100 = toRational(100);
+  const rat4 = toRational(4);
+  const rat9 = toRational(9);
 
-  const unroundedInputCalories =
-    4 * unroundedInputProtein +
-    4 * unroundedInputCarbohydrate +
-    9 * unroundedInputFat;
+  const selP = toRational(selectedFood.macroProfile.protein);
+  const selC = toRational(selectedFood.macroProfile.carbohydrate);
+  const selF = toRational(selectedFood.macroProfile.fat);
+
+  const inputProtein = div(mul(selP, baseQty), rat100);
+  const inputCarbohydrate = div(mul(selC, baseQty), rat100);
+  const inputFat = div(mul(selF, baseQty), rat100);
+
+  const inputCalories = add(
+    add(mul(rat4, inputProtein), mul(rat4, inputCarbohydrate)),
+    mul(rat9, inputFat),
+  );
 
   const projectedItems: ProjectedSubstituteItem[] = items.map((item) => {
-    const candidateCaloriesPer100 =
-      4 * item.macroProfile.protein +
-      4 * item.macroProfile.carbohydrate +
-      9 * item.macroProfile.fat;
+    const candP = toRational(item.macroProfile.protein);
+    const candC = toRational(item.macroProfile.carbohydrate);
+    const candF = toRational(item.macroProfile.fat);
 
-    const unroundedMatchedQuantity =
-      (unroundedInputCalories * 100) / candidateCaloriesPer100;
+    const candidateCaloriesPer100 = add(
+      add(mul(rat4, candP), mul(rat4, candC)),
+      mul(rat9, candF),
+    );
+    const unroundedMatchedQuantity = div(
+      mul(inputCalories, rat100),
+      candidateCaloriesPer100,
+    );
 
-    const unroundedCandidateProtein =
-      (item.macroProfile.protein * unroundedMatchedQuantity) / 100;
-    const unroundedCandidateCarbohydrate =
-      (item.macroProfile.carbohydrate * unroundedMatchedQuantity) / 100;
-    const unroundedCandidateFat =
-      (item.macroProfile.fat * unroundedMatchedQuantity) / 100;
+    const unroundedCandidateProtein = div(
+      mul(candP, unroundedMatchedQuantity),
+      rat100,
+    );
+    const unroundedCandidateCarbohydrate = div(
+      mul(candC, unroundedMatchedQuantity),
+      rat100,
+    );
+    const unroundedCandidateFat = div(
+      mul(candF, unroundedMatchedQuantity),
+      rat100,
+    );
+
     return {
       foodObjectId: item.foodObjectId,
       names: item.names,
       imageKey: item.imageKey,
       matchedQuantity: {
-        value: roundWhole(unroundedMatchedQuantity),
+        value: roundToWhole(unroundedMatchedQuantity),
         unit: item.baseUnit,
       },
       macronutrients: {
-        protein: roundMacronutrient(unroundedCandidateProtein),
-        carbohydrate: roundMacronutrient(unroundedCandidateCarbohydrate),
-        fat: roundMacronutrient(unroundedCandidateFat),
+        protein: roundToTenth(unroundedCandidateProtein),
+        carbohydrate: roundToTenth(unroundedCandidateCarbohydrate),
+        fat: roundToTenth(unroundedCandidateFat),
       },
-      calories: roundWhole(unroundedInputCalories),
+      calories: roundToWhole(inputCalories),
       similarityPercent: item.similarityPercent,
     };
   });
 
   return {
     inputMacronutrients: {
-      protein: roundMacronutrient(unroundedInputProtein),
-      carbohydrate: roundMacronutrient(unroundedInputCarbohydrate),
-      fat: roundMacronutrient(unroundedInputFat),
+      protein: roundToTenth(inputProtein),
+      carbohydrate: roundToTenth(inputCarbohydrate),
+      fat: roundToTenth(inputFat),
     },
-    inputCalories: roundWhole(unroundedInputCalories),
+    inputCalories: roundToWhole(inputCalories),
     items: projectedItems,
   };
 }
