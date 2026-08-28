@@ -887,10 +887,10 @@ Phase 22.
 - Do not acquire the Substitution Search lock or enter a pending interaction state.
 - Keep the exact Serving base quantity in calculation state and do not render it separately.
 - Remove quantity-recalculation placeholder data, card pending properties, and retained-content hiding.
-- Remove selected-food and result-card spinners.
+- Remove the selected-food spinner from new Search and the result-card spinners from quantity recalculation. Keep the current spinner-free MORE! card-opacity behavior.
 - Remove superseded quantity-recalculation states, transitions, tests, and request failures.
 - Preserve current result IDs, rank order, page, images, card identity, motion state, focus, active Interface Language, and localized text.
-- Keep new-Search and MORE! request behavior unchanged.
+- Keep new-Search and MORE! request, lock, failure, focus, and motion behavior unchanged apart from the selected-food spinner removal.
 
 **Requirements that become testable**
 
@@ -898,7 +898,6 @@ Phase 22.
 - [REQ-026](../requirements/requirements.md#req-026--invalid-quantity)
 - [REQ-027](../requirements/requirements.md#req-027--quantity-editing)
 - [REQ-028](../requirements/requirements.md#req-028--quantity-recalculation)
-- [REQ-081](../requirements/requirements.md#req-081--single-card-loading-spinner)
 
 Reverify REQ-029, REQ-031, REQ-037 through REQ-040, and REQ-078 through the completed interaction.
 

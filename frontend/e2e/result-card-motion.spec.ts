@@ -4,7 +4,6 @@ const COPY = {
   en: {
     searchPlaceholder: "Search foods",
     foundSubstitutions: "Found substitutions",
-    updatingQuantities: "Updating quantities",
   },
 } as const;
 
@@ -396,20 +395,20 @@ test.describe("Result Card motion", () => {
     await expect(heading).toBeFocused();
   });
 
-  test("a held and then completed Food Quantity recalculation neither remounts nor animates the retained page-0 cards (REQ-052, REQ-081, ISSUE-016)", async ({
+  test("a local Food Quantity commit neither remounts nor animates the retained page-0 cards", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     await page.addInitScript(installMotionObserver);
 
     let postCount = 0;
-    const gate = Promise.withResolvers<void>();
-    await page.route("**/api/v1/substitutes/search", async (route) => {
-      postCount += 1;
-      if (postCount === 2) {
-        await gate.promise;
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        request.url().includes("/api/v1/substitutes/search")
+      ) {
+        postCount += 1;
       }
-      await route.continue();
     });
 
     await page.goto("/");
@@ -423,21 +422,7 @@ test.describe("Result Card motion", () => {
     const input = page.locator("[data-quantity-number]");
     await input.fill("2");
     await input.press("Enter");
-    await expect.poll(() => postCount).toBe(2);
-    await expect(page.locator("[data-result-region]")).toHaveAttribute(
-      "aria-busy",
-      "true",
-    );
-    await expect(page.locator("[data-editor-status]")).toHaveText(
-      COPY.en.updatingQuantities,
-    );
-    await page.waitForTimeout(150);
-    expect(
-      (await motionEvents(page)).length,
-      "no card transition event while the recalculation is pending",
-    ).toBe(settledEventCount);
-
-    gate.resolve();
+    await expect.poll(() => postCount).toBe(1);
     await expect(page.locator("[data-result-region]")).not.toHaveAttribute(
       "aria-busy",
       "true",
@@ -446,7 +431,13 @@ test.describe("Result Card motion", () => {
     await page.waitForTimeout(150);
     expect(
       (await motionEvents(page)).length,
-      "no card transition event after the recalculation completes",
+      "no card transition event after the local projection",
+    ).toBe(settledEventCount);
+
+    await page.waitForTimeout(150);
+    expect(
+      (await motionEvents(page)).length,
+      "no card transition event after the local projection settles",
     ).toBe(settledEventCount);
     const domIds = await page
       .locator("[data-result-card]")
@@ -457,7 +448,7 @@ test.describe("Result Card motion", () => {
       );
     expect(
       domIds,
-      "the retained page-0 cards keep their order after the recalculation",
+      "the retained page-0 cards keep their order after the local projection",
     ).toEqual([...PIZZA_PAGE_0_IDS]);
   });
   test("a new keyboard search removes the settled cards and reveals the replacement cards in the same viewport slots without layout movement", async ({

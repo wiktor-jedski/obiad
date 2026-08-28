@@ -823,8 +823,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | Playwright: During a controlled pending Substitute Search request each pending card has one centered spinner, its non-image content is hidden, result images remain visible, and card dimensions do not change; a valid quantity commit shows no card spinner. |
+| Status | Deprecated |
+| Verification | Not applicable. Phase 23 removes this spinner behavior. |
+
+**Notes:** Deprecated because selected-food and result-card spinners are removed. There is no replacement requirement.
 
 ## REQ-082 — Pending MORE! control
 

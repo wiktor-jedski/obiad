@@ -265,7 +265,7 @@ async function runPrimaryFlow(
 
   await page.locator(`#food-suggestion-option-${PIZZA_FOOD_OBJECT_ID}`).click();
   await expect(main).toHaveAttribute("data-interaction-state", "loadingNew");
-  await expect(page.locator("[data-card-spinner]").first()).toBeVisible();
+  await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
   await expectNoHorizontalOverflow(page, `${vp.name} pending new-Search`);
   posts.release(1);
   await expect(main).toHaveAttribute("data-interaction-state", "results");
@@ -285,13 +285,10 @@ async function runPrimaryFlow(
   await number.fill("200");
   await number.press("Enter");
   await expect(main).toHaveAttribute("data-interaction-state", "results");
-  await expect(page.locator("[data-card-spinner]").first()).toBeVisible();
-  await expectNoHorizontalOverflow(page, `${vp.name} recalculation-loading`);
-  posts.release(2);
   await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
   await expectNoHorizontalOverflow(
     page,
-    `${vp.name} completed recalculated result`,
+    `${vp.name} local quantity projection`,
   );
 
   const moreButton = page.locator("[data-more-button]");
@@ -299,7 +296,7 @@ async function runPrimaryFlow(
   await expect(main).toHaveAttribute("data-interaction-state", "loadingMore");
   await expect(moreButton).toHaveAttribute("aria-disabled", "true");
   await expectNoHorizontalOverflow(page, `${vp.name} pending-MORE!`);
-  posts.release(3);
+  posts.release(2);
   await expect(main).toHaveAttribute("data-interaction-state", "results");
   await expect
     .poll(async () => renderedCardIDs(page))

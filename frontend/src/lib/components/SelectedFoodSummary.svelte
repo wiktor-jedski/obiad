@@ -34,11 +34,9 @@
       | MoreFailureInteractionState;
     /** Display-ready selected-input and card values projected from calculation basis. */
     projection: ProjectedSubstitutePage | undefined;
-    /** Whether a valid quantity recalculation is pending. */
-    recalculating: boolean;
   }
 
-  let { interaction, projection, recalculating }: Props = $props();
+  let { interaction, projection }: Props = $props();
   /** The active dictionary for the region's interface and validation text. */
   const dictionary = $derived(getDictionary($interfaceLanguage));
   /** The selected Food Object name in the active Interface Language. */
@@ -67,50 +65,22 @@
   );
   /** Whether the summary shows the initial new-Search pending interaction. */
   const initial = $derived(interaction.name === "loadingNew");
-  /** Whether any quantity-dependent value is pending (initial or recalculation). */
-  const busy = $derived(initial || recalculating);
-  /** Whether quantity editing is blocked by loading, recalculation, or failure. */
+  /** Whether quantity editing is blocked by a request or paging failure. */
   const locked = $derived(
-    $substitutionSearchLock ||
-      initial ||
-      recalculating ||
-      interaction.name === "moreFailure",
+    $substitutionSearchLock || initial || interaction.name === "moreFailure",
   );
-  /**
-   * Whether a locked editor is removed from the tab order.
-   * Recalculation keeps its controls focusable but non-operable.
-   */
-  const removableLock = $derived(locked && !recalculating);
-  /**
-   * Whether a locked editor retains focus during recalculation.
-   * Its controls remain focusable but non-operable.
-   */
-  const focusRetainingLock = $derived(locked && recalculating);
+  /** Whether a locked editor is removed from the tab order. */
+  const removableLock = $derived(locked);
   const inputMacros = $derived(projection?.inputMacronutrients);
   /** The projected input calories at the committed quantity, when present. */
   const inputCalories = $derived(projection?.inputCalories);
   const QUANTITY_ERROR_ID = "quantity-error";
   /** Stable id for the polite editor status region. */
   const EDITOR_STATUS_ID = "quantity-editor-status";
-
-  /**
-   * One localized busy announcement per loading period.
-   * The message is cleared when the period ends.
-   */
-  let announcement = $state("");
-  let previousBusyKind: "initial" | "recalculating" | null = $state(null);
-  $effect(() => {
-    const kind = initial ? "initial" : recalculating ? "recalculating" : null;
-    if (kind !== previousBusyKind) {
-      previousBusyKind = kind;
-      announcement =
-        kind === "initial"
-          ? dictionary.loadingNutritionValues()
-          : kind === "recalculating"
-            ? dictionary.updatingQuantities()
-            : "";
-    }
-  });
+  /** The initial search announcement remains available to assistive technology. */
+  const announcement = $derived(
+    initial ? dictionary.loadingNutritionValues() : "",
+  );
 
   /** Returns the localized label for an allowed quantity unit. */
   function unitOptionLabel(unit: QuantityUnit): string {
@@ -173,15 +143,9 @@
 <div
   data-selected-input
   data-selected-food-summary
-  aria-busy={busy}
-  class="relative w-full max-w-md rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
+  class="w-full max-w-md rounded-2xl border border-solid border-dark-secondary bg-dark-surface p-4"
 >
-  <div
-    data-card-content
-    class="flex flex-col gap-3"
-    class:opacity-0={busy}
-    class:pointer-events-none={busy}
-  >
+  <div data-card-content class="flex flex-col gap-3">
     <!-- Localized accessible summary updates with the active language. -->
     <span class="sr-only"
       >{dictionary.selectedFoodLabel()}: {selectedValue}</span
@@ -195,7 +159,7 @@
       {selectedName}
     </div>
 
-    <!-- Text input preserves invalid drafts; the disabled editor stays in place. -->
+    <!-- Text input preserves invalid drafts and is disabled only while request-locked. -->
     <div
       data-quantity-editor
       onfocusout={onEditorFocusOut}
@@ -217,8 +181,6 @@
           ? QUANTITY_ERROR_ID
           : undefined}
         disabled={removableLock || undefined}
-        aria-disabled={focusRetainingLock ? "true" : undefined}
-        readonly={focusRetainingLock || undefined}
         oninput={onNumberInput}
         onkeydown={onNumberKeydown}
         class="h-11 w-28 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary placeholder:text-dark-text-muted focus-visible:border-dark-primary focus-visible:outline-none"
@@ -232,8 +194,6 @@
           data-quantity-unit
           value={interaction.draftUnit}
           disabled={removableLock || undefined}
-          aria-disabled={focusRetainingLock ? "true" : undefined}
-          tabindex={focusRetainingLock ? -1 : undefined}
           onchange={onUnitChange}
           class="h-11 rounded border border-solid border-dark-secondary bg-dark-surface px-3 font-data text-sm text-dark-text-primary focus-visible:border-dark-primary focus-visible:outline-none"
         >
@@ -284,7 +244,7 @@
       </p>
     {/if}
 
-    <!-- Values come from the browser projection; pending state uses the card spinner. -->
+    <!-- Values come from the browser projection. -->
     <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
         <dt class="font-medium text-dark-text-muted">
@@ -324,20 +284,8 @@
       </div>
     </dl>
   </div>
-  {#if busy}
-    <div
-      aria-hidden="true"
-      class="pointer-events-none absolute inset-0 flex items-center justify-center"
-    >
-      <span
-        data-card-spinner
-        aria-hidden="true"
-        class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-      ></span>
-    </div>
-  {/if}
 
-  <!-- Announce one localized busy status for each pending period. -->
+  <!-- Announce the initial selected-food load. -->
   <span
     id={EDITOR_STATUS_ID}
     data-editor-status

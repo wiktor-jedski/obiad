@@ -62,10 +62,7 @@
           pageIndex: committedPageIndex,
         },
   );
-  /**
-   * Query for the committed Substitution Search input.
-   * Previous data remains visible while a recalculation loads.
-   */
+  /** Query for the committed Substitution Search input. */
   const substitutionSearch = createSubstitutionSearchQuery({
     committed: () => committed,
   });
@@ -88,13 +85,6 @@
     committed: () => committed,
     displayedPageIndex: () => displayedPageIndex,
   });
-  /**
-   * Whether a valid quantity recalculation is pending.
-   * Previous cards remain visible with busy presentation.
-   */
-  const recalculating = $derived(
-    interaction.name === "results" && substitutionSearch.isPlaceholderData,
-  );
   /** Whether a substitution request currently locks the controls. */
   const locked = $derived(
     $substitutionSearchLock || interaction.name === "loadingMore",
@@ -118,7 +108,6 @@
 
   /**
    * Applies fresh response outcomes and moves focus to the appropriate result target.
-   * Placeholder data does not trigger a transition.
    */
   $effect(() => {
     const data = substitutionSearch.data;
@@ -177,12 +166,8 @@
 </script>
 
 {#if interaction.name !== "empty"}
-  <div
-    data-selected-input-region
-    aria-busy={recalculating}
-    class="mt-6 flex justify-center"
-  >
-    <SelectedFoodSummary {interaction} {projection} {recalculating} />
+  <div data-selected-input-region class="mt-6 flex justify-center">
+    <SelectedFoodSummary {interaction} {projection} />
   </div>
 {/if}
 {#if interaction.name === "newSearchFailure" || interaction.name === "moreFailure"}
@@ -198,8 +183,7 @@
   </div>
 {/if}
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
-  <!-- Result cards use projected values and stable slots for page replacement. -->
-  <div data-result-region aria-busy={recalculating} class="mt-6">
+  <div data-result-region class="mt-6">
     <h2
       bind:this={headingElement}
       tabindex="-1"
@@ -224,7 +208,6 @@
                 <ResultCard
                   {item}
                   language={$interfaceLanguage}
-                  pending={recalculating}
                   rank={index}
                   firstPage={interaction.pageIndex === 0}
                 />

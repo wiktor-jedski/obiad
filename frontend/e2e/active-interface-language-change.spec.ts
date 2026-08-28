@@ -54,7 +54,6 @@ const RESULT_COPY = {
     similarity: "Similarity",
     calories: "Calories",
     loading: "Loading nutrition values",
-    updating: "Updating quantities",
     invalidQuantity: "Enter a valid quantity.",
   },
   pl: {
@@ -71,7 +70,6 @@ const RESULT_COPY = {
     similarity: "Podobieństwo",
     calories: "Kalorie",
     loading: "Ładowanie wartości odżywczych",
-    updating: "Aktualizowanie ilości",
     invalidQuantity: "Wpisz prawidłową ilość.",
   },
 } as const;
@@ -439,12 +437,10 @@ test.describe("Active Interface Language change", () => {
 
     let postCount = 0;
     const release: Record<number, () => void> = {};
-    const held: Record<number, Promise<void>> = {};
     await page.route("**/api/v1/substitutes/search", async (route) => {
       postCount += 1;
-      if (postCount === 4 || postCount === 5) {
+      if (postCount === 4) {
         const { promise, resolve } = Promise.withResolvers<void>();
-        held[postCount] = promise;
         release[postCount] = resolve;
         await promise;
       }
@@ -520,18 +516,18 @@ test.describe("Active Interface Language change", () => {
     const numberField = page.getByRole("textbox", {
       name: RESULT_COPY.pl.quantity,
     });
+    const page2ProjectedValues = await page
+      .locator("[data-input-calories], [data-result-card-matched-quantity]")
+      .allTextContents();
     await numberField.fill("2");
     await numberField.press("Enter");
-    await expect.poll(() => posts.length).toBe(4);
-    expect(posts[3]?.body).toEqual({
-      foodObjectId: 1,
-      pageIndex: 2,
-    });
-    await expect(page.locator("[data-editor-status]")).toHaveText(
-      RESULT_COPY.pl.updating,
-    );
-    release[4]!();
+    expect(posts).toHaveLength(3);
     await expect(page.locator("[data-editor-status]")).toHaveText("");
+    expect(
+      await page
+        .locator("[data-input-calories], [data-result-card-matched-quantity]")
+        .allTextContents(),
+    ).not.toEqual(page2ProjectedValues);
     await expect
       .poll(() => renderedCardIDs(page))
       .toEqual([...PIZZA_PAGE_2_IDS]);
@@ -545,15 +541,15 @@ test.describe("Active Interface Language change", () => {
     const milkOption = page.locator("#food-suggestion-option-10");
     await expect(milkOption).toBeVisible();
     await milkOption.click();
-    await expect.poll(() => posts.length).toBe(5);
-    expect(posts[4]?.body).toEqual({
+    await expect.poll(() => posts.length).toBe(4);
+    expect(posts[3]?.body).toEqual({
       foodObjectId: 10,
       pageIndex: 0,
     });
     await expect(page.locator("[data-editor-status]")).toHaveText(
       RESULT_COPY.pl.loading,
     );
-    release[5]!();
+    release[4]!();
     await expect(page.locator("[data-editor-status]")).toHaveText("");
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
@@ -570,7 +566,7 @@ test.describe("Active Interface Language change", () => {
     const quantityError = page.locator("[data-quantity-error]");
     await expect(quantityError).toHaveText(RESULT_COPY.pl.invalidQuantity);
     await expect(quantityError).toHaveAttribute("aria-live", "polite");
-    expect(posts).toHaveLength(5);
+    expect(posts).toHaveLength(4);
 
     const ledgerBeforeSecondChange = ledger.length;
     const polishControl = page.getByRole("combobox", {
@@ -591,17 +587,13 @@ test.describe("Active Interface Language change", () => {
     await expect(englishNumberField).toHaveValue("1.2.3");
     await expect(englishNumberField).toHaveAttribute("aria-invalid", "true");
     await expect(page.locator('input[type="search"]')).toHaveValue("Mleko");
-    expect(posts).toHaveLength(5);
+    expect(posts).toHaveLength(4);
 
     await englishNumberField.fill("150");
     await expect(englishNumberField).not.toHaveAttribute("aria-invalid");
     await expect(quantityError).toHaveCount(0);
     await englishNumberField.press("Enter");
-    await expect.poll(() => posts.length).toBe(6);
-    expect(posts[5]?.body).toEqual({
-      foodObjectId: 10,
-      pageIndex: 0,
-    });
+    expect(posts).toHaveLength(4);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
@@ -615,7 +607,7 @@ test.describe("Active Interface Language change", () => {
     expect(new URL(gets[gets.length - 1] ?? "").searchParams.get("query")).toBe(
       "mleko",
     );
-    expect(substitutePosts(ledger)).toHaveLength(6);
+    expect(substitutePosts(ledger)).toHaveLength(4);
     expect(posts.map((post) => post.body)).toEqual([
       {
         foodObjectId: 1,
@@ -628,14 +620,6 @@ test.describe("Active Interface Language change", () => {
       {
         foodObjectId: 1,
         pageIndex: 2,
-      },
-      {
-        foodObjectId: 1,
-        pageIndex: 2,
-      },
-      {
-        foodObjectId: 10,
-        pageIndex: 0,
       },
       {
         foodObjectId: 10,

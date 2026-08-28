@@ -372,3 +372,13 @@ Status: wontfix
 - `cosineSimilarity` squares finite `math.MaxFloat64` macro values. This overflows and returns `INTERNAL_ERROR` for catalog-valid finite Macro Profiles.
 - Repair the backend similarity arithmetic and add an integration regression. Preserve ranking behavior for ordinary profiles.
 - Resolved with the project owner on 2026-08-28. Nutrition data cannot contain physically impossible macro values near `math.MaxFloat64`; do not add a special arithmetic path for this excluded input.
+
+## ISSUE-022: Phase 23 card-spinner scope conflict
+
+Type: Architecture and requirements clarification
+Status: ready-for-agent
+
+### Clarifications
+
+- The Phase 23 implementation list says to remove selected-food and result-card spinners. The same phase says to keep new-Search and MORE! request behavior unchanged and makes REQ-081 testable, but REQ-081 requires one spinner in each visible card while a Substitute Search request is pending. The project owner must decide whether Phase 23 removes only the quantity-recalculation spinner path and keeps request-pending spinners, or removes all card spinners and first revises the phase plan, REQ-081, and the ARCH-020 presentation contract. Implementing either interpretation without this decision risks contradicting a required source.
+- Resolved with the project owner on 2026-08-28. Deprecate REQ-081 without a replacement requirement. Remove the card-spinner behavior from ARCH-020. Phase 23 removes the selected-food spinner from new Search and the result-card spinners from quantity recalculation. MORE! keeps its current spinner-free card-opacity behavior. Do not add a requirement that only prohibits card spinners.
