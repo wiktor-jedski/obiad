@@ -85,11 +85,11 @@ The default is `1 serving` when the Food Object has a Serving. Otherwise, it is 
 | Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-045, REQ-072, REQ-078 |
 | Dependencies | ARCH-006, ARCH-013, ARCH-018 |
 
-**Responsibility:** Return one deterministic page of display-ready Substitutes.
+**Responsibility:** Return one deterministic page of candidate Substitutes and calculation basis data independently of Food Quantity.
 
-**Contract:** One concrete `Run` interface accepts a Substitution Input and a zero-based page index. It returns the requested page index, total eligible count, `hasMore`, the input macronutrients and whole display calories, and at most three Substitute items.
+**Contract:** One concrete `Run` interface accepts a selected Food Object ID and a zero-based page index. It owns catalog access, exclusion, full-precision Nutritional Similarity, deterministic rank order, eligibility counts, and paging independently of Food Quantity. It returns the requested page index, total eligible count, `hasMore`, the selected Food Object calculation basis, and at most three candidate Substitute items.
 
-Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, scaled protein, carbohydrate, and fat amounts to 0.1 g, whole display calories, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
+The selected Food Object basis contains the canonical Macro Profile (`100 g` for solids or `100 ml` for liquids), base unit, and exact optional Serving base quantity. Each candidate item contains the stable Food Object ID, English and Polish names, optional image key, canonical Macro Profile, base unit, exact optional Serving base quantity where applicable, and backend-derived full-precision Nutritional Similarity and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
 
 ## ARCH-006 — PostgreSQL Catalog Loader
 
@@ -132,28 +132,32 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 
 **Contract:** A checked-in OpenAPI document is authoritative. It generates Go transport models and the TypeScript client and types. The Fiber Adapter maps generated transport values to backend domain values and maps results back. Generated values do not enter the operation Modules.
 
-The Interface provides these operations:
+The approved target interface provides these operations:
 
 - `GET /api/v1/food-suggestions?query=<text>&language=<en|pl>`
 - `POST /api/v1/substitutes/search`
 
-The POST body contains `foodObjectId`, `quantity.value`, `quantity.unit`, and `pageIndex`. `quantity.value` is a JSON number. `quantity.unit` is `g`, `ml`, or `serving`. The body limit is 4 KiB.
+In the approved target contract, the `POST /api/v1/substitutes/search` request body identifies only the selected Food Object and requested page. It contains `foodObjectId` (integer) and `pageIndex` (nonnegative integer). Food Quantity is removed from the request. The body limit is 4 KiB.
 
 A successful suggestion response contains exactly five items. Each item contains `foodObjectId`, `names.en`, `names.pl`, and `defaultQuantity`.
 
-A successful Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, `inputMacronutrients`, `inputCalories`, and zero to three items. Each item contains `foodObjectId`, both names, optional `imageKey`, `matchedQuantity`, `macronutrients`, `calories`, and `similarityPercent`.
+A successful target Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, the selected Food Object calculation basis (`foodObjectId`, `names.en`, `names.pl`, `canonicalMacroProfile` with finite protein, carbohydrate, and fat per `100 g` or `100 ml`, `baseUnit`, and exact optional `servingBaseQuantity`), and zero to three candidate items. Each candidate item contains `foodObjectId`, `names.en`, `names.pl`, optional `imageKey`, `canonicalMacroProfile`, `baseUnit`, exact optional `servingBaseQuantity` where applicable, and backend-derived whole `similarityPercent`.
 
 An error response contains a stable `code` and an optional `field`. It never contains localized prose, SQL text, a stack trace, or an internal cause.
+
+Target stable error codes:
 
 | HTTP status | Stable codes |
 | --- | --- |
 | 400 | `INVALID_REQUEST` |
 | 404 | `FOOD_OBJECT_NOT_FOUND` |
 | 413 | `REQUEST_BODY_TOO_LARGE` |
-| 422 | `INVALID_SEARCH_QUERY`, `QUERY_TOO_LONG`, `UNSUPPORTED_LANGUAGE`, `INVALID_QUANTITY`, `QUANTITY_UNIT_MISMATCH`, `SERVING_UNAVAILABLE`, `QUANTITY_OUT_OF_RANGE`, `INVALID_PAGE_INDEX`, `PAGE_OUT_OF_RANGE` |
+| 422 | `INVALID_SEARCH_QUERY`, `QUERY_TOO_LONG`, `UNSUPPORTED_LANGUAGE`, `INVALID_PAGE_INDEX`, `PAGE_OUT_OF_RANGE` |
 | 503 | `CATALOG_UNAVAILABLE` |
 | 504 | `SEARCH_TIMEOUT` |
 | 500 | `INTERNAL_ERROR` |
+
+**Transition note:** The checked-in OpenAPI document and running application continue to use the legacy quantity-dependent contract (`quantity.value`, `quantity.unit`, backend-derived `inputMacronutrients`, `inputCalories`, `matchedQuantity`, `macronutrients`, and `calories`, with quantity 422 codes `INVALID_QUANTITY`, `QUANTITY_UNIT_MISMATCH`, `SERVING_UNAVAILABLE`, and `QUANTITY_OUT_OF_RANGE`) as a transitional contract until Phase 22 implements the target contract.
 
 ## ARCH-009 — Backend Readiness Interface
 
@@ -233,19 +237,19 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 
 **Owner:** The PostgreSQL schema maintained by ARCH-007.
 
-**Structure contract:** One Food Object row contains:
+**Structure contract:** Each Food Object maintains one canonical Macro Profile per Nutrition Basis (`100 g` for solids or `100 ml` for liquids). One Food Object row contains:
 
 - one positive opaque seeded integer ID;
 - one JSONB localized-name map with nonempty `en` and `pl` string values;
-- one Physical State, `solid` or `liquid`;
-- finite double-precision protein, carbohydrate, and fat values that are nonnegative and not all zero;
-- one optional positive finite Serving base quantity;
+- one Physical State, `solid` or `liquid`, defining the Nutrition Basis (`100 g` for solids, `100 ml` for liquids);
+- one canonical Macro Profile of finite double-precision protein, carbohydrate, and fat values that are nonnegative and not all zero per Nutrition Basis;
+- one optional positive finite Serving base quantity in the base unit;
 - one nullable Food Family foreign key;
 - one optional frontend image key.
 
-Additional language keys are permitted in the localized-name map. A solid has a Nutrition Basis of `100 g`. A liquid has a Nutrition Basis of `100 ml`. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
+Additional language keys are permitted in the localized-name map. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
 
-**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry only required values. Calories, similarities, Matched Quantities, pages, and rounded card values are derived and are never stored.
+**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry the calculation basis data and required metadata. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from the canonical Macro Profiles and are never stored.
 
 ## ARCH-014 — Interface Language Preference
 
@@ -324,15 +328,17 @@ Assign each name to its first applicable exact-match, full-name-prefix, substrin
 | Requirements | REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-035, REQ-038–REQ-043, REQ-072 |
 | Dependencies | ARCH-005, ARCH-013 |
 
-**Responsibility:** Calculate eligibility, deterministic Substitute order, page data, and display values.
+**Responsibility:** Own catalog access, candidate exclusion, full-precision Nutritional Similarity, deterministic rank order, eligibility counts, and paging independently of Food Quantity.
 
-**Behavior:** Convert the Substitution Input Food Quantity to its base unit. A direct gram or millilitre value is a positive integer. A Serving value can be fractional and multiplies the Food Object Serving base quantity. The converted value must be greater than zero and at most `100,000 g` or `100,000 ml`.
+**Behavior:** The backend request identifies only the selected Food Object ID and requested zero-based page index. Food Quantity does not enter backend request identity, eligibility, ranking, or paging.
 
-For a Macro Profile `(p, c, f)`, derive calories as `4p + 4c + 9f`. Compute Nutritional Similarity as cosine similarity of the input and candidate Macro Profiles. Exclude the input Food Object and every other member of its Food Family. Sort by decreasing unrounded similarity, pinned English-name collation, and stable Food Object ID.
+Retrieve the canonical per-100 g or per-100 ml Macro Profile `(p, c, f)` for the selected Food Object and candidate Food Objects. Compute full-precision Nutritional Similarity as the cosine similarity of the canonical Macro Profiles. Exclude the selected Food Object and every other member of its Food Family from eligible Substitutes. Sort eligible candidates by decreasing unrounded Nutritional Similarity, pinned English-name collation, and stable Food Object ID.
 
-Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. Compute each selected candidate Matched Quantity at equal derived calories. Scale protein, carbohydrate, and fat to the unrounded Matched Quantity. Round Matched Quantity to a whole base unit, scaled macronutrients to 0.1 g, and `100 × similarity` to a whole percentage. Exact halves round up at each target precision. A positive value can display as zero.
+Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. Page `0` is valid when no eligible Substitute exists. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`.
 
-**Quality constraints:** Use `float64` through ranking and calculation. Do not round before response projection. Food Quantity and Interface Language changes do not change eligible IDs, order, or page for an unchanged catalog.
+For the requested page, supply the calculation basis for the selected Food Object (canonical Macro Profile, base unit, exact optional Serving base quantity) and each candidate item (canonical Macro Profile, base unit, exact optional Serving base quantity where applicable, and backend-derived whole similarity percentage). Food Quantity conversion, derived calories, Matched Quantities, and scaled macronutrients are browser projection responsibilities and do not run on the backend.
+
+**Quality constraints:** Use `float64` for all similarity calculations and ranking. Do not round similarity before deterministic sorting; round similarity to a whole percentage point with exact halves rounded up only for display presentation. Food Quantity and Interface Language changes do not change eligible IDs, order, or page for an unchanged catalog.
 
 ## ARCH-019 — Request Control and Failure Mechanism
 
