@@ -1136,7 +1136,7 @@ test.describe("Control disabled presentation", () => {
       await waitForInteractionState(page, "results");
     });
 
-    test(`[${lang}] a pending valid recalculation keeps the initiating Quantity editor focusable but non-operable with aria-disabled, and repeated activation starts no request (REQ-048, REQ-068)`, async ({
+    test(`[${lang}] a valid local quantity commit keeps the Quantity editor operable and starts no request (REQ-048, REQ-068)`, async ({
       page,
     }) => {
       await useBrowserLanguages(page, [lang]);
@@ -1153,33 +1153,20 @@ test.describe("Control disabled presentation", () => {
 
       const numberInput = page.locator("[data-quantity-number]");
       const unitSelect = page.locator("[data-quantity-unit]");
+      const moreButton = page.locator("[data-more-button]");
       await numberInput.fill("2");
       await numberInput.press("Enter");
-      await gates.waitForPosts(2);
-      await expect(numberInput).toBeFocused();
-      await expect(numberInput).toHaveAttribute("aria-disabled", "true");
-      await expect(numberInput).not.toHaveAttribute("disabled");
-      await expect(numberInput).toHaveAttribute("readonly", "");
-      await expect(unitSelect).toHaveAttribute("aria-disabled", "true");
-      await expect(unitSelect).toHaveAttribute("tabindex", "-1");
-      await expect(unitSelect).not.toHaveAttribute("disabled");
-      const moreButton = page.locator("[data-more-button]");
-      await expect(moreButton).toHaveAttribute("aria-disabled", "true");
 
-      await numberInput.press("Enter");
-      await numberInput.dispatchEvent("keydown", { key: "Enter" });
-      await unitSelect.dispatchEvent("change");
-      await page.locator("[data-quantity-editor]").dispatchEvent("focusout");
-      await moreButton.dispatchEvent("click");
-      await page.waitForTimeout(300);
-      expect(gates.count()).toBe(2);
       await expect(numberInput).toBeFocused();
-
-      gates.releasePost(1);
-      await waitForInteractionState(page, "results");
       await expect(numberInput).toBeEnabled();
+      await expect(numberInput).not.toHaveAttribute("aria-disabled");
+      await expect(numberInput).not.toHaveAttribute("readonly");
       await expect(unitSelect).toBeEnabled();
+      await expect(unitSelect).not.toHaveAttribute("aria-disabled");
+      await expect(unitSelect).not.toHaveAttribute("tabindex", "-1");
       await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+      await page.waitForTimeout(300);
+      expect(gates.count()).toBe(1);
     });
 
     test(`[${lang}] the pending MORE! page keeps the initiating MORE! control focused and aria-disabled with its gray presentation while the Quantity editor is natively disabled (REQ-082, REQ-068)`, async ({
@@ -1458,7 +1445,7 @@ test.describe("Control presentation contrast audit", () => {
       await attachReviewSurface(page, testInfo, `${seedKey}-open-suggestion`);
     });
 
-    test(`[${lang}] the pending new-Search, locked-suggestion, and card-loading presentations meet the WCAG 2.1 AA limits with review attachments (P17-G5, REQ-069)`, async ({
+    test(`[${lang}] the pending new-Search and locked-suggestion presentations meet the WCAG 2.1 AA limits with review attachments (P17-G5, REQ-069)`, async ({
       page,
     }, testInfo) => {
       await useBrowserLanguages(page, [lang]);
@@ -1485,18 +1472,6 @@ test.describe("Control presentation contrast audit", () => {
           kind: "border",
           minimum: 3,
           where: "selected-input region border",
-        },
-        {
-          selector: "[data-card-spinner]",
-          kind: "border",
-          minimum: 3,
-          where: "card-loading spinner Primary arc",
-        },
-        {
-          selector: "[data-card-spinner]",
-          kind: "border-bottom",
-          minimum: 3,
-          where: "card-loading spinner Secondary arc",
         },
       ]);
       await attachReviewSurface(page, testInfo, `${seedKey}-loading-new`);
@@ -1536,24 +1511,9 @@ test.describe("Control presentation contrast audit", () => {
       const number = page.locator("[data-quantity-number]");
       await number.fill("200");
       await number.press("Enter");
-      await gates.waitForPosts(2);
-      await expect(page.locator("[data-card-spinner]").first()).toBeVisible();
-      await expectContrastTargets(page, [
-        {
-          selector: "[data-card-spinner]",
-          kind: "border",
-          minimum: 3,
-          where: "recalculation spinner Primary arc",
-        },
-        {
-          selector: "[data-card-spinner]",
-          kind: "border-bottom",
-          minimum: 3,
-          where: "recalculation spinner Secondary arc",
-        },
-      ]);
-      await attachReviewSurface(page, testInfo, `${seedKey}-card-loading`);
-      gates.releasePost(1);
+      expect(gates.count()).toBe(1);
+      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+      await attachReviewSurface(page, testInfo, `${seedKey}-local-quantity`);
     });
 
     test(`[${lang}] the result, hover, keyboard-focus, validation-error, and pending-MORE! presentations meet the WCAG 2.1 AA limits with review attachments (P17-G5, REQ-069)`, async ({
@@ -1690,11 +1650,10 @@ test.describe("Control presentation contrast audit", () => {
 
       await number.fill("350");
       await number.press("Enter");
-      await gates.waitForPosts(2);
-      gates.releasePost(1);
+      expect(gates.count()).toBe(1);
       await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
       await moreButton.click();
-      await gates.waitForPosts(3);
+      await gates.waitForPosts(2);
       await waitForInteractionState(page, "loadingMore");
       await expect(moreButton).toHaveAttribute("aria-disabled", "true");
 
@@ -1732,7 +1691,7 @@ test.describe("Control presentation contrast audit", () => {
         },
       ]);
       await attachReviewSurface(page, testInfo, `${seedKey}-loading-more`);
-      gates.releasePost(2);
+      gates.releasePost(1);
     });
   }
 });

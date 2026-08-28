@@ -221,8 +221,7 @@ describe("the Substitution Search lifecycle", () => {
     });
     globalThis.fetch = Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request =
-          input instanceof globalThis.Request ? input : undefined;
+        const request = input instanceof globalThis.Request ? input : undefined;
         const url = request?.url ?? input.toString();
         if (url.includes("/api/v1/substitutes/search")) {
           postUrls.push(url);
@@ -262,7 +261,9 @@ describe("the Substitution Search lifecycle", () => {
         throw new TypeError("Quantity editor controls must be present");
       }
 
-      expect(postUrls, "the initial selection starts one search").toHaveLength(1);
+      expect(postUrls, "the initial selection starts one search").toHaveLength(
+        1,
+      );
       await fireEvent.input(quantity, { target: { value: "200" } });
       await fireEvent.keyDown(quantity, { key: "Enter" });
       await tick();
@@ -282,14 +283,18 @@ describe("the Substitution Search lifecycle", () => {
       expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
         "821 kcal",
       );
-      expect(postUrls, "local commits start no additional POST").toHaveLength(1);
+      expect(postUrls, "local commits start no additional POST").toHaveLength(
+        1,
+      );
       expect(aborts, "local commits cancel no request").toBe(0);
-      expect(queryClient.isFetching(), "local commits start no pending query").toBe(
-        0,
-      );
-      expect(isSubstitutionSearchLocked(), "local commits acquire no lock").toBe(
-        false,
-      );
+      expect(
+        queryClient.isFetching(),
+        "local commits start no pending query",
+      ).toBe(0);
+      expect(
+        isSubstitutionSearchLocked(),
+        "local commits acquire no lock",
+      ).toBe(false);
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
@@ -311,8 +316,7 @@ describe("the Substitution Search lifecycle", () => {
     });
     globalThis.fetch = Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request =
-          input instanceof HappyDomRequest ? input : undefined;
+        const request = input instanceof HappyDomRequest ? input : undefined;
         const url = request?.url ?? input.toString();
         if (url.includes("/api/v1/substitutes/search")) {
           postUrls.push(url);
@@ -368,15 +372,17 @@ describe("the Substitution Search lifecycle", () => {
       const pageOneCard = view.container.querySelector(
         '[data-result-card][data-food-object-id="21"]',
       );
-      const pageOneResponse = queryClient.getQueryData<SubstituteSearchResponse>([
-        "substitute-search",
-        SELECTED.foodObjectId,
-        1,
-      ]);
+      const pageOneResponse =
+        queryClient.getQueryData<SubstituteSearchResponse>([
+          "substitute-search",
+          SELECTED.foodObjectId,
+          1,
+        ]);
       expect(pageOneCard).not.toBeNull();
-      expect(pageRequestCount, "MORE! starts a later-page request").toBeGreaterThan(
-        1,
-      );
+      expect(
+        pageRequestCount,
+        "MORE! starts a later-page request",
+      ).toBeGreaterThan(1);
 
       interactionState.setQuantityText("200");
       interactionState.commitQuantity();

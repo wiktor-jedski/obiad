@@ -18,21 +18,13 @@
     /** One display-ready substitution item. */
     item: ProjectedSubstituteItem;
     language: InterfaceLanguage;
-    /** Whether quantity recalculation is pending; non-image content is hidden. */
-    pending?: boolean;
     /** Zero-based rank within the rendered result page. */
     rank?: number;
     /** Whether the card belongs to the first page. */
     firstPage?: boolean;
   }
 
-  let {
-    item,
-    language,
-    pending = false,
-    rank = 0,
-    firstPage = false,
-  }: Props = $props();
+  let { item, language, rank = 0, firstPage = false }: Props = $props();
 
   /** The active-language dictionary for the card's visible labels. */
   const dictionary = $derived(getDictionary(language));
@@ -68,11 +60,7 @@
     onerror={onImageError}
     class="h-44 w-full object-cover"
   />
-  <div
-    data-card-content
-    class="flex flex-col gap-2 p-4"
-    class:opacity-0={pending}
-  >
+  <div data-card-content class="flex flex-col gap-2 p-4">
     <h3 class="text-center text-base font-medium text-dark-text-primary">
       {item.names[language]}
     </h3>
@@ -126,16 +114,4 @@
       </div>
     </dl>
   </div>
-  {#if pending}
-    <div
-      aria-hidden="true"
-      class="pointer-events-none absolute inset-x-0 bottom-0 top-44 flex items-center justify-center"
-    >
-      <span
-        data-card-spinner
-        aria-hidden="true"
-        class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-dark-secondary border-t-dark-primary"
-      ></span>
-    </div>
-  {/if}
 </article>
