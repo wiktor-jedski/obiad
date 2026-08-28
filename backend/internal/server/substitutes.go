@@ -48,13 +48,7 @@ func substitutesHandler(pool *pgxpool.Pool) fiber.Handler {
 			return writeError(c, fiber.StatusInternalServerError, transport.INTERNALERROR, nil, err.Error())
 		}
 
-		page, err := find.Run(ctx, repository.SubstituteInput{
-			FoodObjectID: req.FoodObjectId,
-			Quantity: repository.FoodQuantity{
-				Value: req.Quantity.Value,
-				Unit:  repository.Unit(req.Quantity.Unit),
-			},
-		}, req.PageIndex)
+		page, err := find.Run(ctx, req.FoodObjectId, req.PageIndex)
 		if err != nil {
 			status, code, field, logCause := substituteRunError(err)
 			return writeError(c, status, code, field, logCause)
@@ -86,14 +80,6 @@ func substituteRunError(err error) (status int, code transport.ErrorCode, field 
 			return fiber.StatusBadRequest, transport.INVALIDREQUEST, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute request", moduleErr.Field)
 		case repository.CodeFoodObjectNotFound:
 			return fiber.StatusNotFound, transport.FOODOBJECTNOTFOUND, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object is absent from the catalog", moduleErr.Field)
-		case repository.CodeInvalidQuantity:
-			return fiber.StatusUnprocessableEntity, transport.INVALIDQUANTITY, fieldPathOf(moduleErr.Field), safeSubstituteCause("invalid substitute quantity", moduleErr.Field)
-		case repository.CodeQuantityUnitMismatch:
-			return fiber.StatusUnprocessableEntity, transport.QUANTITYUNITMISMATCH, fieldPathOf(moduleErr.Field), safeSubstituteCause("quantity unit does not match the food object physical state", moduleErr.Field)
-		case repository.CodeServingUnavailable:
-			return fiber.StatusUnprocessableEntity, transport.SERVINGUNAVAILABLE, fieldPathOf(moduleErr.Field), safeSubstituteCause("food object has no stored serving", moduleErr.Field)
-		case repository.CodeQuantityOutOfRange:
-			return fiber.StatusUnprocessableEntity, transport.QUANTITYOUTOFRANGE, fieldPathOf(moduleErr.Field), safeSubstituteCause("converted quantity exceeds the base-unit limit", moduleErr.Field)
 		case repository.CodeInvalidPageIndex:
 			return fiber.StatusUnprocessableEntity, transport.INVALIDPAGEINDEX, fieldPathOf(moduleErr.Field), safeSubstituteCause("page index is negative", moduleErr.Field)
 		case repository.CodePageOutOfRange:
@@ -132,10 +118,6 @@ type objectSpec struct {
 // substituteRequestSpec defines the accepted request shape.
 var substituteRequestSpec = &objectSpec{fields: []fieldSpec{
 	{key: "foodObjectId", path: "foodObjectId", kind: kindNumber},
-	{key: "quantity", path: "quantity", kind: kindObject, nested: &objectSpec{fields: []fieldSpec{
-		{key: "value", path: "quantity.value", kind: kindNumber},
-		{key: "unit", path: "quantity.unit", kind: kindString},
-	}}},
 	{key: "pageIndex", path: "pageIndex", kind: kindNumber},
 }}
 
@@ -161,7 +143,6 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 		return req, field, err
 	}
 
-	quantity := members["quantity"].(map[string]any)
 	req.FoodObjectId, err = strictInt32(members["foodObjectId"].(json.Number), "foodObjectId")
 	if err != nil {
 		return req, fieldPathOf("foodObjectId"), err
@@ -170,11 +151,6 @@ func decodeSubstituteRequest(c fiber.Ctx) (transport.SubstituteSearchRequest, *t
 	if err != nil {
 		return req, fieldPathOf("pageIndex"), err
 	}
-	req.Quantity.Value, err = strictFloat64(quantity["value"].(json.Number), "quantity.value")
-	if err != nil {
-		return req, fieldPathOf("quantity.value"), err
-	}
-	req.Quantity.Unit = transport.SubstitutionQuantityUnit(quantity["unit"].(string))
 	return req, nil, nil
 }
 
@@ -284,15 +260,6 @@ func strictInt32(number json.Number, field string) (int32, error) {
 	return int32(v), nil
 }
 
-// strictFloat64 parses one request number.
-func strictFloat64(number json.Number, field string) (float64, error) {
-	v, err := strconv.ParseFloat(number.String(), 64)
-	if err != nil {
-		return 0, fmt.Errorf("field %s is not a valid double", field)
-	}
-	return v, nil
-}
-
 // substituteResponse maps a page to transport values.
 func substituteResponse(page *repository.Page) transport.SubstituteSearchResponse {
 	items := make([]transport.SubstituteItem, 0, len(page.Items))
@@ -304,16 +271,13 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 				Pl: item.Names.Pl,
 			},
 			ImageKey: item.ImageKey,
-			MatchedQuantity: transport.MatchedQuantity{
-				Value: item.MatchedQuantity.Value,
-				Unit:  transport.MatchedQuantityUnit(item.MatchedQuantity.Unit),
+			MacroProfile: transport.MacroProfile{
+				Protein:      item.MacroProfile.Protein,
+				Carbohydrate: item.MacroProfile.Carbohydrate,
+				Fat:          item.MacroProfile.Fat,
 			},
-			Macronutrients: transport.Macronutrients{
-				Protein:      item.Protein,
-				Carbohydrate: item.Carbohydrate,
-				Fat:          item.Fat,
-			},
-			Calories:          item.Calories,
+			BaseUnit:          transport.SubstituteItemBaseUnit(item.BaseUnit),
+			Serving:           item.Serving,
 			SimilarityPercent: item.SimilarityPercent,
 		})
 	}
@@ -321,12 +285,20 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 		PageIndex:          page.PageIndex,
 		TotalEligibleCount: int32(page.TotalEligibleCount),
 		HasMore:            page.HasMore,
-		InputMacronutrients: transport.Macronutrients{
-			Protein:      page.InputMacronutrients.Protein,
-			Carbohydrate: page.InputMacronutrients.Carbohydrate,
-			Fat:          page.InputMacronutrients.Fat,
+		SelectedFood: transport.SelectedFood{
+			FoodObjectId: page.SelectedFood.FoodObjectID,
+			Names: transport.LocalizedNames{
+				En: page.SelectedFood.Names.En,
+				Pl: page.SelectedFood.Names.Pl,
+			},
+			MacroProfile: transport.MacroProfile{
+				Protein:      page.SelectedFood.MacroProfile.Protein,
+				Carbohydrate: page.SelectedFood.MacroProfile.Carbohydrate,
+				Fat:          page.SelectedFood.MacroProfile.Fat,
+			},
+			BaseUnit: transport.SelectedFoodBaseUnit(page.SelectedFood.BaseUnit),
+			Serving:  page.SelectedFood.Serving,
 		},
-		InputCalories: page.InputCalories,
-		Items:         items,
+		Items: items,
 	}
 }

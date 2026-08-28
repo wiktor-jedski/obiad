@@ -345,7 +345,7 @@ func TestFoodSuggestionAllowedQuantityBoundaryHTTPIntegration(t *testing.T) {
 			status, body, contentType := getSuggestions(t, baseURL, "pizza", "en")
 			assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusInternalServerError, "INTERNAL_ERROR", "")
 
-			status, body, contentType = postSubstitutes(t, baseURL, "application/json", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
+			status, body, contentType = postSubstitutes(t, baseURL, "application/json", `{"foodObjectId":1,"pageIndex":0}`)
 			assertError(t, httpResult{status: status, body: body, contentType: contentType}, http.StatusInternalServerError, "INTERNAL_ERROR", "")
 		})
 	}
