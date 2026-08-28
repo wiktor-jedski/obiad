@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Obiad aggregate catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "dataCommit",
+    "foodFamilies",
+    "foodObjects"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "dataCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "foodFamilies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/foodFamily"
+      }
+    },
+    "foodObjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/foodObject"
+      }
+    }
+  },
+  "$defs": {
+    "foodFamily": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "names"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/positiveId"
+        },
+        "names": {
+          "$ref": "#/$defs/localizedNames"
+        }
+      }
+    },
+    "foodObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "names",
+        "macroProfile",
+        "nutritionBasis"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/positiveId"
+        },
+        "names": {
+          "$ref": "#/$defs/localizedNames"
+        },
+        "macroProfile": {
+          "$ref": "#/$defs/macroProfile"
+        },
+        "nutritionBasis": {
+          "type": "string",
+          "enum": [
+            "g",
+            "ml"
+          ]
+        },
+        "serving": {
+          "$ref": "#/$defs/serving"
+        },
+        "source": {
+          "$ref": "#/$defs/sourceUrl"
+        },
+        "foodFamilyId": {
+          "$ref": "#/$defs/positiveId"
+        }
+      }
+    },
+    "localizedNames": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "required": [
+        "en",
+        "pl"
+      ],
+      "properties": {
+        "en": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pl": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "macroProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protein",
+        "availableCarbohydrate",
+        "fat"
+      ],
+      "properties": {
+        "protein": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "availableCarbohydrate": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "fat": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "protein": {
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "availableCarbohydrate": {
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "fat": {
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "serving": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "value": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "g",
+            "ml"
+          ]
+        }
+      }
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "format": "uri"
+    },
+    "positiveId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "nonnegativeNumber": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}
