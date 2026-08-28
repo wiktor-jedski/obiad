@@ -320,12 +320,11 @@ describe("the Substitution Search lifecycle", () => {
         const url = request?.url ?? input.toString();
         if (url.includes("/api/v1/substitutes/search")) {
           postUrls.push(url);
+          const body = request?.body ?? init?.body;
           const pageIndex =
-            typeof request?.body === "string"
-              ? JSON.parse(request.body).pageIndex
-              : typeof init?.body === "string"
-                ? JSON.parse(init.body).pageIndex
-                : postUrls.length - 1;
+            body === null || body === undefined
+              ? postUrls.length - 1
+              : JSON.parse(body.toString()).pageIndex;
           return new Response(
             JSON.stringify({
               pageIndex,
