@@ -246,7 +246,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-025 — Quantity syntax
 
-**Statement:** The quantity control shall accept positive integer grams or millilitres and positive Serving counts that use a dot decimal separator.
+**Statement:** The browser quantity control shall accept positive integer grams or millilitres and positive Serving counts that use a dot decimal separator.
 
 | Attribute | Value |
 | --- | --- |
@@ -256,7 +256,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-026 — Invalid quantity
 
-**Statement:** IF a quantity is invalid, THEN the system shall cancel submission, keep the value, and show a localized field message.
+**Statement:** IF an entered quantity is invalid, THEN the browser shall cancel submission, keep the value, and show a localized field message.
 
 | Attribute | Value |
 | --- | --- |
@@ -266,7 +266,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-027 — Quantity editing
 
-**Statement:** WHILE results are visible, the system shall let the user edit the Substitution Input quantity.
+**Statement:** WHILE results are visible, the browser shall let the user edit the Substitution Input quantity without changing the current result values until the edited value is committed.
 
 | Attribute | Value |
 | --- | --- |
@@ -276,23 +276,23 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-028 — Quantity recalculation
 
-**Statement:** WHEN a valid quantity changes, the system shall recalculate result values and keep the result order and current page.
+**Statement:** WHEN a valid quantity is committed, the browser shall reproject the current page values locally from the returned calculation basis, start no HTTP request, and keep eligibility, result identity, order, page, motion, focus, and Interface Language unchanged.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: Values change proportionally. Result IDs and the current page stay the same. |
+| Verification | Playwright: After a valid commit the input and card values change proportionally and eligibility, result identity, order, page, focus, and Interface Language are unchanged, and no Substitute Search request is started. Browser calculation test: reprojected values match the full-precision projection. |
 
 ## REQ-029 — Derived calories
 
-**Statement:** The system shall calculate calories as 4 times protein plus 4 times carbohydrate plus 9 times fat.
+**Statement:** The browser shall derive calories from the returned canonical per-100 g or per-100 ml Macro Profile as 4 times protein plus 4 times carbohydrate plus 9 times fat.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Calculation test: Known Macro Profiles give the expected full-precision calorie values. |
+| Verification | Browser calculation test: A known per-100 Macro Profile and committed quantity give the expected full-precision input calories before display rounding. |
 
 ## REQ-030 — Nutritional Similarity
 
@@ -306,13 +306,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-031 — Matched Quantity
 
-**Statement:** The Matched Quantity shall contain the same derived calories as the entered Substitution Input quantity.
+**Statement:** The browser shall compute each candidate equal-calorie Matched Quantity from its returned canonical per-100 g or per-100 ml Macro Profile so that it contains the same derived calories as the entered Substitution Input quantity.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Calculation test: Known calorie densities give the expected unrounded Matched Quantities. |
+| Verification | Browser calculation test: Known per-100 Macro Profiles give the expected unrounded equal-calorie Matched Quantities before display rounding. |
 
 ## REQ-032 — Input exclusion
 
@@ -366,43 +366,43 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-037 — Card data
 
-**Statement:** Each result card shall show an image, localized name, Matched Quantity, three macronutrients, and a whole-number Macro similarity percentage.
+**Statement:** Each result card shall show an image, localized name, the browser-projected Matched Quantity, the three browser-scaled macronutrients, and the backend-derived whole-number Macro similarity percentage.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: Each card field matches the API data in English and Polish. |
+| Verification | Playwright and browser calculation test: Each card shows the returned name and backend similarity plus the browser-projected Matched Quantity and macronutrients in English and Polish. |
 
 ## REQ-038 — Base-unit Matched Quantity
 
-**Statement:** Each card shall show Matched Quantity as whole grams for solids or whole millilitres for liquids.
+**Statement:** Each card shall show the browser-rounded Matched Quantity as whole grams for solids or whole millilitres for liquids.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: Cards show g or ml and do not show a Serving equivalent. |
+| Verification | Playwright: Cards show the browser-rounded whole g or ml and do not show a Serving equivalent. |
 
 ## REQ-039 — Display precision
 
-**Statement:** The system shall round Matched Quantity to a whole gram or millilitre, each macronutrient to 0.1 g, and Macro similarity to one percentage point.
+**Statement:** The browser shall apply final display rounding to full-precision projected values, rounding Matched Quantity to a whole gram or millilitre and each macronutrient to 0.1 g; the Macro similarity percentage is presented as a whole percentage point.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Integration calculation test: Boundary fixtures show whole-unit Matched Quantity, one-decimal macronutrients, and whole-percentage similarity use the specified precision and round exact halves up. |
+| Verification | Browser calculation test: Boundary fixtures show whole-unit Matched Quantity and one-decimal macronutrients, use the specified precision, and round exact halves up; Macro similarity is presented as a whole percentage point. |
 
 ## REQ-040 — Calculation precision
 
-**Statement:** The system shall use full calculation precision before it rounds values for display.
+**Statement:** The browser shall use full calculation precision for the projection before it applies final display rounding.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accuracy) |
 | Status | Active |
-| Verification | Calculation test: A fixture that is sensitive to early rounding gives the full-precision result. |
+| Verification | Browser calculation test: A fixture that is sensitive to early rounding gives the full-precision projection result. |
 
 ## REQ-041 — MORE replacement
 
@@ -788,13 +788,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-078 — Displayed calories
 
-**Statement:** The system shall show backend-derived whole calories in kcal for the Substitution Input and every result card.
+**Statement:** The browser shall show whole derived calories in kcal for the Substitution Input and every result card.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | API and Playwright: The input and each card show the response calories with the localized `Calories` or `Kalorie` label and `kcal`; the browser does not calculate or round them. |
+| Verification | Playwright: The input and each card show the browser-projected whole calories with the localized `Calories` or `Kalorie` label and `kcal`. Browser calculation test: the projected values match the full-precision result after final rounding. |
 
 ## REQ-079 — Compact result presentation
 
@@ -818,13 +818,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-081 — Single card loading spinner
 
-**Statement:** WHILE card values are pending, each visible selected-food card and result card shall show exactly one centered spinner in place of its non-image content.
+**Statement:** WHILE a Substitute Search request is pending, each visible selected-food card and result card shall show exactly one centered spinner in place of its non-image content; a valid local quantity commit starts no request and never leaves card values pending.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: Each pending card has one centered spinner, its non-image content is hidden, result images remain visible, and card dimensions do not change. |
+| Verification | Playwright: During a controlled pending Substitute Search request each pending card has one centered spinner, its non-image content is hidden, result images remain visible, and card dimensions do not change; a valid quantity commit shows no card spinner. |
 
 ## REQ-082 — Pending MORE! control
 
