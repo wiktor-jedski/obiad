@@ -183,7 +183,6 @@ async function expectSubstitutePost(
   const post = posts[0];
   expect(post.body).toEqual({
     foodObjectId,
-    quantity: expectedQuantity,
     pageIndex: 0,
   });
 

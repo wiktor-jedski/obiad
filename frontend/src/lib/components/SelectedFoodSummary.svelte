@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SubstituteSearchResponse } from "../../client/types.gen";
+  import type { ProjectedSubstitutePage } from "../substituteProjection";
   import {
     formatCaloriesValue,
     formatFoodQuantityValue,
@@ -32,13 +32,13 @@
       | ZeroResultsInteractionState
       | NewSearchFailureInteractionState
       | MoreFailureInteractionState;
-    data: SubstituteSearchResponse | undefined;
+    /** Display-ready selected-input and card values projected from calculation basis. */
+    projection: ProjectedSubstitutePage | undefined;
     /** Whether a valid quantity recalculation is pending. */
     recalculating: boolean;
   }
 
-  let { interaction, data, recalculating }: Props = $props();
-
+  let { interaction, projection, recalculating }: Props = $props();
   /** The active dictionary for the region's interface and validation text. */
   const dictionary = $derived(getDictionary($interfaceLanguage));
   /** The selected Food Object name in the active Interface Language. */
@@ -86,9 +86,9 @@
    * Its controls remain focusable but non-operable.
    */
   const focusRetainingLock = $derived(locked && recalculating);
-  const inputMacros = $derived(data?.inputMacronutrients);
-  /** The response's input calories at the committed quantity, when present. */
-  const inputCalories = $derived(data?.inputCalories);
+  const inputMacros = $derived(projection?.inputMacronutrients);
+  /** The projected input calories at the committed quantity, when present. */
+  const inputCalories = $derived(projection?.inputCalories);
   const QUANTITY_ERROR_ID = "quantity-error";
   /** Stable id for the polite editor status region. */
   const EDITOR_STATUS_ID = "quantity-editor-status";
@@ -284,7 +284,7 @@
       </p>
     {/if}
 
-    <!-- Values come from the backend; pending state uses the card spinner. -->
+    <!-- Values come from the browser projection; pending state uses the card spinner. -->
     <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
         <dt class="font-medium text-dark-text-muted">

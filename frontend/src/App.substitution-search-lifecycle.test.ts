@@ -20,13 +20,18 @@ const RESPONSE_BODY = JSON.stringify({
   pageIndex: 0,
   totalEligibleCount: 1,
   hasMore: false,
-  inputMacronutrients: { protein: 31, carbohydrate: 0, fat: 3.6 },
+  selectedFood: {
+    foodObjectId: 18,
+    names: { en: "Butter", pl: "Masło" },
+    macroProfile: { protein: 31, carbohydrate: 0, fat: 3.6 },
+    baseUnit: "g",
+  },
   items: [
     {
       foodObjectId: 20,
       names: { en: "Protein shake", pl: "Shake białkowy" },
-      matchedQuantity: { value: 100, unit: "ml" },
-      macronutrients: { protein: 8, carbohydrate: 4, fat: 1 },
+      macroProfile: { protein: 8, carbohydrate: 4, fat: 1 },
+      baseUnit: "ml",
       similarityPercent: 85,
     },
   ],
@@ -161,10 +166,36 @@ describe("the Substitution Search lifecycle", () => {
         }
         if (url.includes("/api/v1/substitutes/search")) {
           postUrls.push(url);
-          return new Response(RESPONSE_BODY, {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
+          const foodObjectId = postUrls.length === 1 ? 6 : 11;
+          return new Response(
+            JSON.stringify({
+              pageIndex: 0,
+              totalEligibleCount: 1,
+              hasMore: false,
+              selectedFood: {
+                foodObjectId,
+                names: {
+                  en: `Food ${foodObjectId}`,
+                  pl: `Potrawa ${foodObjectId}`,
+                },
+                macroProfile: { protein: 31, carbohydrate: 0, fat: 3.6 },
+                baseUnit: "g",
+              },
+              items: [
+                {
+                  foodObjectId: 20,
+                  names: { en: "Protein shake", pl: "Shake białkowy" },
+                  macroProfile: { protein: 8, carbohydrate: 4, fat: 1 },
+                  baseUnit: "ml",
+                  similarityPercent: 85,
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
         }
         throw new Error(`Unexpected request: ${url}`);
       },

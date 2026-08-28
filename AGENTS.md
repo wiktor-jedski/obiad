@@ -99,6 +99,14 @@ Follow TSDoc comment specification.
 Follow the official Go Doc comments guidelines.
 Keep backend repository persistence SQL under the colocated `backend/internal/repository/sql/` directory and embed it from Go. Do not place SQL statement strings inline in repository Go files.
 
+Use following file format:
+
+- package name
+- imports
+- types
+- constants
+- functions
+
 ## Testing Guidelines
 
 - For each phase, during task planning, add relevant integration tests for the newly implemented code AND the code that will work with this phase's code.

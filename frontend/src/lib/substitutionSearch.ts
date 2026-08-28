@@ -73,7 +73,6 @@ export function createSubstitutionSearchQuery(
           }
           return searchSubstitutes({
             foodObjectId: active.foodObjectId,
-            quantity: active.quantity,
             pageIndex: active.pageIndex,
             signal,
           });
@@ -121,7 +120,6 @@ export function createRetainedPageQuery(input: RetainedPageQueryInput) {
 
 export function searchSubstitutes(options: {
   foodObjectId: number;
-  quantity: CommittedSubstitutionInput["quantity"];
   pageIndex: number;
   signal?: AbortSignal;
 }): Promise<SubstituteSearchResponse> {
@@ -129,7 +127,6 @@ export function searchSubstitutes(options: {
     url: "/api/v1/substitutes/search",
     body: {
       foodObjectId: options.foodObjectId,
-      quantity: options.quantity,
       pageIndex: options.pageIndex,
     },
   };

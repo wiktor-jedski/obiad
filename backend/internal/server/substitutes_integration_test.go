@@ -50,20 +50,38 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
 		t.Fatalf("body %q is not valid JSON: %v", body, err)
 	}
-	assertExactFieldSet(t, envelope, "response envelope", "pageIndex", "totalEligibleCount", "hasMore", "inputMacronutrients", "inputCalories", "items")
-	var inputMacros map[string]json.RawMessage
-	if err := json.Unmarshal(envelope["inputMacronutrients"], &inputMacros); err != nil {
-		t.Fatalf("inputMacronutrients %q is not a JSON object: %v", envelope["inputMacronutrients"], err)
+	assertExactFieldSet(t, envelope, "response envelope", "pageIndex", "totalEligibleCount", "hasMore", "selectedFood", "items")
+	var selected map[string]json.RawMessage
+	if err := json.Unmarshal(envelope["selectedFood"], &selected); err != nil {
+		t.Fatalf("selectedFood %q is not a JSON object: %v", envelope["selectedFood"], err)
 	}
-	assertExactFieldSet(t, inputMacros, "inputMacronutrients", "protein", "carbohydrate", "fat")
+	wantSelectedFields := []string{"foodObjectId", "names", "macroProfile", "baseUnit"}
+	if _, ok := selected["serving"]; ok {
+		wantSelectedFields = append(wantSelectedFields, "serving")
+	}
+	assertExactFieldSet(t, selected, "selectedFood", wantSelectedFields...)
+	var selectedNames map[string]json.RawMessage
+	if err := json.Unmarshal(selected["names"], &selectedNames); err != nil {
+		t.Fatalf("selectedFood names %q is not a JSON object: %v", selected["names"], err)
+	}
+	assertExactFieldSet(t, selectedNames, "selectedFood names", "en", "pl")
+	var selectedMacros map[string]json.RawMessage
+	if err := json.Unmarshal(selected["macroProfile"], &selectedMacros); err != nil {
+		t.Fatalf("selectedFood macroProfile %q is not a JSON object: %v", selected["macroProfile"], err)
+	}
+	assertExactFieldSet(t, selectedMacros, "selectedFood macroProfile", "protein", "carbohydrate", "fat")
+
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(envelope["items"], &items); err != nil {
 		t.Fatalf("items %q is not a JSON array: %v", envelope["items"], err)
 	}
 	for i, item := range items {
-		wantFields := []string{"foodObjectId", "names", "matchedQuantity", "macronutrients", "calories", "similarityPercent"}
+		wantFields := []string{"foodObjectId", "names", "macroProfile", "baseUnit", "similarityPercent"}
 		if _, ok := item["imageKey"]; ok {
 			wantFields = append(wantFields, "imageKey")
+		}
+		if _, ok := item["serving"]; ok {
+			wantFields = append(wantFields, "serving")
 		}
 		assertExactFieldSet(t, item, "item", wantFields...)
 		var names map[string]json.RawMessage
@@ -71,16 +89,11 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 			t.Fatalf("item %d names %q is not a JSON object: %v", i, item["names"], err)
 		}
 		assertExactFieldSet(t, names, "names", "en", "pl")
-		var matched map[string]json.RawMessage
-		if err := json.Unmarshal(item["matchedQuantity"], &matched); err != nil {
-			t.Fatalf("item %d matchedQuantity %q is not a JSON object: %v", i, item["matchedQuantity"], err)
-		}
-		assertExactFieldSet(t, matched, "matchedQuantity", "value", "unit")
 		var macros map[string]json.RawMessage
-		if err := json.Unmarshal(item["macronutrients"], &macros); err != nil {
-			t.Fatalf("item %d macronutrients %q is not a JSON object: %v", i, item["macronutrients"], err)
+		if err := json.Unmarshal(item["macroProfile"], &macros); err != nil {
+			t.Fatalf("item %d macroProfile %q is not a JSON object: %v", i, item["macroProfile"], err)
 		}
-		assertExactFieldSet(t, macros, "macronutrients", "protein", "carbohydrate", "fat")
+		assertExactFieldSet(t, macros, "macroProfile", "protein", "carbohydrate", "fat")
 	}
 	var response transport.SubstituteSearchResponse
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
@@ -89,18 +102,37 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	return response
 }
 
-func assertInputMacronutrients(t *testing.T, response transport.SubstituteSearchResponse, protein, carbohydrate, fat float64) {
-	t.Helper()
-	got := response.InputMacronutrients
-	if got.Protein != protein || got.Carbohydrate != carbohydrate || got.Fat != fat {
-		t.Fatalf("inputMacronutrients (%v, %v, %v), want (%v, %v, %v)", got.Protein, got.Carbohydrate, got.Fat, protein, carbohydrate, fat)
-	}
+type wantSelectedFood struct {
+	id           int32
+	en           string
+	pl           string
+	macroProfile transport.MacroProfile
+	baseUnit     transport.SelectedFoodBaseUnit
+	serving      *float64
 }
 
-func assertInputCalories(t *testing.T, response transport.SubstituteSearchResponse, calories int64) {
+func assertSelectedFood(t *testing.T, got transport.SelectedFood, want wantSelectedFood) {
 	t.Helper()
-	if response.InputCalories != calories {
-		t.Fatalf("inputCalories %d, want %d", response.InputCalories, calories)
+	if got.FoodObjectId != want.id {
+		t.Fatalf("selectedFood.FoodObjectId %d, want %d", got.FoodObjectId, want.id)
+	}
+	if got.Names.En != want.en || got.Names.Pl != want.pl {
+		t.Fatalf("selectedFood.Names (%q, %q), want (%q, %q)", got.Names.En, got.Names.Pl, want.en, want.pl)
+	}
+	if got.MacroProfile != want.macroProfile {
+		t.Fatalf("selectedFood.MacroProfile %+v, want %+v", got.MacroProfile, want.macroProfile)
+	}
+	if got.BaseUnit != want.baseUnit {
+		t.Fatalf("selectedFood.BaseUnit %q, want %q", got.BaseUnit, want.baseUnit)
+	}
+	if want.serving == nil {
+		if got.Serving != nil {
+			t.Fatalf("selectedFood.Serving %v, want nil", *got.Serving)
+		}
+	} else {
+		if got.Serving == nil || *got.Serving != *want.serving {
+			t.Fatalf("selectedFood.Serving %v, want %v", got.Serving, *want.serving)
+		}
 	}
 }
 
@@ -109,12 +141,9 @@ type wantSubstituteItem struct {
 	en                string
 	pl                string
 	imageKey          *string
-	matchedValue      int64
-	matchedUnit       transport.MatchedQuantityUnit
-	protein           float64
-	carbohydrate      float64
-	fat               float64
-	calories          int64
+	macroProfile      transport.MacroProfile
+	baseUnit          transport.SubstituteItemBaseUnit
+	serving           *float64
 	similarityPercent int32
 }
 
@@ -133,14 +162,18 @@ func assertSubstituteItem(t *testing.T, item transport.SubstituteItem, want want
 	} else if item.ImageKey == nil || *item.ImageKey != *want.imageKey {
 		t.Fatalf("item %d imageKey %v, want %q", item.FoodObjectId, item.ImageKey, *want.imageKey)
 	}
-	if item.MatchedQuantity.Value != want.matchedValue || item.MatchedQuantity.Unit != want.matchedUnit {
-		t.Fatalf("item %d matchedQuantity %+v, want value %d unit %q", item.FoodObjectId, item.MatchedQuantity, want.matchedValue, want.matchedUnit)
+	if item.MacroProfile != want.macroProfile {
+		t.Fatalf("item %d macroProfile (%v, %v, %v), want (%v, %v, %v)", item.FoodObjectId, item.MacroProfile.Protein, item.MacroProfile.Carbohydrate, item.MacroProfile.Fat, want.macroProfile.Protein, want.macroProfile.Carbohydrate, want.macroProfile.Fat)
 	}
-	if item.Macronutrients.Protein != want.protein || item.Macronutrients.Carbohydrate != want.carbohydrate || item.Macronutrients.Fat != want.fat {
-		t.Fatalf("item %d macronutrients (%v, %v, %v), want (%v, %v, %v)", item.FoodObjectId, item.Macronutrients.Protein, item.Macronutrients.Carbohydrate, item.Macronutrients.Fat, want.protein, want.carbohydrate, want.fat)
+	if item.BaseUnit != want.baseUnit {
+		t.Fatalf("item %d baseUnit %q, want %q", item.FoodObjectId, item.BaseUnit, want.baseUnit)
 	}
-	if item.Calories != want.calories {
-		t.Fatalf("item %d calories %d, want %d", item.FoodObjectId, item.Calories, want.calories)
+	if want.serving == nil {
+		if item.Serving != nil {
+			t.Fatalf("item %d serving %v, want nil", item.FoodObjectId, *item.Serving)
+		}
+	} else if item.Serving == nil || *item.Serving != *want.serving {
+		t.Fatalf("item %d serving %v, want %v", item.FoodObjectId, item.Serving, *want.serving)
 	}
 	if item.SimilarityPercent != want.similarityPercent {
 		t.Fatalf("item %d similarityPercent %d, want %d", item.FoodObjectId, item.SimilarityPercent, want.similarityPercent)
@@ -171,7 +204,8 @@ func assertSubstitutePage(t *testing.T, response transport.SubstituteSearchRespo
 	}
 }
 
-func strPtr(s string) *string { return &s }
+func strPtr(s string) *string       { return &s }
+func float64Ptr(v float64) *float64 { return &v }
 
 func assertInvalidRequest(t *testing.T, status int, body string, contentType string, wantField transport.ErrorField) {
 	t.Helper()
@@ -207,90 +241,104 @@ func TestSubstituteSearchHTTPIntegration(t *testing.T) {
 	const jsonType = "application/json"
 
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`)
+		`{"foodObjectId":1,"pageIndex":0}`)
 	pizza := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, pizza, 35.0, 105.0, 35.0)
-	assertInputCalories(t, pizza, 875)
+	assertSelectedFood(t, pizza.SelectedFood, wantSelectedFood{
+		id: 1, en: "Pizza Margherita", pl: "Pizza margherita",
+		macroProfile: transport.MacroProfile{Protein: 10, Carbohydrate: 30, Fat: 10},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      float64Ptr(350),
+	})
 	assertSubstitutePage(t, pizza, 0, 36, true,
-		wantSubstituteItem{id: 13, en: "Gyoza", pl: "Pierożki gyoza", imageKey: strPtr("gyoza"), matchedValue: 438, matchedUnit: transport.MatchedQuantityUnitG, protein: 35, carbohydrate: 105, fat: 35, calories: 875, similarityPercent: 100},
-		wantSubstituteItem{id: 29, en: "Paella", pl: "Paella", matchedValue: 557, matchedUnit: transport.MatchedQuantityUnitG, protein: 44.6, carbohydrate: 111.5, fat: 27.9, calories: 875, similarityPercent: 100},
-		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", matchedValue: 440, matchedUnit: transport.MatchedQuantityUnitG, protein: 26.4, carbohydrate: 123.1, fat: 30.8, calories: 875, similarityPercent: 99},
+		wantSubstituteItem{id: 13, en: "Gyoza", pl: "Pierożki gyoza", imageKey: strPtr("gyoza"), macroProfile: transport.MacroProfile{Protein: 8, Carbohydrate: 24, Fat: 8}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(200), similarityPercent: 100},
+		wantSubstituteItem{id: 29, en: "Paella", pl: "Paella", macroProfile: transport.MacroProfile{Protein: 8, Carbohydrate: 20, Fat: 5}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(350), similarityPercent: 100},
+		wantSubstituteItem{id: 26, en: "Pancakes", pl: "Naleśniki", macroProfile: transport.MacroProfile{Protein: 6, Carbohydrate: 28, Fat: 7}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(150), similarityPercent: 99},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":1}`)
+		`{"foodObjectId":1,"pageIndex":1}`)
 	pizzaPage1 := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, pizzaPage1, 35.0, 105.0, 35.0)
-	assertInputCalories(t, pizzaPage1, 875)
+	assertSelectedFood(t, pizzaPage1.SelectedFood, wantSelectedFood{
+		id: 1, en: "Pizza Margherita", pl: "Pizza margherita",
+		macroProfile: transport.MacroProfile{Protein: 10, Carbohydrate: 30, Fat: 10},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      float64Ptr(350),
+	})
 	assertSubstitutePage(t, pizzaPage1, 1, 36, true,
-		wantSubstituteItem{id: 30, en: "Pho", pl: "Zupa pho", matchedValue: 1522, matchedUnit: transport.MatchedQuantityUnitMl, protein: 45.7, carbohydrate: 121.7, fat: 22.8, calories: 875, similarityPercent: 99},
-		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 486, matchedUnit: transport.MatchedQuantityUnitG, protein: 43.8, carbohydrate: 87.5, fat: 38.9, calories: 875, similarityPercent: 99},
-		wantSubstituteItem{id: 35, en: "Pastel de nata", pl: "Pastel de nata", matchedValue: 306, matchedUnit: transport.MatchedQuantityUnitG, protein: 15.3, carbohydrate: 107.1, fat: 42.8, calories: 875, similarityPercent: 98},
+		wantSubstituteItem{id: 30, en: "Pho", pl: "Zupa pho", macroProfile: transport.MacroProfile{Protein: 3, Carbohydrate: 8, Fat: 1.5}, baseUnit: transport.SubstituteItemBaseUnitMl, serving: float64Ptr(400), similarityPercent: 99},
+		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", macroProfile: transport.MacroProfile{Protein: 9, Carbohydrate: 18, Fat: 8}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(350), similarityPercent: 99},
+		wantSubstituteItem{id: 35, en: "Pastel de nata", pl: "Pastel de nata", macroProfile: transport.MacroProfile{Protein: 5, Carbohydrate: 35, Fat: 14}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(60), similarityPercent: 98},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":11}`)
+		`{"foodObjectId":1,"pageIndex":11}`)
 	pizzaLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, pizzaLast, 35.0, 105.0, 35.0)
-	assertInputCalories(t, pizzaLast, 875)
+	assertSelectedFood(t, pizzaLast.SelectedFood, wantSelectedFood{
+		id: 1, en: "Pizza Margherita", pl: "Pizza margherita",
+		macroProfile: transport.MacroProfile{Protein: 10, Carbohydrate: 30, Fat: 10},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      float64Ptr(350),
+	})
 	assertSubstitutePage(t, pizzaLast, 11, 36, false,
-		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 653, matchedUnit: transport.MatchedQuantityUnitG, protein: 189.4, carbohydrate: 0, fat: 13.1, calories: 875, similarityPercent: 32},
-		wantSubstituteItem{id: 18, en: "Butter", pl: "Masło", matchedValue: 118, matchedUnit: transport.MatchedQuantityUnitG, protein: 0.6, carbohydrate: 0.6, fat: 96.7, calories: 875, similarityPercent: 31},
-		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", matchedValue: 106, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0, carbohydrate: 0, fat: 97.2, calories: 875, similarityPercent: 30},
+		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", macroProfile: transport.MacroProfile{Protein: 29, Carbohydrate: 0, Fat: 2}, baseUnit: transport.SubstituteItemBaseUnitG, serving: nil, similarityPercent: 32},
+		wantSubstituteItem{id: 18, en: "Butter", pl: "Masło", macroProfile: transport.MacroProfile{Protein: 0.5, Carbohydrate: 0.5, Fat: 82}, baseUnit: transport.SubstituteItemBaseUnitG, serving: nil, similarityPercent: 31},
+		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", macroProfile: transport.MacroProfile{Protein: 0, Carbohydrate: 0, Fat: 91.3}, baseUnit: transport.SubstituteItemBaseUnitMl, serving: nil, similarityPercent: 30},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":1,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
-	pizzaAt100g := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, pizzaAt100g, 10.0, 30.0, 10.0)
-	assertInputCalories(t, pizzaAt100g, 250)
-	if len(pizzaAt100g.Items) != len(pizza.Items) {
-		t.Fatalf("Pizza at 100 g returned %d items, want the same %d as one Serving", len(pizzaAt100g.Items), len(pizza.Items))
-	}
-	for i := range pizza.Items {
-		if pizzaAt100g.Items[i].FoodObjectId != pizza.Items[i].FoodObjectId {
-			t.Fatalf("Pizza at 100 g item %d has ID %d, want the unchanged ID %d of one Serving", i, pizzaAt100g.Items[i].FoodObjectId, pizza.Items[i].FoodObjectId)
-		}
-	}
-
-	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`)
+		`{"foodObjectId":5,"pageIndex":0}`)
 	chicken := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, chicken, 31.0, 0.0, 3.6)
-	assertInputCalories(t, chicken, 156)
+	assertSelectedFood(t, chicken.SelectedFood, wantSelectedFood{
+		id: 5, en: "Chicken breast", pl: "Pierś z kurczaka",
+		macroProfile: transport.MacroProfile{Protein: 31, Carbohydrate: 0, Fat: 3.6},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      nil,
+	})
 	assertSubstitutePage(t, chicken, 0, 37, true,
-		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", matchedValue: 117, matchedUnit: transport.MatchedQuantityUnitG, protein: 33.8, carbohydrate: 0, fat: 2.3, calories: 156, similarityPercent: 100},
-		wantSubstituteItem{id: 11, en: "Skyr yogurt", pl: "Jogurt skyr", matchedValue: 253, matchedUnit: transport.MatchedQuantityUnitG, protein: 27.8, carbohydrate: 10.1, fat: 0.5, calories: 156, similarityPercent: 94},
-		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", matchedValue: 67, matchedUnit: transport.MatchedQuantityUnitG, protein: 18, carbohydrate: 0, fat: 9.4, calories: 156, similarityPercent: 93},
+		wantSubstituteItem{id: 23, en: "Turkey breast", pl: "Pierś z indyka", macroProfile: transport.MacroProfile{Protein: 29, Carbohydrate: 0, Fat: 2}, baseUnit: transport.SubstituteItemBaseUnitG, serving: nil, similarityPercent: 100},
+		wantSubstituteItem{id: 11, en: "Skyr yogurt", pl: "Jogurt skyr", macroProfile: transport.MacroProfile{Protein: 11, Carbohydrate: 4, Fat: 0.2}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(150), similarityPercent: 94},
+		wantSubstituteItem{id: 6, en: "Pork chop", pl: "Kotlet wieprzowy", macroProfile: transport.MacroProfile{Protein: 27, Carbohydrate: 0, Fat: 14}, baseUnit: transport.SubstituteItemBaseUnitG, serving: nil, similarityPercent: 93},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":5,"quantity":{"value":100,"unit":"g"},"pageIndex":12}`)
+		`{"foodObjectId":5,"pageIndex":12}`)
 	chickenLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, chickenLast, 31.0, 0.0, 3.6)
-	assertInputCalories(t, chickenLast, 156)
+	assertSelectedFood(t, chickenLast.SelectedFood, wantSelectedFood{
+		id: 5, en: "Chicken breast", pl: "Pierś z kurczaka",
+		macroProfile: transport.MacroProfile{Protein: 31, Carbohydrate: 0, Fat: 3.6},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      nil,
+	})
 	assertSubstitutePage(t, chickenLast, 12, 37, false,
-		wantSubstituteItem{id: 9, en: "Apple juice", pl: "Sok jabłkowy", matchedValue: 345, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0.3, carbohydrate: 38, fat: 0.3, calories: 156, similarityPercent: 1},
+		wantSubstituteItem{id: 9, en: "Apple juice", pl: "Sok jabłkowy", macroProfile: transport.MacroProfile{Protein: 0.1, Carbohydrate: 11, Fat: 0.1}, baseUnit: transport.SubstituteItemBaseUnitMl, serving: nil, similarityPercent: 1},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":0}`)
+		`{"foodObjectId":10,"pageIndex":0}`)
 	milk := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, milk, 3.4, 4.8, 2.0)
-	assertInputCalories(t, milk, 51)
+	assertSelectedFood(t, milk.SelectedFood, wantSelectedFood{
+		id: 10, en: "Milk", pl: "Mleko",
+		macroProfile: transport.MacroProfile{Protein: 3.4, Carbohydrate: 4.8, Fat: 2},
+		baseUnit:     transport.SelectedFoodBaseUnitMl,
+		serving:      nil,
+	})
 	assertSubstitutePage(t, milk, 0, 37, true,
-		wantSubstituteItem{id: 33, en: "Mondongo", pl: "Zupa mondongo", matchedValue: 53, matchedUnit: transport.MatchedQuantityUnitMl, protein: 3.7, carbohydrate: 4.2, fat: 2.1, calories: 51, similarityPercent: 99},
-		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", matchedValue: 28, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 5.1, fat: 2.3, calories: 51, similarityPercent: 99},
-		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", matchedValue: 19, matchedUnit: transport.MatchedQuantityUnitG, protein: 2.5, carbohydrate: 4.6, fat: 2.5, calories: 51, similarityPercent: 99},
+		wantSubstituteItem{id: 33, en: "Mondongo", pl: "Zupa mondongo", macroProfile: transport.MacroProfile{Protein: 7, Carbohydrate: 8, Fat: 4}, baseUnit: transport.SubstituteItemBaseUnitMl, serving: float64Ptr(350), similarityPercent: 99},
+		wantSubstituteItem{id: 3, en: "Lasagna", pl: "Lazania", macroProfile: transport.MacroProfile{Protein: 9, Carbohydrate: 18, Fat: 8}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(350), similarityPercent: 99},
+		wantSubstituteItem{id: 21, en: "Beef cheeseburger", pl: "Cheeseburger wołowy", macroProfile: transport.MacroProfile{Protein: 13, Carbohydrate: 24, Fat: 13}, baseUnit: transport.SubstituteItemBaseUnitG, serving: float64Ptr(220), similarityPercent: 99},
 	)
 
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType,
-		`{"foodObjectId":10,"quantity":{"value":100,"unit":"ml"},"pageIndex":12}`)
+		`{"foodObjectId":10,"pageIndex":12}`)
 	milkLast := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, milkLast, 3.4, 4.8, 2.0)
-	assertInputCalories(t, milkLast, 51)
+	assertSelectedFood(t, milkLast.SelectedFood, wantSelectedFood{
+		id: 10, en: "Milk", pl: "Mleko",
+		macroProfile: transport.MacroProfile{Protein: 3.4, Carbohydrate: 4.8, Fat: 2},
+		baseUnit:     transport.SelectedFoodBaseUnitMl,
+		serving:      nil,
+	})
 	assertSubstitutePage(t, milkLast, 12, 37, false,
-		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", matchedValue: 6, matchedUnit: transport.MatchedQuantityUnitMl, protein: 0, carbohydrate: 0, fat: 5.6, calories: 51, similarityPercent: 32},
+		wantSubstituteItem{id: 19, en: "Olive oil", pl: "Oliwa z oliwek", macroProfile: transport.MacroProfile{Protein: 0, Carbohydrate: 0, Fat: 91.3}, baseUnit: transport.SubstituteItemBaseUnitMl, serving: nil, similarityPercent: 32},
 	)
 }
 
@@ -299,19 +347,28 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 	baseURL, _ := startServer(t, db.RuntimeURL)
 	const jsonType = "application/json"
 
-	valid := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	valid := `{"foodObjectId":1,"pageIndex":0}`
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType, valid)
 	canonical := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, canonical, 35.0, 105.0, 35.0)
-	assertInputCalories(t, canonical, 875)
+	assertSelectedFood(t, canonical.SelectedFood, wantSelectedFood{
+		id: 1, en: "Pizza Margherita", pl: "Pizza margherita",
+		macroProfile: transport.MacroProfile{Protein: 10, Carbohydrate: 30, Fat: 10},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      float64Ptr(350),
+	})
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType+"; charset=utf-8", valid)
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType, valid+"\n")
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	reordered := "{\n  \"pageIndex\": 0,\n  \"quantity\": { \"unit\": \"serving\", \"value\": 1 },\n  \"foodObjectId\": 1\n}"
+	reordered := "{\n  \"pageIndex\": 0,\n  \"foodObjectId\": 1\n}"
 	status, body, contentType = postSubstitutes(t, baseURL, jsonType, reordered)
 	reorderedEnvelope := assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	assertInputMacronutrients(t, reorderedEnvelope, 35.0, 105.0, 35.0)
+	assertSelectedFood(t, reorderedEnvelope.SelectedFood, wantSelectedFood{
+		id: 1, en: "Pizza Margherita", pl: "Pizza margherita",
+		macroProfile: transport.MacroProfile{Protein: 10, Carbohydrate: 30, Fat: 10},
+		baseUnit:     transport.SelectedFoodBaseUnitG,
+		serving:      float64Ptr(350),
+	})
 
 	contentTypeCases := []struct {
 		name        string
@@ -355,9 +412,10 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		name string
 		body string
 	}{
-		{"unknown root key", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"extra":1}`},
-		{"unknown quantity key", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving","extra":1},"pageIndex":0}`},
-		{"duplicate unknown key", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"extra":1,"extra":2}`},
+		{"unknown root key", `{"foodObjectId":1,"pageIndex":0,"extra":1}`},
+		{"quantity field rejected as unknown", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`},
+		{"scalar quantity field rejected as unknown", `{"foodObjectId":1,"quantity":100,"pageIndex":0}`},
+		{"duplicate unknown key", `{"foodObjectId":1,"pageIndex":0,"extra":1,"extra":2}`},
 	}
 	for _, tc := range unknownCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -371,11 +429,8 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		body  string
 		field transport.ErrorField
 	}{
-		{"duplicate foodObjectId", `{"foodObjectId":1,"foodObjectId":2,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"duplicate quantity", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"quantity":{"value":2,"unit":"g"},"pageIndex":0}`, transport.Quantity},
-		{"duplicate pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"pageIndex":1}`, transport.PageIndex},
-		{"duplicate quantity.value", `{"foodObjectId":1,"quantity":{"value":1,"value":2,"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
-		{"duplicate quantity.unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving","unit":"g"},"pageIndex":0}`, transport.QuantityUnit},
+		{"duplicate foodObjectId", `{"foodObjectId":1,"foodObjectId":2,"pageIndex":0}`, transport.FoodObjectId},
+		{"duplicate pageIndex", `{"foodObjectId":1,"pageIndex":0,"pageIndex":1}`, transport.PageIndex},
 	}
 	for _, tc := range duplicateCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -389,11 +444,8 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		body  string
 		field transport.ErrorField
 	}{
-		{"missing foodObjectId", `{"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"missing quantity", `{"foodObjectId":1,"pageIndex":0}`, transport.Quantity},
-		{"missing pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"}}`, transport.PageIndex},
-		{"missing quantity.value", `{"foodObjectId":1,"quantity":{"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
-		{"missing quantity.unit", `{"foodObjectId":1,"quantity":{"value":1},"pageIndex":0}`, transport.QuantityUnit},
+		{"missing foodObjectId", `{"pageIndex":0}`, transport.FoodObjectId},
+		{"missing pageIndex", `{"foodObjectId":1}`, transport.PageIndex},
 	}
 	for _, tc := range missingCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -407,11 +459,8 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		body  string
 		field transport.ErrorField
 	}{
-		{"null foodObjectId", `{"foodObjectId":null,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"null quantity", `{"foodObjectId":1,"quantity":null,"pageIndex":0}`, transport.Quantity},
-		{"null pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":null}`, transport.PageIndex},
-		{"null quantity.value", `{"foodObjectId":1,"quantity":{"value":null,"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
-		{"null quantity.unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":null},"pageIndex":0}`, transport.QuantityUnit},
+		{"null foodObjectId", `{"foodObjectId":null,"pageIndex":0}`, transport.FoodObjectId},
+		{"null pageIndex", `{"foodObjectId":1,"pageIndex":null}`, transport.PageIndex},
 	}
 	for _, tc := range nullCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -425,18 +474,12 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		body  string
 		field transport.ErrorField
 	}{
-		{"string foodObjectId", `{"foodObjectId":"1","quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"boolean pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":true}`, transport.PageIndex},
-		{"number quantity", `{"foodObjectId":1,"quantity":5,"pageIndex":0}`, transport.Quantity},
-		{"array quantity", `{"foodObjectId":1,"quantity":[1],"pageIndex":0}`, transport.Quantity},
-		{"string quantity.value", `{"foodObjectId":1,"quantity":{"value":"100","unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
-		{"boolean quantity.value", `{"foodObjectId":1,"quantity":{"value":true,"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
-		{"number quantity.unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":5},"pageIndex":0}`, transport.QuantityUnit},
-		{"array foodObjectId", `{"foodObjectId":[],"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"fractional foodObjectId", `{"foodObjectId":1.5,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"out-of-int32 foodObjectId", `{"foodObjectId":2147483648,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, transport.FoodObjectId},
-		{"out-of-int32 pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":2147483648}`, transport.PageIndex},
-		{"out-of-double quantity.value", `{"foodObjectId":1,"quantity":{"value":1e400,"unit":"serving"},"pageIndex":0}`, transport.QuantityValue},
+		{"string foodObjectId", `{"foodObjectId":"1","pageIndex":0}`, transport.FoodObjectId},
+		{"boolean pageIndex", `{"foodObjectId":1,"pageIndex":true}`, transport.PageIndex},
+		{"array foodObjectId", `{"foodObjectId":[],"pageIndex":0}`, transport.FoodObjectId},
+		{"fractional foodObjectId", `{"foodObjectId":1.5,"pageIndex":0}`, transport.FoodObjectId},
+		{"out-of-int32 foodObjectId", `{"foodObjectId":2147483648,"pageIndex":0}`, transport.FoodObjectId},
+		{"out-of-int32 pageIndex", `{"foodObjectId":1,"pageIndex":2147483648}`, transport.PageIndex},
 	}
 	for _, tc := range wrongTypeCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -453,16 +496,11 @@ func TestSubstituteSearchContractHTTPIntegration(t *testing.T) {
 		{"truncated after wrong-type string", `{"foodObjectId":"x"`},
 		{"truncated after null", `{"pageIndex":null`},
 		{"truncated after fractional number", `{"foodObjectId":1.5`},
-		{"truncated after scalar quantity", `{"quantity":5`},
 		{"truncated after wrong-type composite", `{"foodObjectId":[]`},
-		{"truncated after array quantity", `{"quantity":[]`},
-		{"truncated after nested wrong-type", `{"quantity":{"value":[1],"unit":"g"},"pageIndex":0`},
-		{"truncated after nested null", `{"quantity":{"value":null,"unit":"serving"},"pageIndex":0`},
-		{"truncated after complete object", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0`},
+		{"truncated after complete object", `{"foodObjectId":1,"pageIndex":0`},
 		{"malformed delimiter after wrong-type", `{"foodObjectId":]}`},
-		{"malformed delimiter after null", `{"quantity":{"value":null]}}`},
 		{"trailing comma after wrong-type", `{"foodObjectId":true,}`},
-		{"trailing comma after null", `{"foodObjectId":null,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,}`},
+		{"trailing comma after null", `{"foodObjectId":null,"pageIndex":0,}`},
 	}
 	for _, tc := range precedenceCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {

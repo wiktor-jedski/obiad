@@ -296,6 +296,9 @@ func classifyMatch(name, query string) matchTier {
 	}
 }
 
+// maxBaseQuantity is the largest accepted base-unit quantity.
+const maxBaseQuantity = 100000
+
 // defaultQuantity selects the default unit and value.
 func defaultQuantity(object foodObject) Quantity {
 	if object.serving != nil {
