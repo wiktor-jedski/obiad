@@ -365,9 +365,10 @@ Status: ready-for-agent
 ## ISSUE-021: Finite macro-profile cosine overflow
 
 Type: Defect
-Status: ready-for-agent
+Status: wontfix
 
 ### Comments
 
 - `cosineSimilarity` squares finite `math.MaxFloat64` macro values. This overflows and returns `INTERNAL_ERROR` for catalog-valid finite Macro Profiles.
 - Repair the backend similarity arithmetic and add an integration regression. Preserve ranking behavior for ordinary profiles.
+- Resolved with the project owner on 2026-08-28. Nutrition data cannot contain physically impossible macro values near `math.MaxFloat64`; do not add a special arithmetic path for this excluded input.
