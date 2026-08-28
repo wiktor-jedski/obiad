@@ -365,14 +365,14 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080–REQ-085 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080, REQ-082–REQ-085 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
 
 **Behavior:** Tailwind renders one primary content column. The empty state centers the search control. The result state places it near the top and cards below it. The layout uses one card column from 320 px through 1023 px and three columns from 1024 px. Content does not overflow the viewport.
 
-The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. The selected Substitution Input and each result card show browser-projected whole derived calories in kcal with the localized `Calories` or `Kalorie` label. Cards show the bundled image or placeholder, localized name, browser-projected whole Matched Quantity in whole grams or millilitres, scaled macronutrients to 0.1 g, and backend-derived whole similarity percentage. While a Substitute Search request is pending, each visible card hides its non-image content and shows one centered spinner without changing size. A valid local quantity commit is synchronous and local, starts no HTTP request or pending state, shows no card spinner, and preserves candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
+The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. The selected Substitution Input and each result card show browser-projected whole derived calories in kcal with the localized `Calories` or `Kalorie` label. Cards show the bundled image or placeholder, localized name, browser-projected whole Matched Quantity in whole grams or millilitres, scaled macronutrients to 0.1 g, and backend-derived whole similarity percentage. A valid local quantity commit is synchronous and local, starts no HTTP request or pending state, and preserves candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
 
 After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure live announcements remain unchanged.
 
@@ -492,7 +492,7 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-078 | ARCH-020 |
 | REQ-079 | ARCH-001 |
 | REQ-080 | ARCH-002, ARCH-011, ARCH-019 |
-| REQ-081 | ARCH-020 |
+| REQ-081 | Deprecated; no architecture coverage |
 | REQ-082 | ARCH-002, ARCH-019, ARCH-020 |
 | REQ-083 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
