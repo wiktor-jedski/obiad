@@ -4,7 +4,7 @@ This document is the source of truth for the current Obiad proof-of-concept arch
 
 ## System overview
 
-Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the seeded Food Catalog.
+Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the runtime Food Catalog. Database setup loads application-owned dummy data for local development, CI, and integration checks. The production launcher instead loads a validated production Meal aggregate.
 
 The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns suggestion ranking, candidate eligibility, full-precision Nutritional Similarity calculation, deterministic rank order, and paging independently of Food Quantity. The browser owns interaction state, local quantity projection from the returned calculation basis (input calories, equal-calorie Matched Quantities, scaled macronutrients, and final display rounding), localization, accessibility behavior, and presentation.
 
@@ -16,8 +16,9 @@ flowchart LR
     Fiber --> Substitute["Find Substitute Page"]
     Suggest --> Loader["Private PostgreSQL Catalog Loader"]
     Substitute --> Loader
-    Loader --> Catalog[("Seeded PostgreSQL catalog")]
-    Setup["Database Setup command"] --> Catalog
+    Loader --> Catalog[("Runtime PostgreSQL catalog")]
+    Setup["Database Setup command<br/>(application-owned dummy data)"] --> Catalog
+    Production["Production launcher<br/>(validated Meal aggregate)"] --> Catalog
 ```
 
 ## ARCH-001 — Browser Application
@@ -237,13 +238,15 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 
 **Ownership:** ARCH-013 owns REQ-004–REQ-010 and REQ-086–REQ-091. ARCH-006 owns REQ-002. ARCH-007 owns REQ-070–REQ-072. ARCH-006 and ARCH-007 consume this contract but keep application-owned dummy-catalog ownership.
 
-**Application contract:** Food Object is the application and HTTP term for one generic prepared dish. The application owns `api/catalog.schema.json`; it remains available when `data/` is uninitialized. An aggregate catalog requires a positive integer `schemaVersion`, the full 40-character `dataCommit`, `foodFamilies`, and `foodObjects`. Each Food Object requires a stable opaque positive `id`, nonempty `en` and `pl` names, a Macro Profile, and a `g` or `ml` Nutrition Basis. It may have one positive Serving in the Nutrition Basis unit, one source URL, and one Food Family ID. Unknown fields, record revisions, license notices, catalog versions, and release download URLs are invalid.
+**Application contract:** Food Object is the application and HTTP term for one generic prepared dish in a validated production Meal aggregate. The application owns `api/catalog.schema.json`; it remains available when `data/` is uninitialized. Aggregate fields use `camelCase`: a catalog requires positive integer `schemaVersion`, full 40-character `dataCommit`, `foodFamilies`, and `foodObjects`. Each Food Object requires a stable opaque positive `id`, nonempty `en` and `pl` names, `macroProfile`, and `nutritionBasis` of `g` or `ml`. It may have `serving`, `source`, and `foodFamilyId`; Serving is positive and uses the Nutrition Basis unit. Each Food Object has zero or one Food Family reference. Unknown fields, record revisions, license notices, catalog versions, and release download URLs are invalid.
 
-**Production contract:** The separate `data/` repository owns production authoring records, acquisition, validation, calculation, and aggregate export. Ingredient files contain one stable positive opaque ID, localized names, one source URL, a per-100 g Macro Profile, and optional sourced density. Meal files contain one stable positive opaque ID, localized names, ordered resolved Ingredient composition with positive retained gram quantities, ordered short agent-authored steps, yield method and value, and `g` or `ml` Nutrition Basis. A Meal may have one Serving, source URL, and Food Family ID. Git history records changes; records have no revision field. Qualitative salt, dry herbs, and dry spices may occur in steps but never in composition or macro calculation.
+**Production contract:** The separate `data/` repository owns production authoring records, acquisition, validation, calculation, and aggregate export. Authoring files use `snake_case`, one `ingredients/<id>-<english-slug>.json` file per Ingredient and one `meals/<id>-<english-slug>.json` file per Meal. `food_families.json` is one array of Food Family objects, each with a stable positive opaque `id` and localized names. Each Meal has zero or one `food_family_id` that references this file.
+
+An Ingredient contains `id`, localized `names`, one `source` URL, and `macro_profile` with per-100 g `protein`, `available_carbohydrate`, and `fat`. Its optional `density` contains a positive g/ml `value` and one `source` URL. A Meal contains `id`, localized `names`, ordered `composition`, ordered `steps`, `yield`, and `nutrition_basis`. Each composition entry contains one `ingredient_id` and positive retained `quantity_g`; Ingredient IDs are unique. Steps are short agent-authored text. A Meal `yield` contains a positive `value` and `method` of exactly `declared_finished_mass`, `declared_finished_volume`, or `summed_input_mass`. A Meal may have one Serving, one source URL, and one `food_family_id`. Git history records changes; records have no revision field. Qualitative salt, dry herbs, and dry spices may occur in steps but never in composition or macro calculation.
 
 **Attribution contract:** Open Food Facts and USDA credit appears only in the production Data Sources footer with the ODbL, the full production-data commit ID, and the free catalog download. It is not stored in the aggregate catalog.
 
-**Flow:** Application-owned dummy catalog data provides local startup, CI, and integration data without `data/`. ARCH-007 creates this deterministic PostgreSQL state. A production launcher validates and exports `data/` to a temporary aggregate, validates it against the application-owned schema, loads it transactionally, and removes the temporary aggregate. ARCH-006 reads only the loaded PostgreSQL rows. HTTP returns Food Objects, never Ingredients. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from canonical Macro Profiles and are never stored.
+**Flow:** Application-owned dummy catalog data provides local startup, CI, and integration data without `data/`; legacy dummy fixtures do not define production catalog eligibility. ARCH-007 creates this deterministic PostgreSQL state. A production launcher validates and exports `data/` to a temporary aggregate, validates it against the application-owned schema, loads it transactionally, and removes the temporary aggregate. ARCH-006 reads only the loaded PostgreSQL rows. HTTP returns Food Objects, never Ingredients. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from canonical Macro Profiles and are never stored.
 
 ## ARCH-014 — Interface Language Preference
 
@@ -309,7 +312,7 @@ Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authenticat
 
 **Behavior:** Validate UTF-8. Normalize the Search Query and compared name to NFC. Trim and collapse Unicode whitespace to ASCII spaces. Apply Unicode lowercase mapping. Reject a normalized Search Query over 128 Unicode code points. Compute raw Levenshtein distance over Unicode code points.
 
-Assign each name to its first applicable exact-match, full-name-prefix, substring, or fallback tier. Sort in that tier order. Within each tier, sort by increasing raw distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. A valid seeded catalog therefore returns five suggestions for any nonempty accepted Search Query.
+Assign each name to its first applicable exact-match, full-name-prefix, substring, or fallback tier. Sort in that tier order. Within each tier, sort by increasing raw distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. A valid runtime catalog with at least five Food Objects therefore returns five suggestions for any nonempty accepted Search Query.
 
 **Quality constraints:** Polish diacritics remain distinct from their base letters. Canonically equivalent Unicode text compares equally. Each candidate receives one tier and one distance calculation. The implementation uses bounded Levenshtein working memory and does not allocate a full distance matrix.
 
@@ -411,15 +414,15 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | Requirement | Architecture coverage |
 | --- | --- |
 | REQ-001 | ARCH-008, ARCH-016 |
-| REQ-002 | ARCH-004, ARCH-005, ARCH-006, ARCH-013, ARCH-016 |
+| REQ-002 | ARCH-006 |
 | REQ-003 | ARCH-001, ARCH-020 |
-| REQ-004 | ARCH-006, ARCH-013 |
-| REQ-005 | ARCH-004, ARCH-005, ARCH-006, ARCH-013 |
-| REQ-006 | ARCH-004, ARCH-006, ARCH-013 |
-| REQ-007 | ARCH-004, ARCH-005, ARCH-006, ARCH-013, ARCH-018 |
-| REQ-008 | ARCH-004, ARCH-006, ARCH-013 |
-| REQ-009 | ARCH-005, ARCH-006, ARCH-013, ARCH-018 |
-| REQ-010 | ARCH-005, ARCH-006, ARCH-013, ARCH-018 |
+| REQ-004 | ARCH-013 |
+| REQ-005 | ARCH-013 |
+| REQ-006 | ARCH-013 |
+| REQ-007 | ARCH-013 |
+| REQ-008 | ARCH-013 |
+| REQ-009 | ARCH-013 |
+| REQ-010 | ARCH-013 |
 | REQ-011 | ARCH-015, ARCH-020 |
 | REQ-012 | ARCH-004, ARCH-008, ARCH-010, ARCH-017 |
 | REQ-013 | ARCH-003, ARCH-004, ARCH-010, ARCH-017 |
@@ -475,9 +478,9 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-063 | ARCH-020 |
 | REQ-068 | ARCH-003, ARCH-020 |
 | REQ-069 | ARCH-015, ARCH-020 |
-| REQ-070 | ARCH-006, ARCH-007, ARCH-013, ARCH-022 |
-| REQ-071 | ARCH-006, ARCH-007, ARCH-013, ARCH-022 |
-| REQ-072 | ARCH-005, ARCH-006, ARCH-007, ARCH-013, ARCH-018, ARCH-022 |
+| REQ-070 | ARCH-007 |
+| REQ-071 | ARCH-007 |
+| REQ-072 | ARCH-007 |
 | REQ-073 | ARCH-001, ARCH-015, ARCH-016, ARCH-020, ARCH-022 |
 | REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
@@ -491,3 +494,9 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-083 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-085 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
+| REQ-086 | ARCH-013 |
+| REQ-087 | ARCH-013 |
+| REQ-088 | ARCH-013 |
+| REQ-089 | ARCH-013 |
+| REQ-090 | ARCH-013 |
+| REQ-091 | ARCH-013 |

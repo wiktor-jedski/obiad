@@ -34,13 +34,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-004 — Generic Food Objects
 
-**Statement:** Each Food Object shall represent one generic prepared dish with nutritional data. An Ingredient, raw food, or product shall not be a Food Object.
+**Statement:** Each production Food Object shall represent one generic prepared dish with nutritional data. An Ingredient, raw food, or product shall not be a production Food Object. Application-owned dummy rows retain legacy nonproduction fixtures for local development, CI, and integration checks; they do not define production Food Object eligibility.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog check: Each Food Object is one generic prepared dish. No Ingredient, raw food, or product record enters the catalog. |
+| Verification | Catalog check: Each production Food Object is one generic prepared dish. No Ingredient, raw food, or product record enters the production catalog. Dummy fixtures remain available only as nonproduction test data. |
 
 ## REQ-005 — Stable Food Object identity
 
@@ -90,7 +90,7 @@ This document is the source of truth for the active product requirements of the 
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog validation: Zero or one valid reference succeeds. A missing reference, second reference, or nested membership fails. |
+| Verification | Catalog validation: An omitted `food_family_id` succeeds, as does one valid reference. A supplied dangling reference, second reference, or nested membership fails. |
 
 ## REQ-010 — Valid Macro Profile
 
