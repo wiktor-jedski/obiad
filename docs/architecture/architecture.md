@@ -6,7 +6,7 @@ This document is the source of truth for the current Obiad proof-of-concept arch
 
 Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the seeded Food Catalog.
 
-The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns all normalization, ranking, nutrition calculations, paging, and display rounding. The browser owns interaction state, localization, accessibility behavior, and presentation.
+The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns suggestion ranking, candidate eligibility, full-precision Nutritional Similarity calculation, deterministic rank order, and paging independently of Food Quantity. The browser owns interaction state, local quantity projection from the returned calculation basis (input calories, equal-calorie Matched Quantities, scaled macronutrients, and final display rounding), localization, accessibility behavior, and presentation.
 
 ```mermaid
 flowchart LR
@@ -26,12 +26,12 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-003, REQ-060–REQ-061, REQ-073, REQ-075, REQ-078–REQ-079 |
+| Requirements | REQ-003, REQ-029, REQ-031, REQ-039–REQ-040, REQ-060–REQ-061, REQ-073, REQ-075, REQ-079 |
 | Dependencies | ARCH-002, ARCH-003, ARCH-008, ARCH-014–ARCH-016, ARCH-019–ARCH-021 |
 
-**Responsibility:** Render the single-page substitution interface.
+**Responsibility:** Render the single-page substitution interface and project calculation basis values.
 
-**Contract:** This client-only Svelte 5 Module renders one primary content column. It uses the generated TypeScript HTTP client. It consumes display-ready backend values. It does not implement Search ranking, eligibility, nutrition calculations, paging, or display rounding.
+**Contract:** This client-only Svelte 5 Module renders one primary content column. It uses the generated TypeScript HTTP client. It owns one pure projection from the returned calculation basis and committed Food Quantity to input calories, equal-calorie Matched Quantities, scaled macronutrients, and final rounded display values. It converts an entered Serving count to the base grams or millilitres using the returned Serving base quantity, computes derived input calories as `4p + 4c + 9f`, computes candidate equal-calorie Matched Quantities, and scales candidate macronutrients to the unrounded Matched Quantity using full calculation precision before final display rounding. It does not implement Search ranking, candidate eligibility, or paging.
 
 ## ARCH-002 — Browser Interaction Module
 
@@ -39,14 +39,14 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-018–REQ-021, REQ-025–REQ-028, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-083–REQ-085 |
+| Requirements | REQ-018–REQ-021, REQ-025–REQ-027, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-003, ARCH-008, ARCH-010–ARCH-012, ARCH-019–ARCH-021 |
 
 **Responsibility:** Own browser interaction transitions.
 
 **Contract:** One discriminated Svelte state owns Search Query text, the selected Food Object, Food Quantity text, page index, focus intent, and motion phase. TanStack Query owns HTTP data, pending state, and request errors. The Module does not copy query results into a Svelte store. A separate persisted store owns the Interface Language.
 
-The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResults`, `newSearchFailure`, and `moreFailure`. Transitions, not independent booleans, determine visible controls, retained cards, focus, announcements, and motion.
+The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResults`, `newSearchFailure`, and `moreFailure`. Transitions, not independent booleans, determine visible controls, retained cards, focus, announcements, and motion. While results are visible, editing the quantity changes raw input text without changing current result values until committed. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, and preserves result identity, order, page, card identity, motion, focus, Interface Language, and localized text.
 
 ## ARCH-003 — Translation Module
 
@@ -54,7 +54,7 @@ The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResult
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-013, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-068, REQ-083–REQ-085 |
+| Requirements | REQ-013, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-068, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-014 |
 
 **Responsibility:** Produce all localized interface and accessibility text.
@@ -82,7 +82,7 @@ The default is `1 serving` when the Food Object has a Serving. Otherwise, it is 
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-045, REQ-072, REQ-078 |
+| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-030, REQ-032–REQ-036, REQ-041–REQ-045, REQ-072 |
 | Dependencies | ARCH-006, ARCH-013, ARCH-018 |
 
 **Responsibility:** Return one deterministic page of candidate Substitutes and calculation basis data independently of Food Quantity.
@@ -125,7 +125,7 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 | --- | --- |
 | Type | Interface |
 | Status | Active |
-| Requirements | REQ-001, REQ-012, REQ-025, REQ-036–REQ-037, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074, REQ-078 |
+| Requirements | REQ-001, REQ-012, REQ-036, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074 |
 | Dependencies | ARCH-004, ARCH-005, ARCH-019 |
 
 **Responsibility:** Define the browser-to-backend protocol.
@@ -195,14 +195,14 @@ Selection replaces the Search Query with the exact returned selected name for th
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-020, REQ-022, REQ-025–REQ-028, REQ-036–REQ-037, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-074–REQ-075, REQ-083–REQ-085 |
+| Requirements | REQ-020, REQ-022, REQ-028, REQ-036, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-074–REQ-075, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-005, ARCH-006, ARCH-008, ARCH-018–ARCH-021 |
 
-**Responsibility:** Coordinate new searches, quantity recalculation, and result-page replacement.
+**Responsibility:** Coordinate new searches, local quantity reprojection, and result-page replacement.
 
 **Participants:** Browser Interaction Module, generated TypeScript client, Fiber Adapter, Find Substitute Page Module, and PostgreSQL Catalog Loader.
 
-**Runtime behavior:** New selection requests page `0`. A quantity edit remains raw local text until Enter or blur. A valid committed value requests the current page. MORE! requests the next page. These operations share one global request lock. Related actions are visibly and accessibly disabled while the lock is held. The system queues no later intent.
+**Runtime behavior:** New selection requests page `0`. A quantity edit remains raw local text until Enter or blur. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, and reprojects values using the pure projection in ARCH-001 while preserving result identity, order, page, card identity, motion, focus, Interface Language, and localized text. MORE! requests the next page. New Search and MORE! operations share one global request lock and disable related actions while pending; a quantity commit does not acquire the lock. The system queues no later intent.
 
 A new-search failure clears cards, retains the input, keeps focus in Search, and shows the localized retry state. A MORE! failure retains cards and the control, keeps focus on MORE!, and shows the localized retry state. After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure announcements remain unchanged.
 
@@ -274,7 +274,7 @@ Additional language keys are permitted in the localized-name map. One separate F
 | --- | --- |
 | Type | Data |
 | Status | Active |
-| Requirements | REQ-011, REQ-037, REQ-055, REQ-069, REQ-073 |
+| Requirements | REQ-011, REQ-055, REQ-069, REQ-073 |
 | Dependencies | Vite frontend bundle |
 
 **Responsibility:** Supply deterministic images and placeholder content without a runtime third party, and define the browser typography fallback contract.
@@ -325,7 +325,7 @@ Assign each name to its first applicable exact-match, full-name-prefix, substrin
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-035, REQ-038–REQ-043, REQ-072 |
+| Requirements | REQ-007, REQ-009–REQ-010, REQ-030, REQ-032–REQ-035, REQ-041–REQ-043, REQ-072 |
 | Dependencies | ARCH-005, ARCH-013 |
 
 **Responsibility:** Own catalog access, candidate exclusion, full-precision Nutritional Similarity, deterministic rank order, eligibility counts, and paging independently of Food Quantity.
@@ -351,7 +351,7 @@ For the requested page, supply the calculation basis for the selected Food Objec
 
 **Responsibility:** Bound request concurrency, duration, retry behavior, and visible failure transitions.
 
-**Behavior:** Suggestion requests use an independent latest-query lane. The browser aborts a stale request, and a stale response cannot update state. The 450 ms backend context bounds stale Fiber and pgx work that disconnect cancellation does not stop. Substitution Search, quantity recalculation, and MORE! use one global lock. Related actions are disabled while pending. The system queues nothing.
+**Behavior:** Suggestion requests use an independent latest-query lane. The browser aborts a stale request, and a stale response cannot update state. The 450 ms backend context bounds stale Fiber and pgx work that disconnect cancellation does not stop. Substitution Search and MORE! use one global lock; related actions are disabled while pending. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, does not acquire the lock, and preserves result identity, order, page, card identity, motion, focus, Interface Language, and localized text. The system queues nothing.
 
 TanStack Query performs no automatic retry. A later identical intent does not reuse a successful response. Each intent starts a real backend request. Fiber derives a 450 ms Go context and passes it through the operation Module to pgx. The frontend aborts at 500 ms. A timeout uses the stable `SEARCH_TIMEOUT` code and the localized retry state. A spinner is absent within 100 ms after request end.
 
@@ -365,14 +365,14 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-080–REQ-085 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080–REQ-085 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
 
 **Behavior:** Tailwind renders one primary content column. The empty state centers the search control. The result state places it near the top and cards below it. The layout uses one card column from 320 px through 1023 px and three columns from 1024 px. Content does not overflow the viewport.
 
-The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage. While card values are pending, each card hides its non-image content and shows one centered spinner without changing size. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
+The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, browser-projected whole Matched Quantity in whole grams or millilitres, scaled macronutrients to 0.1 g, whole derived calories, and backend-derived whole similarity percentage. While a Substitute Search request is pending, each visible card hides its non-image content and shows one centered spinner without changing size. A valid local quantity commit is synchronous and local, starts no HTTP request or pending state, shows no card spinner, and preserves result identity, order, page, card identity, motion, focus, Interface Language, and localized text. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
 
 After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure live announcements remain unchanged.
 
@@ -406,7 +406,7 @@ After a successful new Search or MORE! request with one or more result cards, fo
 
 **Behavior:** Backend integration tests create a disposable database in real PostgreSQL. They run the real setup command and exercise the real Catalog Loader, operation Modules, and Fiber Adapter. They drop the database after the run. CI provides PostgreSQL as a process.
 
-Every frontend integration test uses the generated client, real Fiber backend, and real PostgreSQL. Normal tests share one seeded stack. Database-outage tests use a separate Fiber process and disposable PostgreSQL database and run serially. Playwright verifies primary flows, accessibility, motion, responsive widths, focus, failure states, and visual states against the complete deployment.
+Every frontend integration test uses the generated client, real Fiber backend, and real PostgreSQL. Normal tests share one seeded stack. Browser calculation tests verify the pure projection formulas, Serving base conversion, full precision, and display rounding boundaries. Database-outage tests use a separate Fiber process and disposable PostgreSQL database and run serially. Playwright verifies primary flows, accessibility, motion, responsive widths, focus, failure states, and visual states against the complete deployment.
 
 A dedicated serial GitHub Actions job starts the optimized real stack, warms it up, and gates all required 20-request and 20-search timing samples. OpenAPI generation and compilation of generated Go and TypeScript values verify transport consistency.
 
@@ -440,22 +440,22 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-022 | ARCH-004, ARCH-010, ARCH-011 |
 | REQ-023 | ARCH-004, ARCH-010 |
 | REQ-024 | ARCH-004, ARCH-010 |
-| REQ-025 | ARCH-002, ARCH-005, ARCH-008, ARCH-011, ARCH-018, ARCH-020 |
-| REQ-026 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
-| REQ-027 | ARCH-002, ARCH-011, ARCH-020 |
-| REQ-028 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
-| REQ-029 | ARCH-005, ARCH-018 |
+| REQ-025 | ARCH-002 |
+| REQ-026 | ARCH-002 |
+| REQ-027 | ARCH-002 |
+| REQ-028 | ARCH-011 |
+| REQ-029 | ARCH-001 |
 | REQ-030 | ARCH-005, ARCH-018 |
-| REQ-031 | ARCH-005, ARCH-018 |
+| REQ-031 | ARCH-001 |
 | REQ-032 | ARCH-005, ARCH-018 |
 | REQ-033 | ARCH-005, ARCH-018 |
 | REQ-034 | ARCH-005, ARCH-018 |
 | REQ-035 | ARCH-005, ARCH-018 |
 | REQ-036 | ARCH-005, ARCH-008, ARCH-011, ARCH-020 |
-| REQ-037 | ARCH-005, ARCH-008, ARCH-011, ARCH-015, ARCH-020 |
-| REQ-038 | ARCH-005, ARCH-018, ARCH-020 |
-| REQ-039 | ARCH-005, ARCH-018, ARCH-020 |
-| REQ-040 | ARCH-005, ARCH-018 |
+| REQ-037 | ARCH-020 |
+| REQ-038 | ARCH-020 |
+| REQ-039 | ARCH-001 |
+| REQ-040 | ARCH-001 |
 | REQ-041 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
 | REQ-042 | ARCH-005, ARCH-018 |
 | REQ-043 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
@@ -489,10 +489,10 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
-| REQ-078 | ARCH-001, ARCH-005, ARCH-008 |
+| REQ-078 | ARCH-020 |
 | REQ-079 | ARCH-001 |
 | REQ-080 | ARCH-002, ARCH-011, ARCH-019 |
-| REQ-081 | ARCH-002, ARCH-019, ARCH-020 |
+| REQ-081 | ARCH-020 |
 | REQ-082 | ARCH-002, ARCH-019, ARCH-020 |
 | REQ-083 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
