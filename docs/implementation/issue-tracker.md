@@ -382,3 +382,24 @@ Status: ready-for-agent
 
 - The Phase 23 implementation list says to remove selected-food and result-card spinners. The same phase says to keep new-Search and MORE! request behavior unchanged and makes REQ-081 testable, but REQ-081 requires one spinner in each visible card while a Substitute Search request is pending. The project owner must decide whether Phase 23 removes only the quantity-recalculation spinner path and keeps request-pending spinners, or removes all card spinners and first revises the phase plan, REQ-081, and the ARCH-020 presentation contract. Implementing either interpretation without this decision risks contradicting a required source.
 - Resolved with the project owner on 2026-08-28. Deprecate REQ-081 without a replacement requirement. Remove the card-spinner behavior from ARCH-020. Phase 23 removes the selected-food spinner from new Search and the result-card spinners from quantity recalculation. MORE! keeps its current spinner-free card-opacity behavior. Do not add a requirement that only prohibits card spinners.
+
+## ISSUE-023: Phase 24 production-data repository and record-contract decisions
+
+Type: Architecture and product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-29. Use `git@github.com:wiktor-jedski/obiad-data.git` as the `data/` submodule remote.
+- Ingredient and Meal authoring files use `snake_case`. The application catalog uses `camelCase`. Ingredient files use `ingredients/<id>-<english-slug>.json`. Meal files use `meals/<id>-<english-slug>.json`. The positive opaque ID is authoritative. Git history records changes. Records have no revision field.
+- Localized name maps require nonempty `en` and `pl` values and permit more language keys. Optional fields are absent when they have no value.
+- An Ingredient contains `id`, `names`, `source`, and `macro_profile`. `source` is one URL string. `macro_profile` contains `protein`, `available_carbohydrate`, and `fat` in grams per 100 g. An optional `density` contains a g/ml `value` and one source URL. Ingredient records have no aliases, source-provider fields, upstream record IDs, product or brand fields, or available-carbohydrate-method field.
+- A Meal contains `id`, `names`, ordered `composition` entries, ordered `steps`, `yield`, and `nutrition_basis`. Each composition entry contains one `ingredient_id` and retained `quantity_g`; duplicate Ingredient IDs fail. Steps are short agent-authored text and can mention salt, dry herbs, and dry spices that composition and macro calculation omit. Meal records have no separate omission list or cooking-operation enum.
+- Yield methods are `declared_finished_mass`, `declared_finished_volume`, and `summed_input_mass`. The yield object contains `method` and `value`. `nutrition_basis` is `g` or `ml`. Optional `serving` uses the Nutrition Basis unit. Optional `source` is one URL string. Optional `food_family_id` references one entry in `food_families.json`.
+- `food_families.json` contains one array of positive opaque family IDs and localized names. Each Meal belongs to zero or one Food Family.
+- The application catalog contains positive integer `schemaVersion`, full `obiad-data` Git commit `dataCommit`, `foodFamilies`, and `foodObjects`. Each Food Object contains `id`, `names`, `macroProfile`, and `nutritionBasis`, with optional `serving`, `source`, and `foodFamilyId`. The catalog has no record revision, license-notice, catalog-version, or release-download-URL field.
+- Data-source and license credit appears only in the application Data Sources footer. It is not stored in the aggregate catalog.
+
+### Assumptions
+
+- Phase 24 establishes repository ownership, record validation, and the application catalog contract. Phase 25 implements recipe acquisition. Phase 26 implements Ingredient acquisition and conversion. Phase 27 implements Meal calculation and catalog export. Phase 24 adds no placeholder acquisition, calculation, or export tools.

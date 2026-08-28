@@ -927,14 +927,14 @@ Phase 23.
 - Create the separate `obiad-data` repository and attach it at the root `data/` Git submodule path.
 - Use Python 3.12, `pyproject.toml`, and an uv lockfile in `obiad-data`.
 - Keep production authoring data and its acquisition, validation, calculation, and export tools in `obiad-data`.
-- Store one canonical JSON file per Ingredient and per Meal.
-- Give each record one stable opaque positive ID and one current positive revision number.
-- Use Git history instead of retaining superseded revision files.
-- Define Ingredient names, aliases, source record, Macro Profile, and optional sourced density fields.
-- Define Meal names, resolved composition, omissions, structured cooking operations, yield, optional Serving, optional source URL, Nutrition Basis, Food Family, and revision fields.
-- Define controlled enums for yield method and cooking-operation type.
+- Store one JSON file per Ingredient and per Meal, with a positive opaque ID and English-name slug in each filename.
+- Give each record one stable opaque positive ID.
+- Use Git history instead of record revision fields or superseded revision files.
+- Define Ingredient names, one source URL, a Macro Profile, and optional sourced density fields.
+- Define Meal names, resolved composition, ordered agent-authored steps, yield, optional Serving, optional source URL, Nutrition Basis, and Food Family.
+- Define the controlled yield-method enum.
 - Define the application-owned, schema-versioned aggregate catalog JSON interface.
-- Include catalog version, data-license notices, and release download location in aggregate metadata.
+- Include the positive schema version and full `obiad-data` Git commit ID in aggregate metadata. Keep data-source notices and the release download URL out of the aggregate.
 - Keep raw Open Food Facts and USDA downloads in an ignored local cache.
 - Do not store source HTML, page text, source-content checksums, or generated catalog output.
 - Add no production Ingredient or Meal record.
@@ -953,7 +953,7 @@ Phase 23.
 - [REQ-071](../requirements/requirements.md#req-071--catalog-coverage)
 - [REQ-072](../requirements/requirements.md#req-072--test-designed-nutrition)
 
-Add the production catalog, source attribution, recipe composition, and cooking-operation requirements needed by Phases 25 through 31.
+Add the production catalog, source attribution, recipe composition, and agent-authored step requirements needed by Phases 25 through 31.
 
 **Phase gate**
 
@@ -1017,11 +1017,10 @@ Phase 25.
 - Make canonical Ingredient nutrition use a 100 g basis.
 - Make carbohydrate mean available carbohydrate.
 - Let an agent search Open Food Facts and USDA for each exact Ingredient kind.
-- Let the agent select one representative source record. Do not aggregate brands or add automatic candidate scoring.
-- Keep brand and source product name in provenance only.
-- Store the Open Food Facts barcode or USDA record ID and source URL.
+- Let the agent select one representative source. Do not aggregate brands or add automatic candidate scoring.
+- Store only the source URL. Do not store the provider type, upstream record ID, product name, or brand.
 - Use a direct available-carbohydrate value when present.
-- For USDA carbohydrate by difference, subtract dietary fibre through one recorded conversion method and reject an invalid result.
+- For USDA carbohydrate by difference, subtract dietary fibre and reject an invalid result. Do not store the calculation method.
 - Define versioned documented defaults for ambiguous recipe terms such as flour or oil.
 - Store an optional `density_g_per_ml` and its source URL when a recipe needs volume-to-mass conversion.
 - Search for and store an Ingredient-specific household-unit conversion when a direct gram quantity is absent.
@@ -1036,7 +1035,7 @@ None. Runtime Ingredient access remains out of scope.
 
 **Phase gate**
 
-Run the `obiad-data` validation command for the complete Pierogi ruskie Ingredient set. For every Ingredient, verify the exact kind, canonical names, stable ID, revision, source type, source record ID, source URL, available-carbohydrate method, and Macro Profile against the selected source. For every volume or household quantity, verify a stored sourced density or direct conversion. Prove that each recipe quantity converts to grams without an unstored default.
+Run the `obiad-data` validation command for the complete Pierogi ruskie Ingredient set. For every Ingredient, verify the exact kind, names, stable ID, source URL, and Macro Profile against the selected source. For every volume or household quantity, verify a stored sourced density or direct conversion. Prove that each recipe quantity converts to grams without an unstored default.
 
 **Review stop**
 
@@ -1054,18 +1053,17 @@ Phase 26.
 
 **Implement**
 
-- Store the resolved Ingredient IDs and accepted gram quantities for the Meal.
+- Store the resolved Ingredient IDs and accepted retained gram quantities for the Meal.
 - Store the optional recipe source URL and do not use it as Meal identity.
-- Convert extracted instructions into required agent-authored structured cooking operations.
-- Link each cooking operation to applicable Ingredient IDs.
-- Do not store or publish source instruction prose.
-- Omit and record qualitative salt, dry herbs, and dry spices.
+- Convert extracted instructions into required ordered, short, agent-authored steps.
+- Let steps mention qualitative salt, dry herbs, and dry spices. Keep these items out of composition and macro calculation.
+- Do not copy, store, or publish source instruction prose.
 - Require an agent estimate for fats, caloric toppings, binders, coatings, sweeteners, dairy, and retained liquids.
 - Estimate retained water and exclude explicitly discarded water.
 - Reject a Meal when retention of a potentially material Ingredient cannot be determined.
 - Sum retained Ingredient protein, available carbohydrate, and fat without cooking-retention factors.
-- Use declared finished mass when present; otherwise use summed input mass.
-- Store `declared_finished_mass` or `summed_input_mass` as the required yield-method enum.
+- Use declared finished mass or volume when present. Otherwise, use summed input mass.
+- Store `declared_finished_mass`, `declared_finished_volume`, or `summed_input_mass` as the required yield-method enum.
 - Use a 100 ml Nutrition Basis only when the recipe declares finished volume. Otherwise use 100 g.
 - Derive one Serving as finished yield divided by declared serving count.
 - Store no Serving when the recipe has no serving count.
@@ -1085,7 +1083,7 @@ Phase 26.
 
 **Phase gate**
 
-Run the `obiad-data` validation and catalog-export commands two times from a clean checkout. Compare the generated files byte for byte. Independently recalculate Pierogi ruskie total macros, yield, Nutrition Basis values, and optional Serving from its Ingredient records. Verify the structured cooking-operation order and references. Verify that the output contains no Ingredient records, source prose, HTML, or checksum.
+Run the `obiad-data` validation and catalog-export commands two times from a clean checkout. Compare the generated files byte for byte. Independently recalculate Pierogi ruskie total macros, yield, Nutrition Basis values, and optional Serving from its Ingredient records. Verify the agent-authored step order and verify that qualitative salt, dry herbs, and dry spices do not enter composition or macro calculation. Verify that the output contains no Ingredient records, source prose, HTML, or checksum.
 
 **Review stop**
 
@@ -1110,7 +1108,7 @@ Phase 27.
 - Add a migration that removes the historical embedded seed result and leaves an empty current catalog.
 - Move the current 38 rows into an application-owned dummy catalog JSON file with the same stable IDs and test-designed values.
 - Add an Obiad-owned `catalogload` command that reads the application-owned catalog JSON interface.
-- Validate schema version, complete metadata, IDs, revisions, localized names, Macro Profiles, basis units, Servings, source URLs, and Food Family references before mutation.
+- Validate schema version, full data commit ID, IDs, localized names, Macro Profiles, basis units, Servings, source URLs, and Food Family references before mutation.
 - Reject duplicate IDs, invalid references, unknown fields, nonfinite values, and incomplete catalogs.
 - Replace Food Families and Food Objects in one offline transaction.
 - Serialize concurrent loaders with the existing database advisory-lock policy.
@@ -1160,7 +1158,7 @@ Phase 28.
 - Use the Phase 25 discovery, handoff, and second-agent implementation workflow for each required new website adapter.
 - Reuse existing Ingredients and documented defaults.
 - Add sourced Ingredient records, densities, and conversions only when a Meal requires them.
-- Require resolved composition, structured cooking operations, yield method, explicit Nutrition Basis, stable identity, and current revision for every accepted Meal.
+- Require resolved composition, ordered agent-authored steps, a yield method, explicit Nutrition Basis, and stable identity for every accepted Meal.
 - Keep one versioned rejection record with the target and exact reason for each rejected Meal.
 - Keep product and raw-food targets out of the production Meal catalog.
 - Reach at least five accepted production Meals.
@@ -1191,14 +1189,14 @@ Phase 29.
 **Implement**
 
 - Attempt Fried chicken wings, Pancakes, Omelette, Oatmeal, Paella, Pho, Beetroot borscht, Coleslaw, Mondongo, Bandeja paisa, Pastel de nata, Cheesecake, and Goulash.
-- Apply the same adapter, Ingredient, normalization, cooking-operation, calculation, revision, and rejection rules as Phase 29.
+- Apply the same adapter, Ingredient, normalization, step, calculation, and rejection rules as Phase 29.
 - Verify that all 26 prepared-dish targets from the historical dummy seed have been attempted across Phases 29 and 30.
 - Reach at least ten accepted production Meals.
 - Add an excluding Pizza Food Family for accepted pizza variants.
 - Add an excluding Dumplings Food Family containing Pierogi ruskie and Gyoza when both are accepted.
 - Do not add a descriptive category system.
 - Keep rejected targets out of the generated catalog.
-- Add Open Food Facts ODbL notices and USDA attribution to catalog metadata.
+- Keep Open Food Facts ODbL and USDA credit for the Phase 31 Data Sources footer. Do not add data-source or license notices to catalog metadata.
 - Publish the generated machine-readable catalog as a versioned `obiad-data` release artifact.
 - Offer the artifact free of charge and link it from the release metadata.
 - Keep application code and its license separate from the data license.
@@ -1217,7 +1215,7 @@ Collect production-catalog evidence for the revised REQ-071. Runtime verificatio
 
 **Phase gate**
 
-Run all `obiad-data` checks from a clean checkout. Verify one accepted or rejected record for every designated target and at least ten accepted Meals. Recalculate every accepted Meal. Verify stable IDs and revisions, required structured operations, explicit yield methods, Serving derivation, Food Family membership and exclusions, source references, attribution metadata, and deterministic byte-identical export. Download the published release artifact and compare it byte for byte with a local export from the tagged data commit.
+Run all `obiad-data` checks from a clean checkout. Verify one accepted or rejected record for every designated target and at least ten accepted Meals. Recalculate every accepted Meal. Verify stable IDs, ordered agent-authored steps, explicit yield methods, Serving derivation, Food Family membership and exclusions, source references, and deterministic byte-identical export. Download the published release artifact and compare it byte for byte with a local export from the tagged data commit.
 
 **Review stop**
 
@@ -1247,7 +1245,7 @@ Phases 23, 28, and 30.
 - Start Fiber only after catalog loading succeeds.
 - Keep `scripts/start.py`, CI, and integration checks on application-owned dummy data.
 - Add one persistent localized Data Sources footer link.
-- Link to Open Food Facts attribution, the ODbL, USDA attribution, exact catalog version, and the free catalog download.
+- Link to Open Food Facts attribution, the ODbL, USDA attribution, the full `obiad-data` commit ID, and the free catalog download.
 - Keep Ingredients out of runtime suggestions, substitutions, and PostgreSQL.
 - Return only recipe-derived Meals from the production catalog.
 
@@ -1268,7 +1266,7 @@ Verify the production catalog and attribution requirements introduced in Phase 2
 
 **Phase gate**
 
-Run `python3 scripts/prod.py` from a checkout with the pinned submodule initialized. Verify that migrations and catalog loading finish before Fiber starts. Search for every accepted Meal in English and Polish. Verify that suggestions and substitutions contain only production Meals and no Ingredient or historical product record. Verify at least ten Meals, stable IDs, explicit basis units, optional Servings, source URLs, and Food Family exclusions through PostgreSQL and HTTP. Open the Data Sources link and verify Open Food Facts, ODbL, USDA, exact catalog version, and the matching free download. Stop the launcher and verify that every owned process, container, credential file, and generated temporary catalog is removed.
+Run `python3 scripts/prod.py` from a checkout with the pinned submodule initialized. Verify that migrations and catalog loading finish before Fiber starts. Search for every accepted Meal in English and Polish. Verify that suggestions and substitutions contain only production Meals and no Ingredient or historical product record. Verify at least ten Meals, stable IDs, explicit basis units, optional Servings, source URLs, and Food Family exclusions through PostgreSQL and HTTP. Open the Data Sources link and verify Open Food Facts, ODbL, USDA, the full `obiad-data` commit ID, and the matching free download. Stop the launcher and verify that every owned process, container, credential file, and generated temporary catalog is removed.
 
 **Review stop**
 
