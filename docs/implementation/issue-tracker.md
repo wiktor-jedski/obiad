@@ -352,3 +352,12 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Resolved with the project owner on 2026-08-28. Phase 21 adds no automated behavior test, static contract checker, or full CI run because it changes only requirements and architecture. Run `python3 scripts/validate_phase_plan.py` and prove through the Phase 21 diff that OpenAPI, backend, and frontend files did not change. Phases 22 and 23 own the backend, projection, and browser interaction tests for the revised requirements. Do not record those requirements as verified in Phase 21.
+
+## ISSUE-020: Phase 22 selected calculation-basis response member
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-28. Name the required closed `POST /api/v1/substitutes/search` response member that contains the selected Food Object calculation basis `selectedFood`. Keep the basis fields nested under this member.
