@@ -50,7 +50,9 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
       // SAFETY: The request payload matches the generated API contract.
       const body = request.postDataJSON() as SubstituteSearchRequest;
       // SAFETY: The raw payload is a plain JSON object from postDataJSON.
-      const rawBody = (request.postDataJSON() ?? {}) as { [key: string]: unknown };
+      const rawBody = (request.postDataJSON() ?? {}) as {
+        [key: string]: unknown;
+      };
       posts.push({
         body,
         rawBody,
