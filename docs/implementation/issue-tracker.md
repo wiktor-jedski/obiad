@@ -338,3 +338,17 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Add no Go integration test or Svelte component test for this phase. Those tests cannot measure the optimized browser, Fiber, and PostgreSQL stack or the first painted Result Card. The isolated real-stack Playwright performance scenario supplies the required evidence. Existing backend, component, and end-to-end suites remain regression coverage, but they do not run in the performance job because their load would invalidate the timing samples.
+
+## ISSUE-019: Phase 21 quantity reprojection planning boundary
+
+Type: Architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-28. Phase 21 records the approved target architecture contract and adds an explicit transition note. The checked-in OpenAPI and running application remain on the old quantity-dependent contract until Phase 22 implements the target contract.
+- Resolved with the project owner on 2026-08-28. Give each revised requirement exactly one primary architecture owner. ARCH-002 owns REQ-025 through REQ-027; ARCH-011 owns REQ-028; ARCH-001 owns REQ-029, REQ-031, REQ-039, and REQ-040; and ARCH-020 owns REQ-037, REQ-038, REQ-078, and REQ-081. Record supporting components in contracts and dependencies, not as additional owners in the requirement-coverage table.
+
+### Testing coverage deviations
+
+- Resolved with the project owner on 2026-08-28. Phase 21 adds no automated behavior test, static contract checker, or full CI run because it changes only requirements and architecture. Run `python3 scripts/validate_phase_plan.py` and prove through the Phase 21 diff that OpenAPI, backend, and frontend files did not change. Phases 22 and 23 own the backend, projection, and browser interaction tests for the revised requirements. Do not record those requirements as verified in Phase 21.

@@ -6,7 +6,7 @@ This document is the source of truth for the current Obiad proof-of-concept arch
 
 Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the seeded Food Catalog.
 
-The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns all normalization, ranking, nutrition calculations, paging, and display rounding. The browser owns interaction state, localization, accessibility behavior, and presentation.
+The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns suggestion ranking, candidate eligibility, full-precision Nutritional Similarity calculation, deterministic rank order, and paging independently of Food Quantity. The browser owns interaction state, local quantity projection from the returned calculation basis (input calories, equal-calorie Matched Quantities, scaled macronutrients, and final display rounding), localization, accessibility behavior, and presentation.
 
 ```mermaid
 flowchart LR
@@ -26,12 +26,12 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-003, REQ-060–REQ-061, REQ-073, REQ-075, REQ-078–REQ-079 |
+| Requirements | REQ-003, REQ-029, REQ-031, REQ-039–REQ-040, REQ-060–REQ-061, REQ-073, REQ-075, REQ-079 |
 | Dependencies | ARCH-002, ARCH-003, ARCH-008, ARCH-014–ARCH-016, ARCH-019–ARCH-021 |
 
-**Responsibility:** Render the single-page substitution interface.
+**Responsibility:** Render the single-page substitution interface and project calculation basis values.
 
-**Contract:** This client-only Svelte 5 Module renders one primary content column. It uses the generated TypeScript HTTP client. It consumes display-ready backend values. It does not implement Search ranking, eligibility, nutrition calculations, paging, or display rounding.
+**Contract:** This client-only Svelte 5 Module renders one primary content column. It uses the generated TypeScript HTTP client. It owns one pure projection from the returned calculation basis and committed Food Quantity to input calories, equal-calorie Matched Quantities, scaled macronutrients, and final rounded display values. It converts an entered Serving count to the base grams or millilitres using the returned Serving base quantity, computes derived input calories as `4p + 4c + 9f`, computes candidate equal-calorie Matched Quantities, and scales candidate macronutrients to the unrounded Matched Quantity using full calculation precision before final display rounding. Final display rounding rounds input calories and Matched Quantity to whole numbers and macronutrients to 0.1 g; exact nonnegative halves round up at each target precision. It does not implement Search ranking, candidate eligibility, or paging.
 
 ## ARCH-002 — Browser Interaction Module
 
@@ -39,14 +39,14 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-018–REQ-021, REQ-025–REQ-028, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-083–REQ-085 |
+| Requirements | REQ-018–REQ-021, REQ-025–REQ-027, REQ-041, REQ-043–REQ-051, REQ-058–REQ-059, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-003, ARCH-008, ARCH-010–ARCH-012, ARCH-019–ARCH-021 |
 
 **Responsibility:** Own browser interaction transitions.
 
 **Contract:** One discriminated Svelte state owns Search Query text, the selected Food Object, Food Quantity text, page index, focus intent, and motion phase. TanStack Query owns HTTP data, pending state, and request errors. The Module does not copy query results into a Svelte store. A separate persisted store owns the Interface Language.
 
-The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResults`, `newSearchFailure`, and `moreFailure`. Transitions, not independent booleans, determine visible controls, retained cards, focus, announcements, and motion.
+The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResults`, `newSearchFailure`, and `moreFailure`. Transitions, not independent booleans, determine visible controls, retained cards, focus, announcements, and motion. While results are visible, editing the quantity changes raw input text without changing current result values until committed. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, and preserves candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text.
 
 ## ARCH-003 — Translation Module
 
@@ -54,7 +54,7 @@ The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResult
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-013, REQ-026, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-068, REQ-083–REQ-085 |
+| Requirements | REQ-013, REQ-044, REQ-050–REQ-051, REQ-055–REQ-059, REQ-068, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-014 |
 
 **Responsibility:** Produce all localized interface and accessibility text.
@@ -82,14 +82,14 @@ The default is `1 serving` when the Food Object has a Serving. Otherwise, it is 
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-045, REQ-072, REQ-078 |
+| Requirements | REQ-002, REQ-005, REQ-007, REQ-009–REQ-010, REQ-030, REQ-032–REQ-036, REQ-041–REQ-045, REQ-072 |
 | Dependencies | ARCH-006, ARCH-013, ARCH-018 |
 
-**Responsibility:** Return one deterministic page of display-ready Substitutes.
+**Responsibility:** Return one deterministic page of candidate Substitutes and calculation basis data independently of Food Quantity.
 
-**Contract:** One concrete `Run` interface accepts a Substitution Input and a zero-based page index. It returns the requested page index, total eligible count, `hasMore`, the input macronutrients and whole display calories, and at most three Substitute items.
+**Contract:** One concrete `Run` interface accepts a selected Food Object ID and a zero-based page index. It owns catalog access, exclusion, full-precision Nutritional Similarity, deterministic rank order, eligibility counts, and paging independently of Food Quantity. It returns the requested page index, total eligible count, `hasMore`, the selected Food Object calculation basis, and at most three candidate Substitute items.
 
-Each item contains the stable Food Object ID, English and Polish names, optional image key, whole Matched Quantity in the candidate base unit, scaled protein, carbohydrate, and fat amounts to 0.1 g, whole display calories, and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
+The selected Food Object basis contains the canonical Macro Profile (`100 g` for solids or `100 ml` for liquids), base unit, and exact optional Serving base quantity. Each candidate item contains the stable Food Object ID, English and Polish names, optional image key, canonical Macro Profile, base unit, exact optional Serving base quantity where applicable, and backend-derived full-precision Nutritional Similarity and whole similarity percentage. Page `0` is valid when no eligible Substitute exists. A later page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. The Module exposes no general Search facade, repository port, policy interface, or test Adapter.
 
 ## ARCH-006 — PostgreSQL Catalog Loader
 
@@ -125,35 +125,39 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 | --- | --- |
 | Type | Interface |
 | Status | Active |
-| Requirements | REQ-001, REQ-012, REQ-025, REQ-036–REQ-037, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074, REQ-078 |
+| Requirements | REQ-001, REQ-012, REQ-036, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074 |
 | Dependencies | ARCH-004, ARCH-005, ARCH-019 |
 
 **Responsibility:** Define the browser-to-backend protocol.
 
 **Contract:** A checked-in OpenAPI document is authoritative. It generates Go transport models and the TypeScript client and types. The Fiber Adapter maps generated transport values to backend domain values and maps results back. Generated values do not enter the operation Modules.
 
-The Interface provides these operations:
+The approved target interface provides these operations:
 
 - `GET /api/v1/food-suggestions?query=<text>&language=<en|pl>`
 - `POST /api/v1/substitutes/search`
 
-The POST body contains `foodObjectId`, `quantity.value`, `quantity.unit`, and `pageIndex`. `quantity.value` is a JSON number. `quantity.unit` is `g`, `ml`, or `serving`. The body limit is 4 KiB.
+In the approved target contract, the `POST /api/v1/substitutes/search` request body identifies only the selected Food Object and requested page. It contains `foodObjectId` (integer) and `pageIndex` (nonnegative integer). Food Quantity is removed from the request. The body limit is 4 KiB.
 
 A successful suggestion response contains exactly five items. Each item contains `foodObjectId`, `names.en`, `names.pl`, and `defaultQuantity`.
 
-A successful Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, `inputMacronutrients`, `inputCalories`, and zero to three items. Each item contains `foodObjectId`, both names, optional `imageKey`, `matchedQuantity`, `macronutrients`, `calories`, and `similarityPercent`.
+A successful target Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, the selected Food Object calculation basis (`foodObjectId`, `names.en`, `names.pl`, `canonicalMacroProfile` with finite protein, carbohydrate, and fat per `100 g` or `100 ml`, `baseUnit`, and exact optional `servingBaseQuantity`), and zero to three candidate items. Each candidate item contains `foodObjectId`, `names.en`, `names.pl`, optional `imageKey`, `canonicalMacroProfile`, `baseUnit`, exact optional `servingBaseQuantity` where applicable, and backend-derived whole `similarityPercent`.
 
 An error response contains a stable `code` and an optional `field`. It never contains localized prose, SQL text, a stack trace, or an internal cause.
+
+Target stable error codes:
 
 | HTTP status | Stable codes |
 | --- | --- |
 | 400 | `INVALID_REQUEST` |
 | 404 | `FOOD_OBJECT_NOT_FOUND` |
 | 413 | `REQUEST_BODY_TOO_LARGE` |
-| 422 | `INVALID_SEARCH_QUERY`, `QUERY_TOO_LONG`, `UNSUPPORTED_LANGUAGE`, `INVALID_QUANTITY`, `QUANTITY_UNIT_MISMATCH`, `SERVING_UNAVAILABLE`, `QUANTITY_OUT_OF_RANGE`, `INVALID_PAGE_INDEX`, `PAGE_OUT_OF_RANGE` |
+| 422 | `INVALID_SEARCH_QUERY`, `QUERY_TOO_LONG`, `UNSUPPORTED_LANGUAGE`, `INVALID_PAGE_INDEX`, `PAGE_OUT_OF_RANGE` |
 | 503 | `CATALOG_UNAVAILABLE` |
 | 504 | `SEARCH_TIMEOUT` |
 | 500 | `INTERNAL_ERROR` |
+
+**Transition note:** The checked-in OpenAPI document and running application continue to use the legacy quantity-dependent contract (`quantity.value`, `quantity.unit`, backend-derived `inputMacronutrients`, `inputCalories`, `matchedQuantity`, `macronutrients`, and `calories`, with quantity 422 codes `INVALID_QUANTITY`, `QUANTITY_UNIT_MISMATCH`, `SERVING_UNAVAILABLE`, and `QUANTITY_OUT_OF_RANGE`) as a transitional contract until Phase 22 implements the target contract.
 
 ## ARCH-009 — Backend Readiness Interface
 
@@ -191,14 +195,14 @@ Selection replaces the Search Query with the exact returned selected name for th
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-020, REQ-022, REQ-025–REQ-028, REQ-036–REQ-037, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-074–REQ-075, REQ-083–REQ-085 |
+| Requirements | REQ-020, REQ-022, REQ-028, REQ-036, REQ-041, REQ-043–REQ-048, REQ-050–REQ-051, REQ-074–REQ-075, REQ-083–REQ-085 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-005, ARCH-006, ARCH-008, ARCH-018–ARCH-021 |
 
-**Responsibility:** Coordinate new searches, quantity recalculation, and result-page replacement.
+**Responsibility:** Coordinate new searches, local quantity reprojection, and result-page replacement.
 
 **Participants:** Browser Interaction Module, generated TypeScript client, Fiber Adapter, Find Substitute Page Module, and PostgreSQL Catalog Loader.
 
-**Runtime behavior:** New selection requests page `0`. A quantity edit remains raw local text until Enter or blur. A valid committed value requests the current page. MORE! requests the next page. These operations share one global request lock. Related actions are visibly and accessibly disabled while the lock is held. The system queues no later intent.
+**Runtime behavior:** New selection requests page `0`. A quantity edit remains raw local text until Enter or blur. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, and reprojects values using the pure projection in ARCH-001 while preserving candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text. MORE! requests the next page. New Search and MORE! operations share one global request lock and disable related actions while pending; a quantity commit does not acquire the lock. The system queues no later intent.
 
 A new-search failure clears cards, retains the input, keeps focus in Search, and shows the localized retry state. A MORE! failure retains cards and the control, keeps focus on MORE!, and shows the localized retry state. After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure announcements remain unchanged.
 
@@ -233,19 +237,19 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 
 **Owner:** The PostgreSQL schema maintained by ARCH-007.
 
-**Structure contract:** One Food Object row contains:
+**Structure contract:** Each Food Object maintains one canonical Macro Profile per Nutrition Basis (`100 g` for solids or `100 ml` for liquids). One Food Object row contains:
 
 - one positive opaque seeded integer ID;
 - one JSONB localized-name map with nonempty `en` and `pl` string values;
-- one Physical State, `solid` or `liquid`;
-- finite double-precision protein, carbohydrate, and fat values that are nonnegative and not all zero;
-- one optional positive finite Serving base quantity;
+- one Physical State, `solid` or `liquid`, defining the Nutrition Basis (`100 g` for solids, `100 ml` for liquids);
+- one canonical Macro Profile of finite double-precision protein, carbohydrate, and fat values that are nonnegative and not all zero per Nutrition Basis;
+- one optional positive finite Serving base quantity in the base unit;
 - one nullable Food Family foreign key;
 - one optional frontend image key.
 
-Additional language keys are permitted in the localized-name map. A solid has a Nutrition Basis of `100 g`. A liquid has a Nutrition Basis of `100 ml`. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
+Additional language keys are permitted in the localized-name map. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
 
-**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry only required values. Calories, similarities, Matched Quantities, pages, and rounded card values are derived and are never stored.
+**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry the calculation basis data and required metadata. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from the canonical Macro Profiles and are never stored.
 
 ## ARCH-014 — Interface Language Preference
 
@@ -270,7 +274,7 @@ Additional language keys are permitted in the localized-name map. A solid has a 
 | --- | --- |
 | Type | Data |
 | Status | Active |
-| Requirements | REQ-011, REQ-037, REQ-055, REQ-069, REQ-073 |
+| Requirements | REQ-011, REQ-055, REQ-069, REQ-073 |
 | Dependencies | Vite frontend bundle |
 
 **Responsibility:** Supply deterministic images and placeholder content without a runtime third party, and define the browser typography fallback contract.
@@ -321,18 +325,20 @@ Assign each name to its first applicable exact-match, full-name-prefix, substrin
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-007, REQ-009–REQ-010, REQ-025, REQ-028–REQ-035, REQ-038–REQ-043, REQ-072 |
+| Requirements | REQ-007, REQ-009–REQ-010, REQ-030, REQ-032–REQ-035, REQ-041–REQ-043, REQ-072 |
 | Dependencies | ARCH-005, ARCH-013 |
 
-**Responsibility:** Calculate eligibility, deterministic Substitute order, page data, and display values.
+**Responsibility:** Own catalog access, candidate exclusion, full-precision Nutritional Similarity, deterministic rank order, eligibility counts, and paging independently of Food Quantity.
 
-**Behavior:** Convert the Substitution Input Food Quantity to its base unit. A direct gram or millilitre value is a positive integer. A Serving value can be fractional and multiplies the Food Object Serving base quantity. The converted value must be greater than zero and at most `100,000 g` or `100,000 ml`.
+**Behavior:** The backend request identifies only the selected Food Object ID and requested zero-based page index. Food Quantity does not enter backend request identity, eligibility, ranking, or paging.
 
-For a Macro Profile `(p, c, f)`, derive calories as `4p + 4c + 9f`. Compute Nutritional Similarity as cosine similarity of the input and candidate Macro Profiles. Exclude the input Food Object and every other member of its Food Family. Sort by decreasing unrounded similarity, pinned English-name collation, and stable Food Object ID.
+Retrieve the canonical per-100 g or per-100 ml Macro Profile `(p, c, f)` for the selected Food Object and candidate Food Objects. Compute full-precision Nutritional Similarity as the cosine similarity of the canonical Macro Profiles. Exclude the selected Food Object and every other member of its Food Family from eligible Substitutes. Sort eligible candidates by decreasing unrounded Nutritional Similarity, pinned English-name collation, and stable Food Object ID.
 
-Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`. Compute each selected candidate Matched Quantity at equal derived calories. Scale protein, carbohydrate, and fat to the unrounded Matched Quantity. Round Matched Quantity to a whole base unit, scaled macronutrients to 0.1 g, and `100 × similarity` to a whole percentage. Exact halves round up at each target precision. A positive value can display as zero.
+Count all eligible Substitutes, then slice pages of three. A page contains unique IDs. Page `0` is valid when no eligible Substitute exists. A nonzero page whose first rank does not exist returns `PAGE_OUT_OF_RANGE`.
 
-**Quality constraints:** Use `float64` through ranking and calculation. Do not round before response projection. Food Quantity and Interface Language changes do not change eligible IDs, order, or page for an unchanged catalog.
+For the requested page, supply the calculation basis for the selected Food Object (canonical Macro Profile, base unit, exact optional Serving base quantity) and each candidate item (canonical Macro Profile, base unit, exact optional Serving base quantity where applicable, and backend-derived whole similarity percentage). Food Quantity conversion, derived calories, Matched Quantities, and scaled macronutrients are browser projection responsibilities and do not run on the backend.
+
+**Quality constraints:** Use `float64` for all similarity calculations and ranking. Do not round similarity before deterministic sorting; round similarity to a whole percentage point with exact halves rounded up only for display presentation. Food Quantity and Interface Language changes do not change eligible IDs, order, or page for an unchanged catalog.
 
 ## ARCH-019 — Request Control and Failure Mechanism
 
@@ -345,7 +351,7 @@ Count all eligible Substitutes, then slice pages of three. A page contains uniqu
 
 **Responsibility:** Bound request concurrency, duration, retry behavior, and visible failure transitions.
 
-**Behavior:** Suggestion requests use an independent latest-query lane. The browser aborts a stale request, and a stale response cannot update state. The 450 ms backend context bounds stale Fiber and pgx work that disconnect cancellation does not stop. Substitution Search, quantity recalculation, and MORE! use one global lock. Related actions are disabled while pending. The system queues nothing.
+**Behavior:** Suggestion requests use an independent latest-query lane. The browser aborts a stale request, and a stale response cannot update state. The 450 ms backend context bounds stale Fiber and pgx work that disconnect cancellation does not stop. Substitution Search and MORE! use one global lock; related actions are disabled while pending. A valid quantity commit is synchronous and local, starts no HTTP request or pending state, does not acquire the lock, and preserves candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text. The system queues nothing.
 
 TanStack Query performs no automatic retry. A later identical intent does not reuse a successful response. Each intent starts a real backend request. Fiber derives a 450 ms Go context and passes it through the operation Module to pgx. The frontend aborts at 500 ms. A timeout uses the stable `SEARCH_TIMEOUT` code and the localized retry state. A spinner is absent within 100 ms after request end.
 
@@ -359,14 +365,14 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-025–REQ-027, REQ-036–REQ-039, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-080–REQ-085 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080–REQ-085 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
 
 **Behavior:** Tailwind renders one primary content column. The empty state centers the search control. The result state places it near the top and cards below it. The layout uses one card column from 320 px through 1023 px and three columns from 1024 px. Content does not overflow the viewport.
 
-The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. Cards show the bundled image or placeholder, localized name, whole Matched Quantity, scaled macronutrients to 0.1 g, and whole similarity percentage. While card values are pending, each card hides its non-image content and shows one centered spinner without changing size. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
+The suggestion control uses the combobox/listbox pattern, active descendant, required key handling, pointer selection, and visible focus. Invalid quantity text remains visible. Enter or blur commits quantity input. The selected Substitution Input and each result card show browser-projected whole derived calories in kcal with the localized `Calories` or `Kalorie` label. Cards show the bundled image or placeholder, localized name, browser-projected whole Matched Quantity in whole grams or millilitres, scaled macronutrients to 0.1 g, and backend-derived whole similarity percentage. While a Substitute Search request is pending, each visible card hides its non-image content and shows one centered spinner without changing size. A valid local quantity commit is synchronous and local, starts no HTTP request or pending state, shows no card spinner, and preserves candidate eligibility including `totalEligibleCount` and `hasMore`, result identity, order, page, card identity, motion, focus, Interface Language, and localized text. While a MORE! request is pending, its focused control keeps the localized label and uses a gray, `aria-disabled` non-operable presentation.
 
 After a successful new Search or MORE! request with one or more result cards, focus moves to the localized results heading. A successful new Search with zero result cards moves focus to the localized zero-result message. A normalized-empty Enter action retains the exact raw Search Query and Search focus and renders no validation state. Successful result states emit no result count or result-status live-region message. Existing loading, validation, and failure live announcements remain unchanged.
 
@@ -400,7 +406,7 @@ After a successful new Search or MORE! request with one or more result cards, fo
 
 **Behavior:** Backend integration tests create a disposable database in real PostgreSQL. They run the real setup command and exercise the real Catalog Loader, operation Modules, and Fiber Adapter. They drop the database after the run. CI provides PostgreSQL as a process.
 
-Every frontend integration test uses the generated client, real Fiber backend, and real PostgreSQL. Normal tests share one seeded stack. Database-outage tests use a separate Fiber process and disposable PostgreSQL database and run serially. Playwright verifies primary flows, accessibility, motion, responsive widths, focus, failure states, and visual states against the complete deployment.
+Every frontend integration test uses the generated client, real Fiber backend, and real PostgreSQL. Normal tests share one seeded stack. Browser calculation tests verify the pure projection formulas, Serving base conversion, full precision, and display rounding boundaries. Database-outage tests use a separate Fiber process and disposable PostgreSQL database and run serially. Playwright verifies primary flows, accessibility, motion, responsive widths, focus, failure states, and visual states against the complete deployment.
 
 A dedicated serial GitHub Actions job starts the optimized real stack, warms it up, and gates all required 20-request and 20-search timing samples. OpenAPI generation and compilation of generated Go and TypeScript values verify transport consistency.
 
@@ -434,22 +440,22 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-022 | ARCH-004, ARCH-010, ARCH-011 |
 | REQ-023 | ARCH-004, ARCH-010 |
 | REQ-024 | ARCH-004, ARCH-010 |
-| REQ-025 | ARCH-002, ARCH-005, ARCH-008, ARCH-011, ARCH-018, ARCH-020 |
-| REQ-026 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
-| REQ-027 | ARCH-002, ARCH-011, ARCH-020 |
-| REQ-028 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
-| REQ-029 | ARCH-005, ARCH-018 |
+| REQ-025 | ARCH-002 |
+| REQ-026 | ARCH-002 |
+| REQ-027 | ARCH-002 |
+| REQ-028 | ARCH-011 |
+| REQ-029 | ARCH-001 |
 | REQ-030 | ARCH-005, ARCH-018 |
-| REQ-031 | ARCH-005, ARCH-018 |
+| REQ-031 | ARCH-001 |
 | REQ-032 | ARCH-005, ARCH-018 |
 | REQ-033 | ARCH-005, ARCH-018 |
 | REQ-034 | ARCH-005, ARCH-018 |
 | REQ-035 | ARCH-005, ARCH-018 |
 | REQ-036 | ARCH-005, ARCH-008, ARCH-011, ARCH-020 |
-| REQ-037 | ARCH-005, ARCH-008, ARCH-011, ARCH-015, ARCH-020 |
-| REQ-038 | ARCH-005, ARCH-018, ARCH-020 |
-| REQ-039 | ARCH-005, ARCH-018, ARCH-020 |
-| REQ-040 | ARCH-005, ARCH-018 |
+| REQ-037 | ARCH-020 |
+| REQ-038 | ARCH-020 |
+| REQ-039 | ARCH-001 |
+| REQ-040 | ARCH-001 |
 | REQ-041 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
 | REQ-042 | ARCH-005, ARCH-018 |
 | REQ-043 | ARCH-002, ARCH-005, ARCH-011, ARCH-018 |
@@ -483,10 +489,10 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-075 | ARCH-001, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
-| REQ-078 | ARCH-001, ARCH-005, ARCH-008 |
+| REQ-078 | ARCH-020 |
 | REQ-079 | ARCH-001 |
 | REQ-080 | ARCH-002, ARCH-011, ARCH-019 |
-| REQ-081 | ARCH-002, ARCH-019, ARCH-020 |
+| REQ-081 | ARCH-020 |
 | REQ-082 | ARCH-002, ARCH-019, ARCH-020 |
 | REQ-083 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
