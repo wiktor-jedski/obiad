@@ -35,7 +35,6 @@ const COPY = {
 
 interface SubstitutePostRecord {
   readonly body: SubstituteSearchRequest;
-  readonly rawBody: { [key: string]: unknown };
   status: number | null;
   response: SubstituteSearchResponse | null;
 }
@@ -49,13 +48,8 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
     ) {
       // SAFETY: The request payload matches the generated API contract.
       const body = request.postDataJSON() as SubstituteSearchRequest;
-      // SAFETY: The raw payload is a plain JSON object from postDataJSON.
-      const rawBody = (request.postDataJSON() ?? {}) as {
-        [key: string]: unknown;
-      };
       posts.push({
         body,
-        rawBody,
         status: null,
         response: null,
       });
@@ -186,8 +180,8 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
       foodObjectId: 1,
       pageIndex: 0,
     });
-    expect(firstPost.rawBody).not.toHaveProperty("quantity");
-    expect(Object.keys(firstPost.rawBody).sort()).toEqual([
+    expect(firstPost.body).not.toHaveProperty("quantity");
+    expect(Object.keys(firstPost.body).sort()).toEqual([
       "foodObjectId",
       "pageIndex",
     ]);
@@ -236,7 +230,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
       foodObjectId: 1,
       pageIndex: 0,
     });
-    expect(secondPost.rawBody).not.toHaveProperty("quantity");
+    expect(secondPost.body).not.toHaveProperty("quantity");
     expect(secondPost.body).toEqual(firstPost.body);
 
     const secondResp = secondPost.response;
@@ -315,7 +309,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
       foodObjectId: 10,
       pageIndex: 0,
     });
-    expect(firstPost.rawBody).not.toHaveProperty("quantity");
+    expect(firstPost.body).not.toHaveProperty("quantity");
 
     const firstResp = firstPost.response;
     expect(firstResp.selectedFood.baseUnit).toBe("ml");
@@ -356,7 +350,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
       foodObjectId: 10,
       pageIndex: 0,
     });
-    expect(secondPost.rawBody).not.toHaveProperty("quantity");
+    expect(secondPost.body).not.toHaveProperty("quantity");
     expect(secondPost.response?.selectedFood).toEqual(firstResp.selectedFood);
     expect(secondPost.response?.items).toEqual(firstResp.items);
 
