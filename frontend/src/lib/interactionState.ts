@@ -6,7 +6,10 @@ import {
   resolveCommittedValue,
   unitSelectionValue,
 } from "./quantity";
-import { isSubstitutionSearchLocked } from "./substitutionSearch";
+import {
+  isSubstitutionSearchLocked,
+  resetSubstitutionSearch,
+} from "./substitutionSearch";
 
 export type QuantityUnit = "serving" | "g" | "ml";
 
@@ -159,6 +162,7 @@ export function createInteractionState(): InteractionStateStore {
         if (state.name === "loadingNew" || state.name === "loadingMore") {
           return state;
         }
+        resetSubstitutionSearch(selected.foodObjectId, 0);
         return {
           name: "loadingNew",
           query: selected.names[selected.capturedLanguage],

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { cleanup, render } from "@testing-library/svelte";
+import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import App from "./App.svelte";
 import type { SubstituteSearchResponse } from "./client/types.gen";
@@ -50,12 +50,16 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     globalThis.Request = OriginalRequest;
   });
 
-  function mockSubstituteResponse(response: SubstituteSearchResponse): void {
+  function mockSubstituteResponse(
+    response: SubstituteSearchResponse,
+    onSearch: () => void = () => {},
+  ): void {
     globalThis.fetch = Object.assign(
       async (input: RequestInfo | URL) => {
         const url =
           input instanceof globalThis.Request ? input.url : input.toString();
         if (url.includes("/api/v1/substitutes/search")) {
+          onSearch();
           return new Response(JSON.stringify(response), {
             status: 200,
             headers: { "content-type": "application/json" },
@@ -149,7 +153,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
       ],
     };
 
-    mockSubstituteResponse(response);
+    let searches = 0;
+    mockSubstituteResponse(response, () => {
+      searches += 1;
+    });
     interactionState.selectSuggestion(selected);
     render(App);
     await settle();
@@ -170,6 +177,26 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
     expect(ddValues).toEqual(["18.7 g", "9.3 g", "4.7 g", "88%"]);
+
+    const quantity = document.querySelector("[data-quantity-number]");
+    const editor = document.querySelector("[data-quantity-editor]");
+    if (
+      !(quantity instanceof HTMLInputElement) ||
+      !(editor instanceof HTMLElement)
+    ) {
+      throw new TypeError("Liquid quantity editor must be present");
+    }
+    await fireEvent.input(quantity, { target: { value: "500" } });
+    await fireEvent.focusOut(editor, { relatedTarget: document.body });
+    await tick();
+
+    expect(elementText("[data-input-macro-protein]")).toBe("17.0 g");
+    expect(elementText("[data-input-calories]")).toBe("308 kcal");
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("933 ml");
+    expect(searches, "a local ml blur starts no additional POST").toBe(1);
+    expect(queryClient.isFetching(), "a local ml blur starts no pending query").toBe(
+      0,
+    );
   });
 
   test("Serving calculation-basis fixture proves Serving count conversion with exact Serving base quantity and full-precision scaling", async () => {
