@@ -12,6 +12,84 @@ import (
 	"golang.org/x/text/language"
 )
 
+// MacroProfile stores source macronutrient values.
+type MacroProfile struct {
+	// Protein is the protein amount in grams.
+	Protein float64
+	// Carbohydrate is the carbohydrate amount in grams.
+	Carbohydrate float64
+	// Fat is the fat amount in grams.
+	Fat float64
+}
+
+// SelectedFood is the calculation basis for the selected food.
+type SelectedFood struct {
+	// FoodObjectID identifies the food.
+	FoodObjectID int32
+	// Names contains both localized names.
+	Names LocalizedNames
+	// MacroProfile stores the canonical profile.
+	MacroProfile MacroProfile
+	// BaseUnit is the base quantity unit.
+	BaseUnit Unit
+	// Serving is the optional serving base quantity.
+	Serving *float64
+}
+
+// SubstituteItem is one candidate substitution.
+type SubstituteItem struct {
+	// FoodObjectID identifies the substitute.
+	FoodObjectID int32
+	// Names contains both localized names.
+	Names LocalizedNames
+	// ImageKey identifies the optional image.
+	ImageKey *string
+	// MacroProfile stores the canonical profile.
+	MacroProfile MacroProfile
+	// BaseUnit is the base quantity unit.
+	BaseUnit Unit
+	// Serving is the optional serving base quantity.
+	Serving *float64
+	// Similarity is the unrounded cosine similarity.
+	Similarity float64
+	// SimilarityPercent is the displayed similarity.
+	SimilarityPercent int32
+}
+
+// Page contains one substitution result page.
+type Page struct {
+	// PageIndex is the requested zero-based page.
+	PageIndex int32
+	// TotalEligibleCount is the number of eligible items.
+	TotalEligibleCount int
+	// HasMore reports whether another page exists.
+	HasMore bool
+	// SelectedFood is the calculation basis of the input food.
+	SelectedFood SelectedFood
+	// Items contains the page results.
+	Items []SubstituteItem
+}
+
+// FindSubstitutePage loads and ranks substitution results.
+type FindSubstitutePage struct {
+	loader *loader
+}
+
+// rankedSubstitute stores an eligible candidate before paging.
+type rankedSubstitute struct {
+	object     foodObject
+	profile    macroProfile
+	similarity float64
+	enName     string
+}
+
+// macroProfile stores source macronutrient values.
+type macroProfile struct {
+	protein      float64
+	carbohydrate float64
+	fat          float64
+}
+
 // pageSize is the number of results per page.
 const pageSize = 3
 
@@ -25,13 +103,6 @@ const (
 	// CodePageOutOfRange identifies an unavailable page.
 	CodePageOutOfRange Code = "PAGE_OUT_OF_RANGE"
 )
-
-// macroProfile stores source macronutrient values.
-type macroProfile struct {
-	protein      float64
-	carbohydrate float64
-	fat          float64
-}
 
 // cosineSimilarity computes full-precision profile similarity.
 func cosineSimilarity(a, b macroProfile) float64 {
@@ -48,14 +119,6 @@ func projectSimilarityPercent(similarity float64) int32 {
 // isFiniteDerived rejects nonfinite calculated values.
 func isFiniteDerived(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0)
-}
-
-// rankedSubstitute stores an eligible candidate before paging.
-type rankedSubstitute struct {
-	object     foodObject
-	profile    macroProfile
-	similarity float64
-	enName     string
 }
 
 // rankEligible excludes the input and its food family.
@@ -92,11 +155,6 @@ func rankEligible(inputID int32, inputFamily *int32, inputProfile macroProfile, 
 		return a.object.id < b.object.id
 	})
 	return rankedList, nil
-}
-
-// FindSubstitutePage loads and ranks substitution results.
-type FindSubstitutePage struct {
-	loader *loader
 }
 
 // NewFindSubstitutePage creates a substitution module for conn.
@@ -201,64 +259,6 @@ func (f *FindSubstitutePage) Run(ctx context.Context, foodObjectID int32, pageIn
 		})
 	}
 	return page, nil
-}
-
-// MacroProfile stores source macronutrient values.
-type MacroProfile struct {
-	// Protein is the protein amount in grams.
-	Protein float64
-	// Carbohydrate is the carbohydrate amount in grams.
-	Carbohydrate float64
-	// Fat is the fat amount in grams.
-	Fat float64
-}
-
-// SelectedFood is the calculation basis for the selected food.
-type SelectedFood struct {
-	// FoodObjectID identifies the food.
-	FoodObjectID int32
-	// Names contains both localized names.
-	Names LocalizedNames
-	// MacroProfile stores the canonical profile.
-	MacroProfile MacroProfile
-	// BaseUnit is the base quantity unit.
-	BaseUnit Unit
-	// Serving is the optional serving base quantity.
-	Serving *float64
-}
-
-// SubstituteItem is one candidate substitution.
-type SubstituteItem struct {
-	// FoodObjectID identifies the substitute.
-	FoodObjectID int32
-	// Names contains both localized names.
-	Names LocalizedNames
-	// ImageKey identifies the optional image.
-	ImageKey *string
-	// MacroProfile stores the canonical profile.
-	MacroProfile MacroProfile
-	// BaseUnit is the base quantity unit.
-	BaseUnit Unit
-	// Serving is the optional serving base quantity.
-	Serving *float64
-	// Similarity is the unrounded cosine similarity.
-	Similarity float64
-	// SimilarityPercent is the displayed similarity.
-	SimilarityPercent int32
-}
-
-// Page contains one substitution result page.
-type Page struct {
-	// PageIndex is the requested zero-based page.
-	PageIndex int32
-	// TotalEligibleCount is the number of eligible items.
-	TotalEligibleCount int
-	// HasMore reports whether another page exists.
-	HasMore bool
-	// SelectedFood is the calculation basis of the input food.
-	SelectedFood SelectedFood
-	// Items contains the page results.
-	Items []SubstituteItem
 }
 
 // baseUnit returns the base unit for state.
