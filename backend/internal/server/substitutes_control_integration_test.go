@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const canonicalSubstituteBody = `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+const canonicalSubstituteBody = `{"foodObjectId":1,"pageIndex":0}`
 
 func postSubstitutesResult(t *testing.T, baseURL string, contentType string, body string) httpResult {
 	t.Helper()
@@ -200,7 +200,8 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 		{"unterminated object", `{"foodObjectId":1`},
 		{"trailing text", canonicalSubstituteBody + " x"},
 		{"trailing second object", canonicalSubstituteBody + canonicalSubstituteBody},
-		{"unknown root key", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"extra":1}`},
+		{"unknown root key", `{"foodObjectId":1,"pageIndex":0,"extra":1}`},
+		{"quantity field rejected as unknown", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`},
 	}
 	for _, tc := range structuralCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -213,12 +214,16 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 		body  string
 		field string
 	}{
-		{"missing foodObjectId", `{"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, "foodObjectId"},
-		{"duplicate quantity.unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving","unit":"g"},"pageIndex":0}`, "quantity.unit"},
-		{"null pageIndex", `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":null}`, "pageIndex"},
-		{"wrong-typed quantity.value", `{"foodObjectId":1,"quantity":{"value":"100","unit":"serving"},"pageIndex":0}`, "quantity.value"},
-		{"wrong-typed quantity object", `{"foodObjectId":1,"quantity":5,"pageIndex":0}`, "quantity"},
-		{"fractional foodObjectId", `{"foodObjectId":1.5,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`, "foodObjectId"},
+		{"missing foodObjectId", `{"pageIndex":0}`, "foodObjectId"},
+		{"missing pageIndex", `{"foodObjectId":1}`, "pageIndex"},
+		{"duplicate foodObjectId", `{"foodObjectId":1,"foodObjectId":2,"pageIndex":0}`, "foodObjectId"},
+		{"duplicate pageIndex", `{"foodObjectId":1,"pageIndex":0,"pageIndex":1}`, "pageIndex"},
+		{"null foodObjectId", `{"foodObjectId":null,"pageIndex":0}`, "foodObjectId"},
+		{"null pageIndex", `{"foodObjectId":1,"pageIndex":null}`, "pageIndex"},
+		{"wrong-typed foodObjectId", `{"foodObjectId":"1","pageIndex":0}`, "foodObjectId"},
+		{"wrong-typed pageIndex", `{"foodObjectId":1,"pageIndex":true}`, "pageIndex"},
+		{"fractional foodObjectId", `{"foodObjectId":1.5,"pageIndex":0}`, "foodObjectId"},
+		{"fractional pageIndex", `{"foodObjectId":1,"pageIndex":1.5}`, "pageIndex"},
 	}
 	for _, tc := range fieldCases {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -226,51 +231,17 @@ func TestSubstituteSearchValidationHTTPIntegration(t *testing.T) {
 		})
 	}
 
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":0,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":-5,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":0,"pageIndex":0}`), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":-5,"pageIndex":0}`), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
 
-	invalidQuantityCases := []struct {
-		name  string
-		body  string
-		field string
-	}{
-		{"zero direct grams", `{"foodObjectId":5,"quantity":{"value":0,"unit":"g"},"pageIndex":0}`, "quantity.value"},
-		{"negative direct grams", `{"foodObjectId":5,"quantity":{"value":-5,"unit":"g"},"pageIndex":0}`, "quantity.value"},
-		{"fractional direct grams", `{"foodObjectId":5,"quantity":{"value":1.5,"unit":"g"},"pageIndex":0}`, "quantity.value"},
-		{"zero Serving count", `{"foodObjectId":1,"quantity":{"value":0,"unit":"serving"},"pageIndex":0}`, "quantity.value"},
-		{"negative Serving count", `{"foodObjectId":1,"quantity":{"value":-1,"unit":"serving"},"pageIndex":0}`, "quantity.value"},
-		{"unsupported unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":"kg"},"pageIndex":0}`, "quantity.unit"},
-		{"empty unit", `{"foodObjectId":1,"quantity":{"value":1,"unit":""},"pageIndex":0}`, "quantity.unit"},
-	}
-	for _, tc := range invalidQuantityCases {
-		t.Run("reject "+tc.name, func(t *testing.T) {
-			assertError(t, postSubstitutesResult(t, baseURL, jsonType, tc.body), http.StatusUnprocessableEntity, "INVALID_QUANTITY", tc.field)
-		})
-	}
-
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":10,"quantity":{"value":100,"unit":"g"},"pageIndex":0}`), http.StatusUnprocessableEntity, "QUANTITY_UNIT_MISMATCH", "quantity.unit")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":100,"unit":"ml"},"pageIndex":0}`), http.StatusUnprocessableEntity, "QUANTITY_UNIT_MISMATCH", "quantity.unit")
-
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":5,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusUnprocessableEntity, "SERVING_UNAVAILABLE", "quantity.unit")
-
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":5,"quantity":{"value":100001,"unit":"g"},"pageIndex":0}`), http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "quantity.value")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":10,"quantity":{"value":100001,"unit":"ml"},"pageIndex":0}`), http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "quantity.value")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":32,"quantity":{"value":1001,"unit":"serving"},"pageIndex":0}`), http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "quantity.value")
-	status, body, contentType = postSubstitutes(t, baseURL, jsonType, `{"foodObjectId":5,"quantity":{"value":100000,"unit":"g"},"pageIndex":0}`)
-	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	status, body, contentType = postSubstitutes(t, baseURL, jsonType, `{"foodObjectId":10,"quantity":{"value":100000,"unit":"ml"},"pageIndex":0}`)
-	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-	status, body, contentType = postSubstitutes(t, baseURL, jsonType, `{"foodObjectId":32,"quantity":{"value":1000,"unit":"serving"},"pageIndex":0}`)
-	assertSubstituteSuccessEnvelope(t, status, body, contentType)
-
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":-1}`), http.StatusUnprocessableEntity, "INVALID_PAGE_INDEX", "pageIndex")
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"pageIndex":-1}`), http.StatusUnprocessableEntity, "INVALID_PAGE_INDEX", "pageIndex")
 	for _, page := range []string{"1", "2", "3", "11"} {
-		body := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":` + page + `}`
-		status, body, contentType = postSubstitutes(t, baseURL, jsonType, body)
+		body := `{"foodObjectId":1,"pageIndex":` + page + `}`
+		status, body, contentType := postSubstitutes(t, baseURL, jsonType, body)
 		assertSubstituteSuccessEnvelope(t, status, body, contentType)
 	}
 	for _, page := range []string{"12", "13", "2147483647"} {
-		body := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":` + page + `}`
+		body := `{"foodObjectId":1,"pageIndex":` + page + `}`
 		assertError(t, postSubstitutesResult(t, baseURL, jsonType, body), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
 	}
 }
@@ -321,10 +292,10 @@ func TestSubstituteSearchFailuresHTTPIntegration(t *testing.T) {
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,`), http.StatusBadRequest, "INVALID_REQUEST", "")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":9999,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
-	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":9999,"pageIndex":0}`), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
+	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":12}`), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, `{"foodObjectId":1,"pageIndex":12}`), http.StatusUnprocessableEntity, "PAGE_OUT_OF_RANGE", "pageIndex")
 
 	adminConn := connect(t, adminDatabaseURL())
 	if _, err := adminConn.Exec(ctx, "DROP DATABASE "+databaseName(t, db.RuntimeURL)+" WITH (FORCE)"); err != nil {
@@ -432,25 +403,25 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	runtimePassword, _ := runtimeURL.User.Password()
 	baseForbidden := []string{runtimePassword, "food_objects", "password", "goroutine", ".go:", "INSERT", "UPDATE"}
 
-	successBody := `{"foodObjectId":5,"quantity":{"value":4321,"unit":"g"},"pageIndex":0}`
+	successBody := `{"foodObjectId":5,"pageIndex":0}`
 	status, body, contentType := postSubstitutes(t, baseURL, jsonType, successBody)
 	assertSubstituteSuccessEnvelope(t, status, body, contentType)
 
-	unknownKeyBody := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0,"secret-unknown-key-xyz":1}`
+	unknownKeyBody := `{"foodObjectId":1,"pageIndex":0,"secret-unknown-key-xyz":1}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, unknownKeyBody), http.StatusBadRequest, "INVALID_REQUEST", "")
 
-	rangeBody := `{"foodObjectId":5,"quantity":{"value":1E9,"unit":"g"},"pageIndex":0}`
-	assertError(t, postSubstitutesResult(t, baseURL, jsonType, rangeBody), http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "quantity.value")
+	unknownQuantityBody := `{"foodObjectId":1,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	assertError(t, postSubstitutesResult(t, baseURL, jsonType, unknownQuantityBody), http.StatusBadRequest, "INVALID_REQUEST", "")
 
-	bigIDBody := `{"foodObjectId":1E12,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	bigIDBody := `{"foodObjectId":1E12,"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, bigIDBody), http.StatusBadRequest, "INVALID_REQUEST", "foodObjectId")
 
 	assertError(t, postSubstitutesResult(t, baseURL, "secret-content-type-xyz", canonicalSubstituteBody), http.StatusBadRequest, "INVALID_REQUEST", "")
 
-	notFoundBody := `{"foodObjectId":9999,"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	notFoundBody := `{"foodObjectId":9999,"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, notFoundBody), http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "foodObjectId")
 
-	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"quantity":{"value":1,"unit":"serving"},"pageIndex":0}`
+	oversizedBody := `{"foodObjectId":1,` + strings.Repeat("secret-padding-token-xyz-", 170) + `"pageIndex":0}`
 	assertError(t, postSubstitutesResult(t, baseURL, jsonType, oversizedBody), http.StatusRequestEntityTooLarge, "REQUEST_BODY_TOO_LARGE", "")
 
 	owner := connect(t, db.OwnerURL)
@@ -486,7 +457,7 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	forbiddenByRecord := [][]string{
 		append(append([]string{}, baseForbidden...), successBody),
 		append(append([]string{}, baseForbidden...), unknownKeyBody, "secret-unknown-key-xyz"),
-		append(append([]string{}, baseForbidden...), rangeBody, "1E9"),
+		append(append([]string{}, baseForbidden...), unknownQuantityBody, "quantity"),
 		append(append([]string{}, baseForbidden...), bigIDBody, "1E12"),
 		append(append([]string{}, baseForbidden...), "secret-content-type-xyz"),
 		append(append([]string{}, baseForbidden...), notFoundBody, "9999"),
@@ -501,7 +472,7 @@ func TestSubstituteRequestLogIntegration(t *testing.T) {
 	}{
 		{http.StatusOK, "", "", "/api/v1/substitutes/search"},
 		{http.StatusBadRequest, "INVALID_REQUEST", "request body contains an unknown field", "/api/v1/substitutes/search"},
-		{http.StatusUnprocessableEntity, "QUANTITY_OUT_OF_RANGE", "converted quantity exceeds the base-unit limit (field quantity.value)", "/api/v1/substitutes/search"},
+		{http.StatusBadRequest, "INVALID_REQUEST", "request body contains an unknown field", "/api/v1/substitutes/search"},
 		{http.StatusBadRequest, "INVALID_REQUEST", "field foodObjectId is not a valid int32", "/api/v1/substitutes/search"},
 		{http.StatusBadRequest, "INVALID_REQUEST", "Content-Type is not application/json", "/api/v1/substitutes/search"},
 		{http.StatusNotFound, "FOOD_OBJECT_NOT_FOUND", "food object is absent from the catalog (field foodObjectId)", "/api/v1/substitutes/search"},

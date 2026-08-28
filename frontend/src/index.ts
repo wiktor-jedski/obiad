@@ -5,9 +5,8 @@ import type { FoodSuggestionsResponse } from "./client/types.gen";
 import type { SubstituteSearchRequest } from "./client/types.gen";
 import type { SubstituteSearchResponse } from "./client/types.gen";
 import type { SubstituteItem } from "./client/types.gen";
-import type { SubstitutionQuantity } from "./client/types.gen";
-import type { MatchedQuantity } from "./client/types.gen";
-import type { Macronutrients } from "./client/types.gen";
+import type { SelectedFood } from "./client/types.gen";
+import type { MacroProfile } from "./client/types.gen";
 
 export type {
   Error,
@@ -15,9 +14,8 @@ export type {
   SubstituteSearchRequest,
   SubstituteSearchResponse,
   SubstituteItem,
-  SubstitutionQuantity,
-  MatchedQuantity,
-  Macronutrients,
+  SelectedFood,
+  MacroProfile,
 };
 
 export { client };
