@@ -14,13 +14,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-002 — Seeded catalog source
 
-**Statement:** The POC shall get all Food Objects from the seeded PostgreSQL catalog.
+**Statement:** The POC shall load every runtime Food Object from a validated application catalog into local PostgreSQL. `scripts/start.py`, CI, and integration checks shall use only application-owned dummy catalog data. The production launcher shall load only a validated production Meal catalog.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Network check: All food-data requests use the local backend and the seeded database. |
+| Verification | Integration check: Dummy setup loads only the application-owned dummy catalog without an initialized production-data submodule. Production startup loads a validated production Meal catalog. |
 
 ## REQ-003 — Single-page interface
 
@@ -34,73 +34,73 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-004 — Generic Food Objects
 
-**Statement:** The seeded catalog shall contain generic foods and generic prepared dishes.
+**Statement:** Each production Food Object shall represent one generic prepared dish with nutritional data. An Ingredient, raw food, or product shall not be a production Food Object. Application-owned dummy rows retain legacy nonproduction fixtures for local development, CI, and integration checks; they do not define production Food Object eligibility.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Seed check: Each record is a generic food or a generic prepared dish. |
+| Verification | Catalog check: Each production Food Object is one generic prepared dish. No Ingredient, raw food, or product record enters the production catalog. Dummy fixtures remain available only as nonproduction test data. |
 
 ## REQ-005 — Stable Food Object identity
 
-**Statement:** Each Food Object shall have one stable identity for all localized names.
+**Statement:** Each Food Object shall have one stable opaque positive identity across all localized names and catalog exports.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: The English and Polish forms of one record have the same Food Object ID. |
+| Verification | Catalog check: The English and Polish forms of one record and its exported form have the same positive Food Object ID. |
 
 ## REQ-006 — Required localized names
 
-**Statement:** The database shall accept a Food Object only when it has one English name and one Polish name.
+**Statement:** A catalog shall accept a Food Object only when it has one nonempty English name and one nonempty Polish name.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: A complete record succeeds. A record with one missing name fails. |
+| Verification | Catalog validation: A complete record succeeds. A record with one missing or empty required name fails. |
 
 ## REQ-007 — Nutrition Basis
 
-**Statement:** Each solid Food Object shall use 100 g, and each liquid Food Object shall use 100 ml, as its Nutrition Basis.
+**Statement:** Each Food Object shall have one explicit Nutrition Basis unit, `g` or `ml`, and a Macro Profile per 100 of that unit.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | API test: One solid fixture returns 100 g. One liquid fixture returns 100 ml. |
+| Verification | Catalog validation: Complete `g` and `ml` fixtures succeed. An absent or invalid basis unit fails. |
 
 ## REQ-008 — One optional Serving
 
-**Statement:** The database shall permit a maximum of one standard Serving for each Food Object.
+**Statement:** A catalog shall permit zero or one positive standard Serving for each Food Object. Its unit shall match the Food Object Nutrition Basis unit.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: Zero or one Serving succeeds. A second Serving fails. |
+| Verification | Catalog validation: Zero or one valid Serving succeeds. A second, nonpositive, or mismatched-unit Serving fails. |
 
 ## REQ-009 — One optional Food Family
 
-**Statement:** The database shall permit a maximum of one flat Food Family for each Food Object.
+**Statement:** A catalog shall permit zero or one flat Food Family reference for each Food Object.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: Zero or one membership succeeds. A second or nested membership fails. |
+| Verification | Catalog validation: An omitted `food_family_id` succeeds, as does one valid reference. A supplied dangling reference, second reference, or nested membership fails. |
 
 ## REQ-010 — Valid Macro Profile
 
-**Statement:** The database shall accept a Macro Profile only when all values are present and nonnegative and at least one value is positive.
+**Statement:** A catalog shall accept a Macro Profile only when protein, available carbohydrate, and fat are present and nonnegative and at least one is positive.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: Each invalid profile fails. Each valid profile succeeds. |
+| Verification | Catalog validation: Each invalid profile fails. Each valid profile succeeds. |
 
 ## REQ-011 — Image placeholder
 
@@ -708,33 +708,33 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-070 — Deterministic database setup
 
-**Statement:** Database migrations and seed SQL shall make the complete POC catalog in a new PostgreSQL database.
+**Statement:** Database migrations and application-owned dummy catalog data shall make the complete deterministic POC catalog in a new PostgreSQL database. Database setup shall not read production data.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Integration test: A new database gets the expected stable IDs and data with no manual data step. |
+| Verification | Integration test: A new database gets the expected stable dummy IDs and data with no manual data step or initialized production-data submodule. |
 
 ## REQ-071 — Catalog coverage
 
-**Statement:** The seed shall contain at least 30 Food Objects and at least nine eligible Substitutes for each designated acceptance input.
+**Statement:** The application-owned dummy catalog shall contain at least 30 Food Objects and at least nine eligible Substitutes for each designated acceptance input. The production catalog shall contain at least ten accepted generic Meals before production startup.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Database test: Record counts and eligible-candidate counts meet both limits. |
+| Verification | Catalog check: The dummy catalog meets both acceptance limits. Production startup rejects fewer than ten accepted Meals. |
 
 ## REQ-072 — Test-designed nutrition
 
-**Statement:** Seeded Macro Profiles shall produce the documented similarities, result order, and Matched Quantities.
+**Statement:** Application-owned dummy Macro Profiles shall produce the documented similarities, result order, and Matched Quantities.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Integration test: Each designated scenario gives its documented scores, IDs, and quantities. |
+| Verification | Integration test: Each designated dummy-catalog scenario gives its documented scores, IDs, and quantities. |
 
 ## REQ-073 — POC compatibility
 
@@ -869,3 +869,63 @@ This document is the source of truth for the active product requirements of the 
 | Verification | Accessibility check: Successful nonzero and zero-result transitions produce no result count or result-status live-region update while focus moves to the required result target. |
 
 **Notes:** Existing loading, validation, and failure announcements remain unchanged.
+
+## REQ-086 — Production Meal catalog
+
+**Statement:** The production catalog shall contain only validated recipe-derived Meals. Ingredient records shall not enter application runtime data.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Production startup check: Suggestions, Substitution Search, and PostgreSQL contain only exported Meals and no Ingredient record. |
+
+## REQ-087 — Production data attribution
+
+**Statement:** The production Data Sources footer shall link to Open Food Facts attribution, the ODbL, USDA attribution, the full production-data commit ID, and the free catalog download. The aggregate catalog shall not contain attribution or license notices.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Browser and catalog check: The localized footer exposes each required link, and aggregate metadata contains no attribution or license field. |
+
+## REQ-088 — Recipe composition
+
+**Statement:** Each production Meal shall contain an ordered composition of resolved Ingredient IDs and positive retained gram quantities. Qualitative salt, dry herbs, and dry spices shall not enter composition or macro calculation.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Production-data validation: A complete Meal succeeds; an unknown or duplicate Ingredient ID, nonpositive quantity, or qualitative item in composition fails. |
+
+## REQ-089 — Agent-authored recipe steps
+
+**Statement:** Each production Meal shall contain one or more ordered short agent-authored steps. Source instruction prose shall not be stored or published.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Production-data validation and review: Empty steps fail; a complete ordered agent-authored fixture succeeds; no source instruction prose is emitted. |
+
+## REQ-090 — Stable production record identity
+
+**Statement:** Each production Ingredient, Meal, and Food Family shall have one stable opaque positive ID. Git history shall record changes; records shall have no revision field.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Production-data validation: Valid stable IDs succeed. Nonpositive IDs and revision fields fail. |
+
+## REQ-091 — Aggregate catalog interface
+
+**Statement:** The application-owned aggregate catalog interface shall require a positive integer schema version, the full production-data Git commit ID, Food Families, and Food Objects. Each Food Object shall contain its stable ID, localized names, Macro Profile, and Nutrition Basis and may contain one Serving, one source URL, and one Food Family ID.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Catalog-schema validation: Empty and complete synthetic catalogs succeed. Invalid metadata, records, references, or unknown fields fail without writing generated output. |
