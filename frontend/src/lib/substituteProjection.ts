@@ -70,6 +70,10 @@ function makeRational(num: bigint, den = 1n): Rational {
   return { num: num / d, den: den / d };
 }
 
+const hundred = makeRational(100n);
+const four = makeRational(4n);
+const nine = makeRational(9n);
+
 function toRational(v: number): Rational {
   const s = v.toString();
   if (s.includes("e") || s.includes("E")) {
@@ -145,21 +149,17 @@ export function projectSubstitutePage(
     baseQty = qtyVal;
   }
 
-  const rat100 = toRational(100);
-  const rat4 = toRational(4);
-  const rat9 = toRational(9);
-
   const selP = toRational(selectedFood.macroProfile.protein);
   const selC = toRational(selectedFood.macroProfile.carbohydrate);
   const selF = toRational(selectedFood.macroProfile.fat);
 
-  const inputProtein = div(mul(selP, baseQty), rat100);
-  const inputCarbohydrate = div(mul(selC, baseQty), rat100);
-  const inputFat = div(mul(selF, baseQty), rat100);
+  const inputProtein = div(mul(selP, baseQty), hundred);
+  const inputCarbohydrate = div(mul(selC, baseQty), hundred);
+  const inputFat = div(mul(selF, baseQty), hundred);
 
   const inputCalories = add(
-    add(mul(rat4, inputProtein), mul(rat4, inputCarbohydrate)),
-    mul(rat9, inputFat),
+    add(mul(four, inputProtein), mul(four, inputCarbohydrate)),
+    mul(nine, inputFat),
   );
 
   const projectedItems: ProjectedSubstituteItem[] = items.map((item) => {
@@ -168,25 +168,25 @@ export function projectSubstitutePage(
     const candF = toRational(item.macroProfile.fat);
 
     const candidateCaloriesPer100 = add(
-      add(mul(rat4, candP), mul(rat4, candC)),
-      mul(rat9, candF),
+      add(mul(four, candP), mul(four, candC)),
+      mul(nine, candF),
     );
     const unroundedMatchedQuantity = div(
-      mul(inputCalories, rat100),
+      mul(inputCalories, hundred),
       candidateCaloriesPer100,
     );
 
     const unroundedCandidateProtein = div(
       mul(candP, unroundedMatchedQuantity),
-      rat100,
+      hundred,
     );
     const unroundedCandidateCarbohydrate = div(
       mul(candC, unroundedMatchedQuantity),
-      rat100,
+      hundred,
     );
     const unroundedCandidateFat = div(
       mul(candF, unroundedMatchedQuantity),
-      rat100,
+      hundred,
     );
 
     return {
