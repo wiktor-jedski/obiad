@@ -157,7 +157,7 @@ async function expectCardProjection(
 }
 
 test.describe("quantity-independent Substitute API and local projection (P22-G3, P22-G5, REQ-037, REQ-038, REQ-078)", () => {
-  test("committing two different valid quantities sends identical request bodies without quantity, returns identical calculation bases and rankings, and projects different calories, matched quantities, and macros in English and Polish", async ({
+  test("one completed initial Substitute POST provides the calculation basis; a Serving commit reprojects it locally with zero additional POSTs in English and Polish", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -166,111 +166,99 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     await page.goto("/");
     await selectFoodSuggestion(page, "margherita", 1, COPY.en);
 
-    // Initial commit: 1 serving of Pizza Margherita (350 g)
     await expect.poll(() => posts[0]?.response).toBeTruthy();
+    await expect.poll(() => posts[0]?.status).toBe(200);
     expect(posts).toHaveLength(1);
 
     const firstPost = posts[0];
     if (firstPost?.response === null || firstPost?.response === undefined) {
-      throw new Error("First substitute search response was not captured");
+      throw new Error("Initial Substitute Search response was not captured");
     }
 
-    // 1. Verify generated-client POST body contains only foodObjectId and pageIndex, no quantity
     expect(firstPost.body).toEqual({
       foodObjectId: 1,
       pageIndex: 0,
     });
-    expect(firstPost.body).not.toHaveProperty("quantity");
     expect(Object.keys(firstPost.body).sort()).toEqual([
       "foodObjectId",
       "pageIndex",
     ]);
 
-    const firstResp = firstPost.response;
-    expect(firstResp.pageIndex).toBe(0);
-    expect(firstResp.totalEligibleCount).toBeGreaterThan(0);
-    expect(firstResp.selectedFood.foodObjectId).toBe(1);
-    expect(firstResp.selectedFood.serving).toBe(350);
-    expect(firstResp.items.map((i) => i.foodObjectId)).toEqual([13, 29, 26]);
+    const response = firstPost.response;
+    expect(response.pageIndex).toBe(0);
+    expect(response.totalEligibleCount).toBe(36);
+    expect(response.hasMore).toBe(true);
+    expect(response.selectedFood).toMatchObject({
+      foodObjectId: 1,
+      baseUnit: "g",
+      serving: 350,
+    });
+    expect(response.items.map((item) => item.foodObjectId)).toEqual([
+      13, 29, 26,
+    ]);
 
-    // 2. Verify initial browser projected display in English
-    const firstProj = projectSubstitutePage(
-      firstResp.selectedFood,
-      firstResp.items,
+    const initialProjection = projectSubstitutePage(
+      response.selectedFood,
+      response.items,
       { value: 1, unit: "serving" },
     );
-    await expectSummaryProjection(page, firstProj, "en");
+    expect(initialProjection.inputCalories).toBe(875);
+    expect(
+      initialProjection.items.map((item) => item.matchedQuantity.value),
+    ).toEqual([438, 557, 440]);
+    await expectSummaryProjection(page, initialProjection, "en");
+    await expect(
+      page.locator("[data-selected-food-summary]"),
+    ).not.toContainText("350 g");
 
     const cards = page.locator("[data-result-card]");
     await expect(cards).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) {
       await expectCardProjection(
         cards.nth(index),
-        firstProj.items[index],
+        initialProjection.items[index],
         COPY.en,
         "en",
       );
     }
 
-    // 3. Edit quantity to 2 servings and commit with Enter
+    const initialPostCount = posts.length;
     const numberField = page.locator("[data-quantity-number]");
     await numberField.fill("2");
     await numberField.press("Enter");
 
-    await expect.poll(() => posts[1]?.response).toBeTruthy();
-    expect(posts).toHaveLength(2);
+    await expect(numberField).toBeFocused();
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    expect(
+      posts,
+      "a local Serving commit starts no additional Substitute Search POST",
+    ).toHaveLength(initialPostCount);
+    await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+    await expect(page.locator("[data-retry-message]")).toHaveCount(0);
+    await expect(page.locator("[data-more-button]")).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
-    const secondPost = posts[1];
-    if (secondPost?.response === null || secondPost?.response === undefined) {
-      throw new Error("Second substitute search response was not captured");
-    }
-
-    // 4. Verify second POST body is identical to the first (same foodObjectId, same pageIndex, no quantity)
-    expect(secondPost.body).toEqual({
-      foodObjectId: 1,
-      pageIndex: 0,
-    });
-    expect(secondPost.body).not.toHaveProperty("quantity");
-    expect(secondPost.body).toEqual(firstPost.body);
-
-    const secondResp = secondPost.response;
-
-    // 5. Verify backend responses are identical in selectedFood basis, candidate calculation bases, IDs, similarity, rank order, count, and page
-    expect(secondResp.pageIndex).toBe(firstResp.pageIndex);
-    expect(secondResp.totalEligibleCount).toBe(firstResp.totalEligibleCount);
-    expect(secondResp.hasMore).toBe(firstResp.hasMore);
-    expect(secondResp.selectedFood).toEqual(firstResp.selectedFood);
-    expect(secondResp.items).toEqual(firstResp.items);
-
-    // 6. Verify browser projected display updated for 2 servings (different calories, matched quantities, and scaled macronutrients)
-    const secondProj = projectSubstitutePage(
-      secondResp.selectedFood,
-      secondResp.items,
+    const servingProjection = projectSubstitutePage(
+      response.selectedFood,
+      response.items,
       { value: 2, unit: "serving" },
     );
-    expect(secondProj.inputCalories).toBe(firstProj.inputCalories * 2);
-    expect(secondProj.inputMacronutrients.protein).toBe(
-      firstProj.inputMacronutrients.protein * 2,
-    );
-    expect(secondProj.inputMacronutrients.carbohydrate).toBe(
-      firstProj.inputMacronutrients.carbohydrate * 2,
-    );
-    expect(secondProj.inputMacronutrients.fat).toBe(
-      firstProj.inputMacronutrients.fat * 2,
-    );
-
-    await expectSummaryProjection(page, secondProj, "en");
-
+    expect(servingProjection.inputCalories).toBe(1750);
+    await expectSummaryProjection(page, servingProjection, "en");
     for (let index = 0; index < 3; index += 1) {
       await expectCardProjection(
         cards.nth(index),
-        secondProj.items[index],
+        servingProjection.items[index],
         COPY.en,
         "en",
       );
     }
 
-    // 7. Change interface language to Polish and verify localized projected values
     await page
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
@@ -278,18 +266,22 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
       COPY.pl.foundSubstitutions,
     );
-    await expectSummaryProjection(page, secondProj, "pl");
+    expect(
+      posts,
+      "an Interface Language change and prior local Serving commit use the existing calculation basis",
+    ).toHaveLength(initialPostCount);
+    await expectSummaryProjection(page, servingProjection, "pl");
     for (let index = 0; index < 3; index += 1) {
       await expectCardProjection(
         cards.nth(index),
-        secondProj.items[index],
+        servingProjection.items[index],
         COPY.pl,
         "pl",
       );
     }
   });
 
-  test("liquid food object selection with two different millilitre quantities verifies identical quantity-free requests and projected ml values in Polish", async ({
+  test("one completed initial liquid Substitute POST provides the calculation basis; a millilitre commit reprojects it locally with zero additional POSTs", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
@@ -299,71 +291,68 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     await selectFoodSuggestion(page, "mleko", 10, COPY.pl);
 
     await expect.poll(() => posts[0]?.response).toBeTruthy();
+    await expect.poll(() => posts[0]?.status).toBe(200);
     expect(posts).toHaveLength(1);
 
     const firstPost = posts[0];
     if (firstPost?.response === null || firstPost?.response === undefined) {
-      throw new Error("First milk search response was not captured");
+      throw new Error(
+        "Initial milk Substitute Search response was not captured",
+      );
     }
     expect(firstPost.body).toEqual({
       foodObjectId: 10,
       pageIndex: 0,
     });
-    expect(firstPost.body).not.toHaveProperty("quantity");
 
-    const firstResp = firstPost.response;
-    expect(firstResp.selectedFood.baseUnit).toBe("ml");
-
-    // Initial commit: 100 ml
-    const firstProj = projectSubstitutePage(
-      firstResp.selectedFood,
-      firstResp.items,
+    const response = firstPost.response;
+    expect(response.selectedFood).toMatchObject({
+      foodObjectId: 10,
+      baseUnit: "ml",
+    });
+    const initialProjection = projectSubstitutePage(
+      response.selectedFood,
+      response.items,
       { value: 100, unit: "ml" },
     );
-    await expectSummaryProjection(page, firstProj, "pl");
+    await expectSummaryProjection(page, initialProjection, "pl");
 
     const cards = page.locator("[data-result-card]");
     await expect(cards).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) {
       await expectCardProjection(
         cards.nth(index),
-        firstProj.items[index],
+        initialProjection.items[index],
         COPY.pl,
         "pl",
       );
     }
 
-    // Change to 250 ml
+    const initialPostCount = posts.length;
     const numberField = page.locator("[data-quantity-number]");
     await numberField.fill("250");
     await numberField.press("Enter");
 
-    await expect.poll(() => posts[1]?.response).toBeTruthy();
-    expect(posts).toHaveLength(2);
+    await expect(numberField).toBeFocused();
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    expect(
+      posts,
+      "a local millilitre commit starts no additional Substitute Search POST",
+    ).toHaveLength(initialPostCount);
 
-    const secondPost = posts[1];
-    if (secondPost?.response === null || secondPost?.response === undefined) {
-      throw new Error("Second milk search response was not captured");
-    }
-
-    expect(secondPost.body).toEqual({
-      foodObjectId: 10,
-      pageIndex: 0,
-    });
-    expect(secondPost.body).not.toHaveProperty("quantity");
-    expect(secondPost.response?.selectedFood).toEqual(firstResp.selectedFood);
-    expect(secondPost.response?.items).toEqual(firstResp.items);
-
-    const secondProj = projectSubstitutePage(
-      secondPost.response!.selectedFood,
-      secondPost.response!.items,
+    const millilitreProjection = projectSubstitutePage(
+      response.selectedFood,
+      response.items,
       { value: 250, unit: "ml" },
     );
-    await expectSummaryProjection(page, secondProj, "pl");
+    await expectSummaryProjection(page, millilitreProjection, "pl");
     for (let index = 0; index < 3; index += 1) {
       await expectCardProjection(
         cards.nth(index),
-        secondProj.items[index],
+        millilitreProjection.items[index],
         COPY.pl,
         "pl",
       );

@@ -36,6 +36,12 @@ interface SubstitutePost {
   response: SubstituteSearchResponse | null;
 }
 
+declare global {
+  interface Window {
+    __localQuantityMotionEvents?: string[];
+  }
+}
+
 function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
@@ -380,6 +386,41 @@ test.describe("food quantity editing", () => {
       .locator("[data-result-card] h3")
       .allTextContents();
     expect(cardNames).toEqual(first.items.map((item) => item.names.en));
+    await unitSelect(page).selectOption("g");
+    await expect(input).toHaveValue("100");
+    await input.fill("200");
+    await commitWithEnter(input);
+
+    const gramProjection = projectSubstitutePage(
+      first.selectedFood,
+      first.items,
+      {
+        value: 200,
+        unit: "g",
+      },
+    );
+    await expect(input).toBeFocused();
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    expect(
+      posts,
+      "a changed valid gram commit must reuse the completed initial calculation basis",
+    ).toHaveLength(1);
+    await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+    await expect(page.locator("[data-retry-message]")).toHaveCount(0);
+    await expect(page.locator("[data-input-calories]")).toHaveText(
+      `${gramProjection.inputCalories} kcal`,
+    );
+    const cards = page.locator("[data-result-card]");
+    for (let index = 0; index < first.items.length; index += 1) {
+      await expect(
+        cards.nth(index).locator("[data-result-card-matched-quantity]"),
+      ).toHaveText(
+        `${gramProjection.items[index]?.matchedQuantity.value} ${gramProjection.items[index]?.matchedQuantity.unit}`,
+      );
+    }
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
   });
 
@@ -536,37 +577,108 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(postsAfterSelection + 2);
   });
 
-  test("a valid local quantity commit keeps the selected summary and result cards visible, identity-stable, and spinner-free while projected values update", async ({
+  test("a valid local quantity commit preserves a later page's calculation basis, identity, motion phase, focus, language, and presentation without a request or pending state", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
+    await page.addInitScript(() => {
+      const events: string[] = [];
+      window.__localQuantityMotionEvents = events;
+      const dispatchEvent = EventTarget.prototype.dispatchEvent;
+      EventTarget.prototype.dispatchEvent = function (event: Event): boolean {
+        if (
+          event.type === "introstart" ||
+          event.type === "introend" ||
+          event.type === "outrostart" ||
+          event.type === "outroend"
+        ) {
+          events.push(event.type);
+        }
+        return dispatchEvent.call(this, event);
+      };
+    });
     const posts = trackSubstitutePosts(page);
+    let failedSubstitutePosts = 0;
+    page.on("requestfailed", (request) => {
+      if (
+        request.method() === "POST" &&
+        request.url().includes("/api/v1/substitutes/search")
+      ) {
+        failedSubstitutePosts += 1;
+      }
+    });
 
     await page.goto("/");
     await selectFoodObject(page, "margherita", 1, COPY.en);
     await expect.poll(() => posts[0]?.response).toBeTruthy();
-    const first = posts[0]?.response;
-    if (first === null || first === undefined) {
-      throw new Error("Initial substitute-search response was not captured");
+    const initial = posts[0]?.response;
+    if (initial === null || initial === undefined) {
+      throw new Error("Initial Substitute Search response was not captured");
     }
 
+    await page.locator("[data-more-button]").click();
+    await expect.poll(() => posts[1]?.response).toBeTruthy();
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "results",
+    );
+    const heading = page.locator("[data-substitutions-heading]");
+    await expect(heading).toBeFocused();
+
+    const later = posts[1]?.response;
+    if (later === null || later === undefined) {
+      throw new Error("Later Substitute Search response was not captured");
+    }
+    expect(posts).toHaveLength(2);
+    expect(later.pageIndex).toBe(1);
+    expect(later.totalEligibleCount).toBe(initial.totalEligibleCount);
+    expect(later.hasMore).toBe(initial.hasMore);
+    expect(later.selectedFood).toEqual(initial.selectedFood);
+    expect(later.items.map((item) => item.foodObjectId)).toEqual([30, 3, 35]);
+    await expect(page.locator("[data-more-button]")).toBeVisible();
+
+    await page
+      .getByRole("combobox", { name: "Interface language" })
+      .selectOption("pl");
+    await expect(
+      page.getByRole("combobox", { name: "Język interfejsu" }),
+    ).toHaveValue("pl");
+    await expect(heading).toHaveText("Znalezione zamienniki");
+    expect(
+      posts,
+      "the Interface Language change starts no Substitute Search",
+    ).toHaveLength(2);
+
+    await page.waitForTimeout(500);
     const cards = page.locator("[data-result-card]");
-    const selectedCard = summary(page);
-    const initialCards = await cards.evaluateAll((elements) =>
+    const laterCards = await cards.evaluateAll((elements) =>
       elements.map((element, index) => {
         element.setAttribute("data-stable-card", String(index));
         return {
+          stableCard: String(index),
           id: element.getAttribute("data-food-object-id"),
+          rank: element.getAttribute("data-result-card-rank"),
           image: element.querySelector("img")?.getAttribute("src"),
           name: element.querySelector("h3")?.textContent,
         };
       }),
     );
-    const projection = projectSubstitutePage(first.selectedFood, first.items, {
+    expect(laterCards.map((card) => Number(card.id))).toEqual(
+      later.items.map((item) => item.foodObjectId),
+    );
+    expect(laterCards.map((card) => card.rank)).toEqual(["0", "1", "2"]);
+    expect(laterCards.map((card) => card.name)).toEqual(
+      later.items.map((item) => item.names.pl),
+    );
+    const settledMotionEvents = await page.evaluate(
+      () => window.__localQuantityMotionEvents ?? [],
+    );
+    expect(settledMotionEvents.length).toBeGreaterThan(0);
+
+    const projection = projectSubstitutePage(later.selectedFood, later.items, {
       value: 2,
       unit: "serving",
     });
-
     const input = numberInput(page);
     await input.fill("2");
     await commitWithEnter(input);
@@ -578,8 +690,13 @@ test.describe("food quantity editing", () => {
       "data-interaction-state",
       "results",
     );
-    expect(posts).toHaveLength(1);
+    expect(
+      posts,
+      "a local quantity commit starts no additional Substitute Search POST",
+    ).toHaveLength(2);
+    expect(failedSubstitutePosts).toBe(0);
     await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+    await expect(page.locator("[data-retry-message]")).toHaveCount(0);
     await expect(
       page.locator("[data-selected-input-region]"),
     ).not.toHaveAttribute("aria-busy", "true");
@@ -587,37 +704,36 @@ test.describe("food quantity editing", () => {
       "aria-busy",
       "true",
     );
+    await expect(page.locator("[data-more-button]")).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await expect(editorStatus(page)).toHaveText("");
-    await expect(selectedCard.locator("[data-card-content]")).toHaveCSS(
-      "opacity",
-      "1",
+    await expect(page.locator("[data-input-calories]")).toHaveText(
+      `${projection.inputCalories} kcal`,
     );
-    await expect(cards.locator("[data-card-content]")).toHaveCount(3);
-    await expect(cards.locator("[data-card-content]")).toHaveCSS(
-      "opacity",
-      "1",
-    );
+    for (let index = 0; index < later.items.length; index += 1) {
+      await expect(
+        cards.nth(index).locator("[data-result-card-matched-quantity]"),
+      ).toHaveText(
+        `${projection.items[index]?.matchedQuantity.value} ${projection.items[index]?.matchedQuantity.unit}`,
+      );
+    }
     const updatedCards = await cards.evaluateAll((elements) =>
       elements.map((element) => ({
         stableCard: element.getAttribute("data-stable-card"),
         id: element.getAttribute("data-food-object-id"),
+        rank: element.getAttribute("data-result-card-rank"),
         image: element.querySelector("img")?.getAttribute("src"),
         name: element.querySelector("h3")?.textContent,
       })),
     );
-    expect(updatedCards).toEqual(
-      initialCards.map((card, index) => ({
-        ...card,
-        stableCard: String(index),
-      })),
-    );
-    await expect(page.locator("[data-input-calories]")).toHaveText(
-      `${projection.inputCalories} kcal`,
-    );
-    await expect(
-      cards.nth(0).locator("[data-result-card-matched-quantity]"),
-    ).toHaveText(
-      `${projection.items[0]?.matchedQuantity.value} ${projection.items[0]?.matchedQuantity.unit}`,
-    );
+    expect(updatedCards).toEqual(laterCards);
+
+    await page.waitForTimeout(300);
+    expect(
+      await page.evaluate(() => window.__localQuantityMotionEvents ?? []),
+      "the retained later-page cards emit no transition events after a local projection",
+    ).toEqual(settledMotionEvents);
   });
 });
