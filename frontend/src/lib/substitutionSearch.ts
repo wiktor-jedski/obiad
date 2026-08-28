@@ -33,6 +33,17 @@ export const substitutionSearchLock: Readable<boolean> = readable(
   },
 );
 
+/** Resets one search page so a new selection always obtains fresh data. */
+export function resetSubstitutionSearch(
+  foodObjectId: number,
+  pageIndex: number,
+): void {
+  queryClient.resetQueries({
+    queryKey: [...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX, foodObjectId, pageIndex],
+    exact: true,
+  });
+}
+
 export interface SubstitutionSearchQueryInput {
   committed: () => CommittedSubstitutionInput | undefined;
 }
@@ -48,8 +59,6 @@ function substitutionSearchKey(
   return [
     ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
     committed.foodObjectId,
-    committed.quantity.value,
-    committed.quantity.unit,
     pageIndex,
   ] as const;
 }
