@@ -361,3 +361,13 @@ Status: ready-for-agent
 ### Clarifications
 
 - Resolved with the project owner on 2026-08-28. Name the required closed `POST /api/v1/substitutes/search` response member that contains the selected Food Object calculation basis `selectedFood`. Keep the basis fields nested under this member.
+
+## ISSUE-021: Finite macro-profile cosine overflow
+
+Type: Defect
+Status: ready-for-agent
+
+### Comments
+
+- `cosineSimilarity` squares finite `math.MaxFloat64` macro values. This overflows and returns `INTERNAL_ERROR` for catalog-valid finite Macro Profiles.
+- Repair the backend similarity arithmetic and add an integration regression. Preserve ranking behavior for ordinary profiles.
