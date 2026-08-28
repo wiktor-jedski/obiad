@@ -284,7 +284,7 @@
       </p>
     {/if}
 
-    <!-- Values come from the backend; pending state uses the card spinner. -->
+    <!-- Values come from the browser projection; pending state uses the card spinner. -->
     <dl data-input-macronutrients class="flex flex-col gap-1 font-data text-sm">
       <div class="flex items-baseline justify-between gap-4">
         <dt class="font-medium text-dark-text-muted">

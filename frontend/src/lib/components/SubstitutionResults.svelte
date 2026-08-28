@@ -198,7 +198,7 @@
   </div>
 {/if}
 {#if interaction.name === "results" || interaction.name === "loadingMore" || interaction.name === "moreFailure"}
-  <!-- Result cards use backend values and stable slots for page replacement. -->
+  <!-- Result cards use projected values and stable slots for page replacement. -->
   <div data-result-region aria-busy={recalculating} class="mt-6">
     <h2
       bind:this={headingElement}

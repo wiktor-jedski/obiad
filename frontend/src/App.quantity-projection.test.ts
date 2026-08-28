@@ -544,4 +544,56 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     expect(ddValues[2]).toBe("4.1 g");
     expect(ddValues[3]).toBe("85%");
   });
+
+  test("equal-calorie exact-half boundary fixture proves candidate card calories match input calories under half-up display rounding", async () => {
+    // Selected: 25.125g protein, 0g carb, 0g fat per 100g -> 4 * 25.125 = 100.5 kcal -> 101 kcal
+    // Candidate: 0g protein, 0g carb, 12.5g fat per 100g -> 112.5 kcal / 100g
+    // Unrounded matched quantity: (100.5 * 100) / 112.5 = 89.333333... g
+    // Candidate calories must match the exact equal-calorie input basis (100.5 kcal -> 101 kcal)
+    const selected: SelectedFoodObject = {
+      foodObjectId: 107,
+      names: { en: "Selected Half-Boundary", pl: "Wybrany Produkt" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+
+    const response: SubstituteSearchResponse = {
+      pageIndex: 0,
+      totalEligibleCount: 1,
+      hasMore: false,
+      selectedFood: {
+        foodObjectId: 107,
+        names: { en: "Selected Half-Boundary", pl: "Wybrany Produkt" },
+        macroProfile: { protein: 25.125, carbohydrate: 0, fat: 0 },
+        baseUnit: "g",
+      },
+      items: [
+        {
+          foodObjectId: 207,
+          names: { en: "Candidate Half-Boundary", pl: "Zamiennik" },
+          macroProfile: { protein: 0, carbohydrate: 0, fat: 12.5 },
+          baseUnit: "g",
+          similarityPercent: 90,
+        },
+      ],
+    };
+
+    mockSubstituteResponse(response);
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+
+    expect(elementText("[data-input-calories]")).toBe("101 kcal");
+    expect(elementText("[data-result-card-calories]")).toBe("101 kcal");
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("89 g");
+
+    const ddValues = Array.from(
+      document.querySelectorAll("[data-result-card] dd"),
+    ).map((element) => element.textContent);
+    expect(ddValues[0]).toBe("0.0 g");
+    expect(ddValues[1]).toBe("0.0 g");
+    expect(ddValues[2]).toBe("11.2 g");
+    expect(ddValues[3]).toBe("90%");
+  });
 });

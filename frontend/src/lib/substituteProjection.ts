@@ -100,12 +100,6 @@ export function projectSubstitutePage(
       (item.macroProfile.carbohydrate * unroundedMatchedQuantity) / 100;
     const unroundedCandidateFat =
       (item.macroProfile.fat * unroundedMatchedQuantity) / 100;
-
-    const unroundedCandidateCalories =
-      4 * unroundedCandidateProtein +
-      4 * unroundedCandidateCarbohydrate +
-      9 * unroundedCandidateFat;
-
     return {
       foodObjectId: item.foodObjectId,
       names: item.names,
@@ -119,7 +113,7 @@ export function projectSubstitutePage(
         carbohydrate: Math.round(unroundedCandidateCarbohydrate * 10) / 10,
         fat: Math.round(unroundedCandidateFat * 10) / 10,
       },
-      calories: Math.round(unroundedCandidateCalories),
+      calories: Math.round(unroundedInputCalories),
       similarityPercent: item.similarityPercent,
     };
   });
