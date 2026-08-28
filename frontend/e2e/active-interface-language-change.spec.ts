@@ -474,17 +474,14 @@ test.describe("Active Interface Language change", () => {
     expect(posts.map((post) => post.body)).toEqual([
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 0,
       },
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 1,
       },
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 2,
       },
     ]);
@@ -528,7 +525,6 @@ test.describe("Active Interface Language change", () => {
     await expect.poll(() => posts.length).toBe(4);
     expect(posts[3]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 2, unit: "serving" },
       pageIndex: 2,
     });
     await expect(page.locator("[data-editor-status]")).toHaveText(
@@ -552,7 +548,6 @@ test.describe("Active Interface Language change", () => {
     await expect.poll(() => posts.length).toBe(5);
     expect(posts[4]?.body).toEqual({
       foodObjectId: 10,
-      quantity: { value: 100, unit: "ml" },
       pageIndex: 0,
     });
     await expect(page.locator("[data-editor-status]")).toHaveText(
@@ -605,7 +600,6 @@ test.describe("Active Interface Language change", () => {
     await expect.poll(() => posts.length).toBe(6);
     expect(posts[5]?.body).toEqual({
       foodObjectId: 10,
-      quantity: { value: 150, unit: "ml" },
       pageIndex: 0,
     });
     await expect(page.locator("main")).toHaveAttribute(
@@ -625,32 +619,26 @@ test.describe("Active Interface Language change", () => {
     expect(posts.map((post) => post.body)).toEqual([
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 0,
       },
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 1,
       },
       {
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 2,
       },
       {
         foodObjectId: 1,
-        quantity: { value: 2, unit: "serving" },
         pageIndex: 2,
       },
       {
         foodObjectId: 10,
-        quantity: { value: 100, unit: "ml" },
         pageIndex: 0,
       },
       {
         foodObjectId: 10,
-        quantity: { value: 150, unit: "ml" },
         pageIndex: 0,
       },
     ]);

@@ -21,8 +21,12 @@ const EMPTY_RESPONSE_BODY = JSON.stringify({
   pageIndex: 0,
   totalEligibleCount: 0,
   hasMore: false,
-  inputMacronutrients: { protein: 35, carbohydrate: 105, fat: 35 },
-  inputCalories: 875,
+  selectedFood: {
+    foodObjectId: 18,
+    names: { en: "Butter", pl: "Masło" },
+    macroProfile: { protein: 35, carbohydrate: 105, fat: 35 },
+    baseUnit: "g",
+  },
   items: [],
 });
 

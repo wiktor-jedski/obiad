@@ -363,7 +363,6 @@ test.describe("Search performance", () => {
     expect(ledger.maxActive).toBeLessThanOrEqual(1);
     for (const post of ledger.posts) {
       expect(post.body.foodObjectId).toBe(PIZZA_FOOD_OBJECT_ID);
-      expect(post.body.quantity).toEqual(PIZZA_QUANTITY);
       expect(post.status).toBe(200);
     }
   });

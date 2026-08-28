@@ -173,12 +173,10 @@ async function expectNewSearchFailure(
   expect("field" in body).toBe(false);
   expect(posts[0]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
-    quantity: { value: 1, unit: "serving" },
     pageIndex: 0,
   });
   expect(posts[1]?.body).toEqual({
     foodObjectId: CHICKEN_FOOD_OBJECT_ID,
-    quantity: { value: 100, unit: "g" },
     pageIndex: 0,
   });
 
@@ -251,17 +249,14 @@ async function expectMoreFailure(
   await expect.poll(() => posts.length).toBe(3);
   expect(posts[0]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
-    quantity: { value: 1, unit: "serving" },
     pageIndex: 0,
   });
   expect(posts[1]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
-    quantity: { value: 1, unit: "serving" },
     pageIndex: 1,
   });
   expect(posts[2]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
-    quantity: { value: 1, unit: "serving" },
     pageIndex: 2,
   });
   await expect.poll(() => posts[2]?.status).toBe(503);
@@ -310,7 +305,6 @@ async function expectMoreFailure(
   await expect.poll(() => posts.length).toBe(4);
   expect(posts[3]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
-    quantity: { value: 1, unit: "serving" },
     pageIndex: 2,
   });
   await expect.poll(() => posts[3]?.status).toBe(503);

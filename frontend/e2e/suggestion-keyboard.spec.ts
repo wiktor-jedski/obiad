@@ -207,7 +207,6 @@ test.describe("suggestion keyboard control", () => {
     expect(posts, "exactly one Substitution Search POST").toHaveLength(1);
     expect(posts[0].body).toEqual({
       foodObjectId: 17,
-      quantity: CHICKEN_SOUP_DEFAULT,
       pageIndex: 0,
     });
 

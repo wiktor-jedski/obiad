@@ -1,8 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type {
-  SubstituteItem,
+  FoodQuantity,
   SubstituteSearchResponse,
 } from "../src/client/types.gen";
+import {
+  projectSubstitutePage,
+  type ProjectedSubstituteItem,
+} from "../src/lib/substituteProjection";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
@@ -44,13 +48,24 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-function captureSubstituteItems(page: Page): Map<number, SubstituteItem> {
-  const items = new Map<number, SubstituteItem>();
+function captureSubstituteItems(
+  page: Page,
+): Map<number, ProjectedSubstituteItem> {
+  const items = new Map<number, ProjectedSubstituteItem>();
   page.on("response", async (response) => {
     if (response.url().includes("/api/v1/substitutes/search")) {
       // SAFETY: The endpoint response matches the generated API contract.
       const body = (await response.json()) as SubstituteSearchResponse;
-      for (const item of body.items) {
+      const defaultQuantity: FoodQuantity =
+        body.selectedFood.serving !== undefined
+          ? { value: 1, unit: "serving" }
+          : { value: 100, unit: body.selectedFood.baseUnit };
+      const projection = projectSubstitutePage(
+        body.selectedFood,
+        body.items,
+        defaultQuantity,
+      );
+      for (const item of projection.items) {
         items.set(item.foodObjectId, item);
       }
     }
@@ -85,7 +100,7 @@ function formatMacronutrient(value: number, locale: "en" | "pl"): string {
 
 async function expectCard(
   card: Locator,
-  item: SubstituteItem,
+  item: ProjectedSubstituteItem,
   copy: (typeof COPY)[keyof typeof COPY],
   locale: "en" | "pl",
   placeholderUrl: string,
@@ -134,7 +149,7 @@ async function expectCard(
 
 async function expectCardFieldOrder(
   card: Locator,
-  item: SubstituteItem,
+  item: ProjectedSubstituteItem,
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
   const sequence = await card.evaluate((element) =>
@@ -159,7 +174,7 @@ async function expectCardFieldOrder(
 async function expectRankedCards(
   page: Page,
   expectedRanks: readonly number[],
-  items: Map<number, SubstituteItem>,
+  items: Map<number, ProjectedSubstituteItem>,
   copy: (typeof COPY)[keyof typeof COPY],
   locale: "en" | "pl",
   placeholderUrl: string,

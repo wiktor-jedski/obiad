@@ -146,7 +146,6 @@ test.describe("MORE! result paging", () => {
     expect(posts.length).toBe(1);
     expect(posts[0]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 0,
     });
     const page0IDs = await renderedCardIDs(page);
@@ -164,7 +163,6 @@ test.describe("MORE! result paging", () => {
     await expect.poll(() => posts.length).toBe(2);
     expect(posts[1]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 1,
     });
 
@@ -226,7 +224,6 @@ test.describe("MORE! result paging", () => {
     await expect.poll(() => posts.length).toBe(3);
     expect(posts[2]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 2,
     });
 
@@ -247,7 +244,6 @@ test.describe("MORE! result paging", () => {
     await expect.poll(() => posts.length).toBe(4);
     expect(posts[3]?.body).toEqual({
       foodObjectId: 5,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 0,
     });
 
@@ -258,10 +254,7 @@ test.describe("MORE! result paging", () => {
 
     await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
 
-    await searchInput.fill("margherita");
-    const pizzaOption = page.locator("#food-suggestion-option-1");
-    await expect(pizzaOption).toBeVisible();
-    await pizzaOption.click();
+    await selectFoodObject(page, "margherita", 1, COPY.en);
 
     await expect
       .poll(() => renderedCardIDs(page))
@@ -315,7 +308,6 @@ test.describe("MORE! result paging", () => {
     await expect.poll(() => posts.at(-1)?.body.pageIndex).toBe(11);
     expect(posts.at(-1)?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 2, unit: "serving" },
       pageIndex: 11,
     });
 
@@ -336,7 +328,6 @@ test.describe("MORE! result paging", () => {
     expect(posts.length).toBe(1);
     expect(posts[0]?.body).toEqual({
       foodObjectId: 5,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 0,
     });
     const page0IDs = await renderedCardIDs(page);
@@ -391,7 +382,6 @@ test.describe("MORE! result paging", () => {
     await expect.poll(() => posts.at(-1)?.body.pageIndex).toBe(12);
     expect(posts.at(-1)?.body).toEqual({
       foodObjectId: 5,
-      quantity: { value: 200, unit: "g" },
       pageIndex: 12,
     });
 

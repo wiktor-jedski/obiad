@@ -2106,7 +2106,6 @@ test.describe("Control keyboard-only flow", () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]).toEqual({
       foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -2130,7 +2129,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(2);
     expect(posts[1]).toEqual({
       foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      quantity: { value: 2, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -2144,7 +2142,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(3);
     expect(posts[2]).toEqual({
       foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 0,
     });
 
@@ -2161,7 +2158,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(4);
     expect(posts[3]).toEqual({
       foodObjectId: PIZZA_FOOD_OBJECT_ID,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 1,
     });
     await waitForInteractionState(page, "results");
@@ -2216,7 +2212,6 @@ test.describe("Control keyboard-only flow", () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]).toEqual({
       foodObjectId: 22,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -2240,7 +2235,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(2);
     expect(posts[1]).toEqual({
       foodObjectId: 22,
-      quantity: { value: 2, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -2254,7 +2248,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(3);
     expect(posts[2]).toEqual({
       foodObjectId: 22,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 0,
     });
 
@@ -2271,7 +2264,6 @@ test.describe("Control keyboard-only flow", () => {
     await expect.poll(() => posts.length).toBe(4);
     expect(posts[3]).toEqual({
       foodObjectId: 22,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 1,
     });
     await waitForInteractionState(page, "results");
