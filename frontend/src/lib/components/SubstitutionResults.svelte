@@ -6,6 +6,7 @@
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
   import { resultCardTransition } from "../resultCardMotion";
+  import { projectSubstitutePage } from "../substituteProjection";
   import {
     createRetainedPageQuery,
     createSubstitutionSearchQuery,
@@ -100,6 +101,22 @@
   );
 
   /**
+   * Projected display-ready values for the selected input and result cards.
+   */
+  const projection = $derived(
+    substitutionSearch.data !== undefined &&
+      committed !== undefined &&
+      substitutionSearch.data.selectedFood.foodObjectId ===
+        committed.foodObjectId
+      ? projectSubstitutePage(
+          substitutionSearch.data.selectedFood,
+          substitutionSearch.data.items,
+          committed.quantity,
+        )
+      : undefined,
+  );
+
+  /**
    * Applies fresh response outcomes and moves focus to the appropriate result target.
    * Placeholder data does not trigger a transition.
    */
@@ -165,11 +182,7 @@
     aria-busy={recalculating}
     class="mt-6 flex justify-center"
   >
-    <SelectedFoodSummary
-      {interaction}
-      data={substitutionSearch.data}
-      {recalculating}
-    />
+    <SelectedFoodSummary {interaction} {projection} {recalculating} />
   </div>
 {/if}
 {#if interaction.name === "newSearchFailure" || interaction.name === "moreFailure"}
@@ -195,9 +208,9 @@
     >
       {dictionary.foundSubstitutionsHeading()}
     </h2>
-    {#if substitutionSearch.data !== undefined}
+    {#if projection !== undefined}
       <div data-result-grid class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {#each substitutionSearch.data.items as item, index}
+        {#each projection.items as item, index}
           <div data-result-card-slot class="grid">
             {#key item.foodObjectId}
               <div

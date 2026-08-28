@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SubstituteItem } from "../../client/types.gen";
+  import type { ProjectedSubstituteItem } from "../substituteProjection";
   import { foodPlaceholderUrl, resolveFoodImage } from "../assets";
   import {
     formatCaloriesValue,
@@ -10,14 +10,13 @@
   import { resultCardTransition } from "../resultCardMotion";
 
   /**
-   * Displays one backend-projected substitution with localized labels and motion.
+   * Displays one projected substitution with localized labels and motion.
    * It never calculates or rerounds nutrition values in the browser.
    */
 
   interface Props {
     /** One display-ready substitution item. */
-    item: SubstituteItem;
-    /** The active Interface Language used for the card's visible text. */
+    item: ProjectedSubstituteItem;
     language: InterfaceLanguage;
     /** Whether quantity recalculation is pending; non-image content is hidden. */
     pending?: boolean;

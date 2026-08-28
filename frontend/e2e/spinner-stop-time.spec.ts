@@ -179,7 +179,6 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       await expect.poll(() => posts.length).toBe(1);
       expect(posts[0]?.body).toEqual({
         foodObjectId: 1,
-        quantity: { value: 1, unit: "serving" },
         pageIndex: 0,
       });
 
@@ -280,7 +279,6 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       await expect.poll(() => posts.length).toBe(2);
       expect(posts[1]?.body).toEqual({
         foodObjectId: 1,
-        quantity: { value: 2, unit: "serving" },
         pageIndex: 0,
       });
 
@@ -369,7 +367,6 @@ test.describe("Spinner stop time and card loading spinners (REQ-049, REQ-081, RE
       await expect.poll(() => posts.length).toBe(3);
       expect(posts[2]?.body).toEqual({
         foodObjectId: 1,
-        quantity: { value: 2, unit: "serving" },
         pageIndex: 1,
       });
 

@@ -4,7 +4,7 @@ import { foodPlaceholderUrl } from "./lib/assets";
 import ResultCard from "./lib/components/ResultCard.svelte";
 import { formatMacronutrientValue, getDictionary } from "./lib/i18n";
 import type { InterfaceLanguage } from "./lib/i18n";
-import type { SubstituteItem } from "./client/types.gen";
+import type { ProjectedSubstituteItem } from "./lib/substituteProjection";
 
 const SEEDED_IMAGE_KEYS = [
   "pizza-margherita",
@@ -15,7 +15,7 @@ const SEEDED_IMAGE_KEYS = [
 
 const UNMAPPED_IMAGE_KEY = "some-unmapped-key";
 
-const ITEM: SubstituteItem = {
+const ITEM: ProjectedSubstituteItem = {
   foodObjectId: 13,
   names: { en: "Gyoza", pl: "Pierożki gyoza" },
   matchedQuantity: { value: 234, unit: "g" },
@@ -44,7 +44,7 @@ const LABELS = {
 function expectCardBody(
   container: HTMLElement,
   language: InterfaceLanguage,
-  item: SubstituteItem = ITEM,
+  item: ProjectedSubstituteItem = ITEM,
 ): void {
   const cardElement =
     container.querySelector<HTMLElement>("[data-result-card]");
@@ -112,7 +112,7 @@ function expectCardBody(
 }
 
 function renderCard(
-  item: SubstituteItem,
+  item: ProjectedSubstituteItem,
   language: InterfaceLanguage,
 ): HTMLElement {
   const { container } = render(ResultCard, { item, language });
@@ -197,7 +197,7 @@ describe("the result-card component", () => {
   });
 
   test("the card displays the exact API-provided numbers formatted for display only, without recalculation or rerounding", () => {
-    const oddItem: SubstituteItem = {
+    const oddItem: ProjectedSubstituteItem = {
       foodObjectId: 21,
       names: { en: "Beef cheeseburger", pl: "Cheeseburger wołowy" },
       matchedQuantity: { value: 300, unit: "g" },

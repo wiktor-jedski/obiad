@@ -3,6 +3,7 @@ import type {
   SubstituteSearchRequest,
   SubstituteSearchResponse,
 } from "../src/client/types.gen";
+import { projectSubstitutePage } from "../src/lib/substituteProjection";
 
 const COPY = {
   en: {
@@ -274,17 +275,26 @@ test.describe("food quantity editing", () => {
     expect(first.pageIndex).toBe(0);
     expect(first.items.map((item) => item.foodObjectId)).toEqual([13, 29, 26]);
 
+    const firstProjection = projectSubstitutePage(
+      first.selectedFood,
+      first.items,
+      { value: 1, unit: "serving" },
+    );
+
     await expect(page.locator("[data-input-macro-protein]")).toHaveText(
-      formatMacronutrient(first.inputMacronutrients.protein, "en"),
+      formatMacronutrient(firstProjection.inputMacronutrients.protein, "en"),
     );
     await expect(page.locator("[data-input-macro-carbohydrate]")).toHaveText(
-      formatMacronutrient(first.inputMacronutrients.carbohydrate, "en"),
+      formatMacronutrient(
+        firstProjection.inputMacronutrients.carbohydrate,
+        "en",
+      ),
     );
     await expect(page.locator("[data-input-macro-fat]")).toHaveText(
-      formatMacronutrient(first.inputMacronutrients.fat, "en"),
+      formatMacronutrient(firstProjection.inputMacronutrients.fat, "en"),
     );
     await expect(page.locator("[data-input-calories]")).toHaveText(
-      `${first.inputCalories} kcal`,
+      `${firstProjection.inputCalories} kcal`,
     );
 
     const input = numberInput(page);
@@ -298,7 +308,6 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(2);
     expect(posts[1]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 2, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -311,79 +320,87 @@ test.describe("food quantity editing", () => {
     }
     expect(second.pageIndex).toBe(0);
     expect(second.items.map((item) => item.foodObjectId)).toEqual([13, 29, 26]);
+    const secondProjection = projectSubstitutePage(
+      second.selectedFood,
+      second.items,
+      { value: 2, unit: "serving" },
+    );
     for (let index = 0; index < first.items.length; index += 1) {
       expectProportional(
-        second.items[index].matchedQuantity.value,
-        first.items[index].matchedQuantity.value,
+        secondProjection.items[index].matchedQuantity.value,
+        firstProjection.items[index].matchedQuantity.value,
         2,
         1,
         `rank ${index + 1} Matched Quantity`,
       );
       expectProportional(
-        second.items[index].macronutrients.protein,
-        first.items[index].macronutrients.protein,
+        secondProjection.items[index].macronutrients.protein,
+        firstProjection.items[index].macronutrients.protein,
         2,
         0.1,
         `rank ${index + 1} protein`,
       );
       expectProportional(
-        second.items[index].macronutrients.carbohydrate,
-        first.items[index].macronutrients.carbohydrate,
+        secondProjection.items[index].macronutrients.carbohydrate,
+        firstProjection.items[index].macronutrients.carbohydrate,
         2,
         0.1,
         `rank ${index + 1} carbohydrate`,
       );
       expectProportional(
-        second.items[index].macronutrients.fat,
-        first.items[index].macronutrients.fat,
+        secondProjection.items[index].macronutrients.fat,
+        firstProjection.items[index].macronutrients.fat,
         2,
         0.1,
         `rank ${index + 1} fat`,
       );
-      expect(second.items[index].similarityPercent).toBe(
-        first.items[index].similarityPercent,
+      expect(secondProjection.items[index].similarityPercent).toBe(
+        firstProjection.items[index].similarityPercent,
       );
     }
     expectProportional(
-      second.inputMacronutrients.protein,
-      first.inputMacronutrients.protein,
+      secondProjection.inputMacronutrients.protein,
+      firstProjection.inputMacronutrients.protein,
       2,
       0.1,
       "input protein",
     );
     expectProportional(
-      second.inputMacronutrients.carbohydrate,
-      first.inputMacronutrients.carbohydrate,
+      secondProjection.inputMacronutrients.carbohydrate,
+      firstProjection.inputMacronutrients.carbohydrate,
       2,
       0.1,
       "input carbohydrate",
     );
     expectProportional(
-      second.inputMacronutrients.fat,
-      first.inputMacronutrients.fat,
+      secondProjection.inputMacronutrients.fat,
+      firstProjection.inputMacronutrients.fat,
       2,
       0.1,
       "input fat",
     );
     expectProportional(
-      second.inputCalories,
-      first.inputCalories,
+      secondProjection.inputCalories,
+      firstProjection.inputCalories,
       2,
       1,
       "input calories",
     );
     await expect(page.locator("[data-input-calories]")).toHaveText(
-      `${second.inputCalories} kcal`,
+      `${secondProjection.inputCalories} kcal`,
     );
 
     await expect(page.locator("[data-input-macro-protein]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.protein, "en"),
+      formatMacronutrient(secondProjection.inputMacronutrients.protein, "en"),
     );
     await expect(page.locator("[data-input-macro-carbohydrate]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.carbohydrate, "en"),
+      formatMacronutrient(
+        secondProjection.inputMacronutrients.carbohydrate,
+        "en",
+      ),
     );
     await expect(page.locator("[data-input-macro-fat]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.fat, "en"),
+      formatMacronutrient(secondProjection.inputMacronutrients.fat, "en"),
     );
     const cardNames = await page
       .locator("[data-result-card] h3")
@@ -410,7 +427,6 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(2);
     expect(posts[1]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 100, unit: "g" },
       pageIndex: 0,
     });
 
@@ -421,7 +437,6 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(3);
     expect(posts[2]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 1, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -432,7 +447,6 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(4);
     expect(posts[3]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 285, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -521,7 +535,6 @@ test.describe("food quantity editing", () => {
     expect(posts).toHaveLength(postsAfterSelection + 3);
     expect(posts[posts.length - 1]?.body).toEqual({
       foodObjectId: 1,
-      quantity: { value: 2.5, unit: "serving" },
       pageIndex: 0,
     });
 
@@ -682,17 +695,25 @@ test.describe("food quantity editing", () => {
         "Recalculated substitute-search response was not captured",
       );
     }
+    const secondProjection = projectSubstitutePage(
+      second.selectedFood,
+      second.items,
+      { value: 2, unit: "serving" },
+    );
     await expect(page.locator("[data-input-macro-protein]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.protein, "en"),
+      formatMacronutrient(secondProjection.inputMacronutrients.protein, "en"),
     );
     await expect(page.locator("[data-input-macro-carbohydrate]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.carbohydrate, "en"),
+      formatMacronutrient(
+        secondProjection.inputMacronutrients.carbohydrate,
+        "en",
+      ),
     );
     await expect(page.locator("[data-input-macro-fat]")).toHaveText(
-      formatMacronutrient(second.inputMacronutrients.fat, "en"),
+      formatMacronutrient(secondProjection.inputMacronutrients.fat, "en"),
     );
     await expect(page.locator("[data-input-calories]")).toHaveText(
-      `${second.inputCalories} kcal`,
+      `${secondProjection.inputCalories} kcal`,
     );
     await expect(
       page.locator("[data-selected-input-region]"),
