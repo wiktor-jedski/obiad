@@ -97,14 +97,14 @@ The selected Food Object basis contains the canonical Macro Profile (`100 g` for
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-002, REQ-004–REQ-010, REQ-070–REQ-072 |
+| Requirements | REQ-002 |
 | Dependencies | ARCH-013, PostgreSQL, pgx |
 
-**Responsibility:** Load and validate one request-local Food Catalog snapshot.
+**Responsibility:** Load and validate one request-local Food Catalog snapshot from PostgreSQL.
 
 **Contract:** This private concrete Module executes embedded SQL through pgx. Its SQL is colocated under `backend/internal/repository/sql/`. It binds all dynamic SQL values through pgx parameters and never interpolates them into statement text; a statement with no dynamic values has no parameters. Each suggestion or Substitution Search performs one fresh PostgreSQL read. The Module maps rows to private Food Object values and reports storage or catalog-invariant failures.
 
-The Module has no exported repository interface, fake Adapter, runtime cache, SQL ranking, automatic retry, or derived-value persistence.
+The Module reads no `data/` submodule file, production Ingredient, Meal authoring record, or aggregate catalog. It has no exported repository interface, fake Adapter, runtime cache, SQL ranking, automatic retry, or derived-value persistence.
 
 ## ARCH-007 — Database Setup Module
 
@@ -115,9 +115,9 @@ The Module has no exported repository interface, fake Adapter, runtime cache, SQ
 | Requirements | REQ-070–REQ-072 |
 | Dependencies | ARCH-013, PostgreSQL |
 
-**Responsibility:** Create the deterministic database state before Fiber starts.
+**Responsibility:** Create the deterministic application-owned dummy catalog before Fiber starts.
 
-**Contract:** An explicit Go command applies embedded versioned migrations and deterministic seed SQL in transactions. It uses a schema-owner database credential. The command creates the complete POC catalog with fixed IDs and test-designed nutrition values. The request-serving process does not execute DDL or seed operations.
+**Contract:** An explicit Go command applies embedded versioned migrations and deterministic dummy catalog data in transactions. It uses a schema-owner database credential. The command creates the complete POC catalog with fixed IDs and test-designed nutrition values. These rows are application-owned dummy data, not production records. The request-serving process does not execute DDL or seed operations, and database setup does not read the `data/` submodule.
 
 ## ARCH-008 — OpenAPI HTTP Interface
 
@@ -229,27 +229,21 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 | --- | --- |
 | Type | Data |
 | Status | Active |
-| Requirements | REQ-002, REQ-004–REQ-010, REQ-070–REQ-072 |
-| Dependencies | PostgreSQL |
+| Requirements | REQ-004–REQ-010, REQ-086–REQ-091 |
+| Dependencies | PostgreSQL, `data/` production repository |
 | ADR | [0001 — Store localized names in Food Object JSONB](0001-localized-names-jsonb.md) |
 
-**Responsibility:** Represent the authoritative seeded Food Objects and their nutrition data.
+**Responsibility:** Define the Food Object catalog contracts at the application and production-data boundary.
 
-**Owner:** The PostgreSQL schema maintained by ARCH-007.
+**Ownership:** ARCH-013 owns REQ-004–REQ-010 and REQ-086–REQ-091. ARCH-006 owns REQ-002. ARCH-007 owns REQ-070–REQ-072. ARCH-006 and ARCH-007 consume this contract but keep application-owned dummy-catalog ownership.
 
-**Structure contract:** Each Food Object maintains one canonical Macro Profile per Nutrition Basis (`100 g` for solids or `100 ml` for liquids). One Food Object row contains:
+**Application contract:** Food Object is the application and HTTP term for one generic prepared dish. The application owns `api/catalog.schema.json`; it remains available when `data/` is uninitialized. An aggregate catalog requires a positive integer `schemaVersion`, the full 40-character `dataCommit`, `foodFamilies`, and `foodObjects`. Each Food Object requires a stable opaque positive `id`, nonempty `en` and `pl` names, a Macro Profile, and a `g` or `ml` Nutrition Basis. It may have one positive Serving in the Nutrition Basis unit, one source URL, and one Food Family ID. Unknown fields, record revisions, license notices, catalog versions, and release download URLs are invalid.
 
-- one positive opaque seeded integer ID;
-- one JSONB localized-name map with nonempty `en` and `pl` string values;
-- one Physical State, `solid` or `liquid`, defining the Nutrition Basis (`100 g` for solids, `100 ml` for liquids);
-- one canonical Macro Profile of finite double-precision protein, carbohydrate, and fat values that are nonnegative and not all zero per Nutrition Basis;
-- one optional positive finite Serving base quantity in the base unit;
-- one nullable Food Family foreign key;
-- one optional frontend image key.
+**Production contract:** The separate `data/` repository owns production authoring records, acquisition, validation, calculation, and aggregate export. Ingredient files contain one stable positive opaque ID, localized names, one source URL, a per-100 g Macro Profile, and optional sourced density. Meal files contain one stable positive opaque ID, localized names, ordered resolved Ingredient composition with positive retained gram quantities, ordered short agent-authored steps, yield method and value, and `g` or `ml` Nutrition Basis. A Meal may have one Serving, source URL, and Food Family ID. Git history records changes; records have no revision field. Qualitative salt, dry herbs, and dry spices may occur in steps but never in composition or macro calculation.
 
-Additional language keys are permitted in the localized-name map. One separate Food Family row owns only an opaque integer ID. The single nullable foreign key enforces maximum-one flat membership.
+**Attribution contract:** Open Food Facts and USDA credit appears only in the production Data Sources footer with the ODbL, the full production-data commit ID, and the free catalog download. It is not stored in the aggregate catalog.
 
-**Flow:** ARCH-007 writes migrations and seed data. Fiber uses a separate SELECT-only database credential. ARCH-006 reads the rows for every operation. HTTP results carry the calculation basis data and required metadata. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from the canonical Macro Profiles and are never stored.
+**Flow:** Application-owned dummy catalog data provides local startup, CI, and integration data without `data/`. ARCH-007 creates this deterministic PostgreSQL state. A production launcher validates and exports `data/` to a temporary aggregate, validates it against the application-owned schema, loads it transactionally, and removes the temporary aggregate. ARCH-006 reads only the loaded PostgreSQL rows. HTTP returns Food Objects, never Ingredients. Candidate similarities, rank order, and pages are derived by the backend; input calories, Matched Quantities, and scaled macronutrients are projected by the browser from canonical Macro Profiles and are never stored.
 
 ## ARCH-014 — Interface Language Preference
 

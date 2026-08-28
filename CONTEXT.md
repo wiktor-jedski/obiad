@@ -12,17 +12,20 @@ The supported language used for interface text, accessibility text, and localize
 ### Food Objects
 
 **Food Object**:
-A generic basic food or generic prepared dish with nutritional data.
+A generic prepared dish with nutritional data. This is the application and HTTP term for catalog data, including application dummy data and an aggregated production Meal. It does not identify an Ingredient, raw food, or product.
+
+**Ingredient**:
+A production-authoring record for one reusable nutritional input to a Meal. An Ingredient does not enter the application catalog, HTTP interface, or PostgreSQL runtime catalog.
+
+**Meal**:
+A production-authoring record for one recipe-derived prepared dish. A validated Meal becomes one Food Object in a production aggregate catalog.
 
 **Food Family**:
-An optional flat grouping of Food Objects that are variants of the same kind of food.
+An optional flat grouping of Food Objects that are variants of the same kind of prepared dish.
 _Avoid_: Category
 
 **Import**:
-The act of bringing Food Objects into a database.
-
-**Substitute**:
-A Food Object proposed in place of a Substitution Input because it is nutritionally similar and satisfies applicable Search constraints.
+The act of loading an application catalog into a database.
 
 ### Search
 
