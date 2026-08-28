@@ -6,69 +6,108 @@ Use ASD-STE100.
 
 ## Project Structure & Module Organization
 
-This repository is currently organized around requirements, architecture, design specs, and helper scripts. Requirements live in `docs/requirements/`, architecture decisions in `docs/architecture/`, and implementation planning in `docs/implementation/`. Utility scripts are in `scripts/`.
+Docs:
+API: `api/openapi.yaml`
+Requirements: `docs/requirements/`
+Architecture: `docs/architecture/`
+Implementation planning: `docs/implementation/`
 
-When application code is added, follow the documented stack: Svelte frontend code under the `frontend/` package, Go/Fiber backend code under the `backend/` package, and tests colocated with code where the language ecosystem expects them.
+Code:
+Frontend (Svelte): `frontend/`
+Backend (Go): `backend/`
+Utility scripts (Python, Bash): `scripts/`
+Tests colocated with code where the language ecosystem expects them.
 
+Planning:
 Task list: `docs/implementation/task-list.md`
 Phase plan: `docs/implementation/plan.md`
 Open items: `docs/implementation/issue-tracker.md`
 
 ## Build, Test, and Development Commands
 
-Backend commands run from `backend/`: `go test ./...` runs the complete Go suite, and `go run ./cmd/dbsetup` applies embedded migrations using `OBIAD_SCHEMA_OWNER_DATABASE_URL`. Frontend commands run from `frontend/`; use Bun for dependency installation and package scripts.
+Treat diagnostics from backend, frontend and aggregate checks as required fixes.
 
-Installed development tooling:
+### Backend commands
 
-- `golang-security` agent skill: use for backend security-sensitive work, especially authentication, authorization, OAuth, cookies, PII handling, and dependency review.
+Run all Go commands from `backend/`.
 
-For all backend Go work, change into `backend/` before invoking Go or editor tooling; do not run these commands from the repository root. Neovim's Go extra uses the Mason-installed `gopls`, `golangci-lint`, `goimports`, and `gofumpt` binaries under `$HOME/.local/share/nvim/mason/bin/`. Before finishing a Go change, use those same tools from `backend/`:
+Setup:
 
-- Materialize the intentionally uncommitted generated transport models before diagnostics, and regenerate them after changing `api/openapi.yaml` or generator configuration: `go generate ./...`.
-- Format every changed Go file, in Neovim's order: `$HOME/.local/share/nvim/mason/bin/goimports -w <changed .go files> && $HOME/.local/share/nvim/mason/bin/gofumpt -w <changed .go files>`.
-- Run command-line LSP diagnostics on every changed Go file: `$HOME/.local/share/nvim/mason/bin/gopls check <changed .go files>`.
-- Run Neovim's Go linter across the module: `$HOME/.local/share/nvim/mason/bin/golangci-lint run ./...`. Its enabled linters include `staticcheck`, matching Neovim's `gopls.staticcheck = true`; the `gopls check` CLI does not accept that LSP setting as a flag.
+- `golang-security` agent skill: use for backend security-sensitive work
 
-Treat diagnostics from these commands as required fixes. Use the explicit Mason paths because agent shells may not inherit Neovim's `PATH`.
+Backend check:
 
-For all frontend TypeScript and Svelte work, change into `frontend/` before invoking package scripts. Install the locked dependencies with `bun install --frozen-lockfile`. Before finishing a frontend change:
+- `scripts/ci_check.py --backend`
 
-- Format changed supported frontend files with the project-local Prettier installation (`bun x prettier --write <changed files>`).
-- Run `bun run typecheck` for project-wide Svelte and TypeScript diagnostics.
-- Run `bun run format:check` to verify repository formatting.
-- Keep the broad `**/*.ts` and `**/*.svelte` coverage in `frontend/tsconfig.json`. Do not replace it with a list of source directories or files. New TypeScript and Svelte files must be checked automatically; only generated, dependency, and tool-output directories belong in `exclude`.
+### Frontend commands
 
-Treat diagnostics and formatting failures from these commands as required fixes. Neovim can use Mason-installed `svelteserver` and `prettierd` interactively, but repository checks must use the locked project dependencies.
+Run all Typescript commands from `frontend/`; use Bun.
+Frontend scripts are defined in `fronted/package.json`.
+
+Setup:
+
+- `svelte-best-practices` agent skill, use in the beginning of coding/testing frontend tasks
+- `bun install --frozen-lockfile` installs locked dependencies.
+
+Frontend check:
+
+- `scripts/ci_check.py --frontend`
+
+### Script commands
+
+Setup:
+
+- `scripts/start.py` runs the app using demo database
+
+Doc checks:
+
+- `scripts/validate_phase_plan.py` phase planning validation
+
+Aggregate checks:
+
+- `scripts/ci_check.py` runs CI check (both frontend and backend)
 
 ## Coding Style & Naming Conventions
 
 Keep Markdown filenames descriptive and consistent with existing prefixes.
+Keep comments precise and short; 1-2 lines max.
+Do not document generated output by hand.
 
-For frontend work, follow `docs/requirements/style.md`: Svelte components in `frontend/src/lib/components/`, Tailwind utilities, Inter for UI text, Roboto Mono for labels/data, and WCAG AA contrast. For backend Go, use `goimports` followed by `gofumpt`, and use lower-case package names.
+Each smell reads _what it is_ → _how to fix_; match it against the diff:
 
-For backend, follow the official Go Doc comments guidelines.
+- **Mysterious Name** — a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
+- **Duplicated Code** — the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
+- **Feature Envy** — a method that reaches into another object's data more than its own. → move the method onto the data it envies.
+- **Data Clumps** — the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
+- **Primitive Obsession** — a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
+- **Repeated Switches** — the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
+- **Shotgun Surgery** — one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
+- **Divergent Change** — one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
+- **Speculative Generality** — abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
+- **Message Chains** — long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
+- **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
+- **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
+
+### Frontend coding
+
+Follow `docs/requirements/style.md`: Svelte components in `frontend/src/lib/components/`, Tailwind utilities, Inter for UI text, Roboto Mono for labels/data, and WCAG AA contrast.
+Every exported type, interface, class, function and constant needs concise TSDoc
+Follow TSDoc comment specification.
+
+### Backend coding
+
+Follow the official Go Doc comments guidelines.
 Keep backend repository persistence SQL under the colocated `backend/internal/repository/sql/` directory and embed it from Go. Do not place SQL statement strings inline in repository Go files.
-For frontend, every hand-written exported type, interface, class, function, and constant needs concise TSDoc that follows the TSDoc comment specification. Generated exports must receive their TSDoc from the source contract and generator; do not document generated output by hand.
 
 ## Testing Guidelines
 
-- Go tests use the standard `testing` package and `Test...` names in `*_test.go` files. PostgreSQL integration tests are colocated in `backend/internal/dbsetup/dbsetup_integration_test.go`. Future Svelte tests should use Bun, `@testing-library/svelte`, and Playwright. Add tests near changed behavior, especially around search, auth, subscriptions, and data normalization.
 - For each phase, during task planning, add relevant integration tests for the newly implemented code AND the code that will work with this phase's code.
 - Unit tests are allowed only to check correctness during development. Remove all unit tests before committing changes.
-
-Current test commands:
-
-- Complete CI check: run `python3 scripts/ci_check.py` from the repository root. It validates phase planning, generates the Go and TypeScript OpenAPI boundaries, compiles the generated frontend client, starts an isolated disposable PostgreSQL container, runs the complete backend test suite, and removes the container.
-- PostgreSQL for integration tests: in a separate terminal, run `docker run --rm --name obiad-test-postgres -e POSTGRES_PASSWORD=obiad_test -p 127.0.0.1:5432:5432 postgres:17-alpine` and wait until it reports that it is ready to accept connections.
-- Backend suite: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test ./...` from `backend/`.
-- PostgreSQL integration suite with individual pass/skip output: run `OBIAD_TEST_ADMIN_DATABASE_URL='postgres://postgres:obiad_test@localhost:5432/postgres?sslmode=disable' go test -v ./internal/dbsetup` from `backend/`.
-- Phase-planning validation: run `python3 scripts/validate_phase_plan.py` from the repository root.
-
-The PostgreSQL integration suite requires an admin connection that can create and drop disposable databases and roles. The Docker command provides a loopback-only disposable test server; stop it with `Ctrl-C`, and `--rm` removes the container. To use another server, set `OBIAD_TEST_ADMIN_DATABASE_URL`; alternatively, configure `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE`, with the password supplied by `PGPASSWORD` or `~/.pgpass`. The tests skip when they cannot establish the admin connection, so use the verbose command to confirm they ran rather than skipped.
+- Tautological tests considered harmful.
 
 ## Commit & Pull Request Guidelines
 
-Keep messages concise and focused on one change. Pull requests should include a brief summary, changed docs or scripts, validation performed, and linked requirements or architecture IDs. Include screenshots for UI changes once the frontend exists.
+Keep messages concise and focused on one change.
 
 ## Security & Configuration Tips
 

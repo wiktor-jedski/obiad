@@ -41,6 +41,17 @@ def run_checked(
     )
 
 
+def run_no_output_check(
+    command: list[str], *, cwd: Path, failure: str
+) -> None:
+    """Run a command and fail when it reports matching files."""
+
+    result = run_checked(command, cwd=cwd, capture_output=True)
+    if result.stdout.strip():
+        print(result.stdout, file=sys.stderr, end="")
+        raise RuntimeError(failure)
+
+
 def container_is_running(container_name: str) -> bool:
     """Return whether Docker reports the disposable container as running."""
 
@@ -162,6 +173,16 @@ def run_backend_checks() -> None:
         ]
     )
     run_checked(["go", "generate", "./..."], cwd=BACKEND_ROOT)
+    run_no_output_check(
+        ["go", "tool", "goimports", "-l", "."],
+        cwd=BACKEND_ROOT,
+        failure="goimports found files that need formatting",
+    )
+    run_no_output_check(
+        ["go", "tool", "gofumpt", "-l", "."],
+        cwd=BACKEND_ROOT,
+        failure="gofumpt found files that need formatting",
+    )
     run_checked(["go", "tool", "golangci-lint", "run", "./..."], cwd=BACKEND_ROOT)
 
     container_name = f"obiad-ci-postgres-{os.getpid()}-{secrets.token_hex(4)}"
@@ -195,7 +216,11 @@ def run_backend_checks() -> None:
         )
         test_env = os.environ.copy()
         test_env["OBIAD_TEST_ADMIN_DATABASE_URL"] = database_url
-        run_checked(["go", "test", "-count=1", "./..."], cwd=BACKEND_ROOT, env=test_env)
+        run_checked(
+            ["go", "test", "-v", "-count=1", "./..."],
+            cwd=BACKEND_ROOT,
+            env=test_env,
+        )
     finally:
         print("Stopping disposable PostgreSQL.", flush=True)
         subprocess.run(
