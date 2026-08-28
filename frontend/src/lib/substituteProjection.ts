@@ -122,11 +122,6 @@ function roundToTenth(r: Rational): number {
 
 /**
  * Pure projection from calculation basis data to display-ready values.
- *
- * @param selectedFood - Calculation basis of the selected Food Object.
- * @param items - Current-page candidate items.
- * @param quantity - Committed Food Quantity.
- * @returns Display-ready selected-input and card values.
  */
 export function projectSubstitutePage(
   selectedFood: SelectedFood,

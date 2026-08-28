@@ -108,11 +108,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     expect(elementText("[data-input-macro-fat]")).toBe("3.6 g");
     expect(elementText("[data-input-calories]")).toBe("156 kcal");
 
-    // Candidate (Tofu): 25g protein, 0g carb, 2g fat per 100g -> 118 kcal/100g
-    // Unrounded Matched Quantity: (156.4 * 100) / 118 = 132.542... g -> 133 g
-    // Candidate Protein: 25 * 132.542... / 100 = 33.135... g -> 33.1 g
-    // Candidate Fat: 2 * 132.542... / 100 = 2.650... g -> 2.7 g
-    // Candidate Calories: 156.4 kcal -> 156 kcal
+    // Tofu (118 kcal/100g) matches 156.4 kcal at 132.542... g -> 133 g.
+    // Unrounded scaling yields 33.1 g protein, 2.7 g fat, and 156 kcal.
     expect(elementText("[data-result-card-matched-quantity]")).toBe("133 g");
     expect(elementText("[data-result-card-calories]")).toBe("156 kcal");
 
@@ -157,9 +154,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    // Input: 250 ml of (3.4g P, 4.8g C, 3.2g F / 100 ml)
-    // Protein: 3.4 * 2.5 = 8.5 g, Carb: 4.8 * 2.5 = 12.0 g, Fat: 3.2 * 2.5 = 8.0 g
-    // Calories: 4*8.5 + 4*12 + 9*8 = 34 + 48 + 72 = 154 kcal
+    // Input 250 ml (3.4g P, 4.8g C, 3.2g F / 100 ml) scales by 2.5 -> 8.5g P, 12.0g C, 8.0g F.
+    // Input calories: 4*8.5 + 4*12 + 9*8 = 154 kcal.
     expect(elementText("[data-input-macro-protein]")).toBe("8.5 g");
     expect(elementText("[data-input-macro-carbohydrate]")).toBe("12.0 g");
     expect(elementText("[data-input-macro-fat]")).toBe("8.0 g");
@@ -215,9 +211,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    // 1 serving = 350 g: scale factor = 3.5
-    // Input macros: 10*3.5 = 35.0g P, 30*3.5 = 105.0g C, 10*3.5 = 35.0g F
-    // Input calories: 4*35 + 4*105 + 9*35 = 140 + 420 + 315 = 875 kcal
+    // 1 serving = 350 g (3.5x): 35.0g P, 105.0g C, 35.0g F.
+    // Input calories: 4*35 + 4*105 + 9*35 = 875 kcal.
     expect(elementText("[data-input-macro-protein]")).toBe("35.0 g");
     expect(elementText("[data-input-macro-carbohydrate]")).toBe("105.0 g");
     expect(elementText("[data-input-macro-fat]")).toBe("35.0 g");
@@ -487,12 +482,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("a fixture that fails under early rounding confirms full calculation precision", async () => {
-    // Selected: Chicken breast (150 g serving, 31g P, 0g C, 3.6g F per 100g)
-    // 1 serving -> 150g -> 46.5g P, 0g C, 5.4g F -> 234.6 kcal
-    // Candidate (Protein shake): 8g P, 4g C, 1g F per 100 ml -> 57 kcal / 100 ml
-    // Full-precision Matched Quantity: (234.6 * 100) / 57 = 411.5789... ml (display rounds to 412 ml)
-    // Full-precision candidate protein: 8 * 411.5789... / 100 = 32.926... g -> rounds to 32.9 g
-    // Early rounded Matched Quantity (412 ml): 8 * 412 / 100 = 32.96 g -> rounds to 33.0 g (FAILS if rounded early)
+    // Full precision: (234.6*100)/57 = 411.5789... ml -> 8*4.115789... = 32.926... g (32.9 g).
+    // Early rounding to 412 ml would incorrectly yield 8*4.12 = 32.96 g (33.0 g).
     const selected: SelectedFoodObject = {
       foodObjectId: 5,
       names: { en: "Chicken breast", pl: "Pierś z kurczaka" },
@@ -546,10 +537,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("equal-calorie exact-half boundary fixture proves candidate card calories match input calories under half-up display rounding", async () => {
-    // Selected: 25.125g protein, 0g carb, 0g fat per 100g -> 4 * 25.125 = 100.5 kcal -> 101 kcal
-    // Candidate: 0g protein, 0g carb, 12.5g fat per 100g -> 112.5 kcal / 100g
-    // Unrounded matched quantity: (100.5 * 100) / 112.5 = 89.333333... g
-    // Candidate calories must match the exact equal-calorie input basis (100.5 kcal -> 101 kcal)
+    // Selected 25.125g P -> 100.5 kcal (101 kcal); candidate 12.5g F -> 112.5 kcal/100g (89.333... g).
+    // Candidate calories match the unrounded equal-calorie input basis (100.5 kcal -> 101 kcal).
     const selected: SelectedFoodObject = {
       foodObjectId: 107,
       names: { en: "Selected Half-Boundary", pl: "Wybrany Produkt" },
@@ -598,9 +587,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("varied-ratio exact 150.5 g matched quantity half-up boundary rounds to 151 g", async () => {
-    // Selected: 2.8595g protein, 0g carb, 0g fat per 100g -> 11.438 kcal
-    // Candidate: 0.1g protein, 0g carb, 0.8g fat per 100g -> 7.6 kcal/100g
-    // Mathematical matched quantity: (11.438 * 100) / 7.6 = 150.5 g -> 151 g
+    // Selected 11.438 kcal and candidate 7.6 kcal/100g yield (11.438 * 100) / 7.6 = 150.5 g.
+    // Exact half boundary rounds up to 151 g.
     const selected: SelectedFoodObject = {
       foodObjectId: 108,
       names: { en: "Selected 150.5g Basis", pl: "Wybrany Produkt" },
@@ -641,10 +629,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("varied-ratio exact 12.05 g candidate macro half-up boundary rounds to 12.1 g", async () => {
-    // Selected: 60.25g protein per 100g -> 241 kcal
-    // Candidate: 10g protein, 40g carb per 100g -> 200 kcal/100g
-    // Mathematical matched quantity: 241 * 100 / 200 = 120.5 g -> 121 g
-    // Candidate protein: 10 * 120.5 / 100 = 12.05 g -> 12.1 g
+    // Matched quantity: 241 kcal / (200 kcal / 100g) = 120.5 g -> 121 g.
+    // Candidate protein: 10g * 1.205 = 12.05 g -> rounds half-up to 12.1 g.
     const selected: SelectedFoodObject = {
       foodObjectId: 109,
       names: { en: "Selected 12.05g Basis", pl: "Wybrany Produkt" },
@@ -687,9 +673,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("genuine below-half matched quantity (selected P=37.62499999999997, candidate P=25) renders 150 g not 151 g", async () => {
-    // Selected: 37.62499999999997g protein per 100g -> 150.49999999999988 kcal
-    // Candidate: 25g protein per 100g -> 100 kcal/100g
-    // Mathematical matched quantity: 150.49999999999988 g (< 150.5 g) -> MUST render 150 g
+    // Selected: 37.62499999999997g P (150.49999999999988 kcal); candidate: 25g P (100 kcal/100g).
+    // Matched quantity 150.49999999999988 g is strictly below 150.5 g -> renders 150 g.
     const selected: SelectedFoodObject = {
       foodObjectId: 110,
       names: { en: "Selected 37.62499999999997g", pl: "Wybrany Produkt" },
@@ -728,10 +713,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
   });
 
   test("genuine below-half candidate macro (12.049999999999995 g) renders 12.0 g", async () => {
-    // Selected: 25g protein per 100g -> 100 kcal
-    // Candidate: 12.049999999999995g protein, 12.950000000000005g carb -> 100 kcal/100g
-    // Matched quantity: 100 g
-    // Candidate protein: 12.049999999999995 g (< 12.05 g) -> MUST render 12.0 g
+    // Selected: 100 kcal; candidate: 100 kcal/100g -> matched quantity 100 g.
+    // Candidate protein 12.049999999999995 g is strictly below 12.05 g -> renders 12.0 g.
     const selected: SelectedFoodObject = {
       foodObjectId: 111,
       names: { en: "Selected 100 kcal", pl: "Wybrany Produkt" },
