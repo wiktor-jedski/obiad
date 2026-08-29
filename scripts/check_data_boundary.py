@@ -55,18 +55,50 @@ def prohibited_artifacts(paths: Iterable[str]) -> list[tuple[str, str]]:
     return violations
 
 
+def data_submodule_is_configured(repository: Path) -> bool:
+    """Return whether the repository configures data as a submodule."""
+    result = subprocess.run(
+        ["git", "-C", str(repository), "config", "--file", ".gitmodules", "--get", "submodule.data.path"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode == 1:
+        return False
+    if result.returncode:
+        message = result.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"cannot read data submodule configuration in {repository}: {message}")
+    if result.stdout.strip() != b"data":
+        raise RuntimeError(f"unexpected data submodule path in {repository}: {result.stdout!r}")
+    return True
+
+
 def initialized_data_submodule(repository: Path) -> Path | None:
     """Return the initialized data submodule path, if this repository has one."""
+    configured = data_submodule_is_configured(repository)
     result = subprocess.run(
         ["git", "-C", str(repository), "submodule", "status", "--", "data"],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if result.returncode or not result.stdout or result.stdout[:1] == b"-":
+    if result.returncode:
+        message = result.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"cannot inspect data submodule in {repository}: {message}")
+    lines = result.stdout.splitlines()
+    if not configured and not lines:
         return None
+    if len(lines) != 1:
+        raise RuntimeError(f"malformed data submodule status in {repository}: {result.stdout!r}")
+    status = lines[0]
+    if status[:1] == b"-":
+        return None
+    if status[:1] not in (b" ", b"+", b"U"):
+        raise RuntimeError(f"malformed data submodule status in {repository}: {status!r}")
     data = repository / "data"
-    return data if data.is_dir() else None
+    if not data.is_dir():
+        raise RuntimeError(f"initialized data submodule is unreadable: {data}")
+    return data
 
 
 def repositories_to_check(repository: Path) -> list[Path]:

@@ -245,6 +245,7 @@ def run_ci_checks(
     """Run the data-boundary check and selected CI checks."""
 
     run_checked([sys.executable, "scripts/check_data_boundary.py"])
+    run_checked([sys.executable, "scripts/check_data_boundary_integration_test.py"])
 
     if not any((backend, frontend, e2e)):
         backend = frontend = e2e = True
