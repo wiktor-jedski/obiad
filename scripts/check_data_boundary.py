@@ -75,7 +75,8 @@ def data_submodule_is_configured(repository: Path) -> bool:
 
 def initialized_data_submodule(repository: Path) -> Path | None:
     """Return the initialized data submodule path, if this repository has one."""
-    configured = data_submodule_is_configured(repository)
+    if not data_submodule_is_configured(repository):
+        return None
     result = subprocess.run(
         ["git", "-C", str(repository), "submodule", "status", "--", "data"],
         check=False,
@@ -86,8 +87,6 @@ def initialized_data_submodule(repository: Path) -> Path | None:
         message = result.stderr.decode(errors="replace").strip()
         raise RuntimeError(f"cannot inspect data submodule in {repository}: {message}")
     lines = result.stdout.splitlines()
-    if not configured and not lines:
-        return None
     if len(lines) != 1:
         raise RuntimeError(f"malformed data submodule status in {repository}: {result.stdout!r}")
     status = lines[0]
