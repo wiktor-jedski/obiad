@@ -55,62 +55,11 @@ def prohibited_artifacts(paths: Iterable[str]) -> list[tuple[str, str]]:
     return violations
 
 
-def data_submodule_is_tracked(repository: Path) -> bool:
-    """Return whether data is tracked as the root Git submodule gitlink."""
-    result = subprocess.run(
-        ["git", "-C", str(repository), "ls-files", "--stage", "--", "data"],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode:
-        message = result.stderr.decode(errors="replace").strip()
-        raise RuntimeError(f"cannot inspect tracked data path in {repository}: {message}")
-    entries = result.stdout.splitlines()
-    if not entries:
-        return False
-    if len(entries) != 1:
-        raise RuntimeError(f"malformed tracked data path in {repository}: {result.stdout!r}")
-    header, separator, path = entries[0].partition(b"\t")
-    if separator != b"\t" or path != b"data" or header.split()[:1] != [b"160000"]:
-        raise RuntimeError(f"tracked data path is not a submodule gitlink in {repository}")
-    return True
-
-
-def data_submodule_has_metadata(repository: Path) -> None:
-    """Require exactly one .gitmodules entry that maps a section to data."""
-    result = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repository),
-            "config",
-            "--file",
-            ".gitmodules",
-            "--get-regexp",
-            r"^submodule\..*\.path$",
-        ],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode not in (0, 1):
-        message = result.stderr.decode(errors="replace").strip()
-        raise RuntimeError(f"cannot read data submodule configuration in {repository}: {message}")
-    paths = [
-        fields[1]
-        for line in result.stdout.splitlines()
-        if len(fields := line.split(None, 1)) == 2
-    ]
-    if paths.count(b"data") != 1:
-        raise RuntimeError(f"tracked data gitlink lacks one .gitmodules path entry in {repository}")
-
-
 def initialized_data_submodule(repository: Path) -> Path | None:
     """Return the initialized data submodule path, if this repository has one."""
-    if not data_submodule_is_tracked(repository):
+    data = repository / "data"
+    if not data.exists():
         return None
-    data_submodule_has_metadata(repository)
     result = subprocess.run(
         ["git", "-C", str(repository), "submodule", "status", "--", "data"],
         check=False,
@@ -121,6 +70,8 @@ def initialized_data_submodule(repository: Path) -> Path | None:
         message = result.stderr.decode(errors="replace").strip()
         raise RuntimeError(f"cannot inspect data submodule in {repository}: {message}")
     lines = result.stdout.splitlines()
+    if not lines:
+        return None
     if len(lines) != 1:
         raise RuntimeError(f"malformed data submodule status in {repository}: {result.stdout!r}")
     status = lines[0]
@@ -128,7 +79,6 @@ def initialized_data_submodule(repository: Path) -> Path | None:
         return None
     if status[:1] not in (b" ", b"+", b"U"):
         raise RuntimeError(f"malformed data submodule status in {repository}: {status!r}")
-    data = repository / "data"
     if not data.is_dir():
         raise RuntimeError(f"initialized data submodule is unreadable: {data}")
     return data

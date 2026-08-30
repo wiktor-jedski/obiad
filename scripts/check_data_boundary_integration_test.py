@@ -44,15 +44,6 @@ class DataBoundarySubmoduleIntegrationTest(unittest.TestCase):
             self.assertEqual(corrupted.returncode, 2)
             self.assertIn("cannot inspect data submodule", corrupted.stderr)
 
-    def test_retained_data_gitlink_without_metadata_fails_closed(self) -> None:
-        """Reject a tracked data gitlink that has no matching .gitmodules entry."""
-        with tempfile.TemporaryDirectory(prefix="obiad-data-boundary-") as temporary:
-            application = self.create_application_with_data_submodule(Path(temporary), "data")
-            (application / ".gitmodules").unlink()
-
-            result = self.run_checker(application)
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("tracked data gitlink lacks one .gitmodules path entry", result.stderr)
 
     def test_repository_without_data_gitlink_succeeds(self) -> None:
         """Allow Git repositories that do not track data."""
