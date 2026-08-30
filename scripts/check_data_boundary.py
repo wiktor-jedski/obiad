@@ -33,8 +33,7 @@ def tracked_paths(repository: Path) -> list[str]:
     result = subprocess.run(
         ["git", "-C", str(repository), "ls-files", "-z"],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     if result.returncode:
         message = result.stderr.decode(errors="replace").strip()
@@ -63,8 +62,7 @@ def initialized_data_submodule(repository: Path) -> Path | None:
     result = subprocess.run(
         ["git", "-C", str(repository), "submodule", "status", "--", "data"],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     if result.returncode:
         message = result.stderr.decode(errors="replace").strip()
