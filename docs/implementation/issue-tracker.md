@@ -403,3 +403,19 @@ Status: ready-for-agent
 ### Assumptions
 
 - Phase 24 establishes repository ownership, record validation, and the application catalog contract. Phase 25 implements recipe acquisition. Phase 26 implements Ingredient acquisition and conversion. Phase 27 implements Meal calculation and catalog export. Phase 24 adds no placeholder acquisition, calculation, or export tools.
+
+## ISSUE-024: Phase 25 recipe adapter contract and evidence decisions
+
+Type: Architecture and product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-08-30. `scrape_recipe(url)` is offline production-data authoring infrastructure for trusted agent- or developer-selected public recipe URLs. The application and end-user APIs never call it. Follow ordinary redirects, use the final URL's ordinary parsed hostname and path for adapter matching, and return the final effective URL as `source_url`. Add no private-address, IDNA, trailing-dot, or port-normalization policy.
+- Return one frozen `ScrapedRecipe` with title, ordered raw Ingredient-line and instruction tuples, optional frozen `DeclaredYield`, optional serving count, and final `source_url`. `DeclaredYield` contains a `Decimal` value and unit `g` or `ml`. Normalize exact g, kg, ml, and l values without loss. Serving count is a positive `Decimal`; when the source declares a range, use its lower bound. Use `None` only when an optional source field is absent.
+- Use typed `RecipeFetchError` for network and HTTP failures. Use one `RecipeStructureError` with stable code `missing_expected_structure`, requested URL, optional adapter name, and concise diagnostic when zero or multiple adapters match or an expected document structure is absent. Never return partial data.
+- Match the first adapter on final hostname `kuchnia-domowa.pl` and recipe-article pattern `^/[^/]+/[1-9][0-9]*-[^/]+/?$`. Zero or multiple registry matches fail. Require exactly one complete schema.org Recipe JSON-LD object; multiple complete Recipe objects fail instead of using document order.
+- Use `https://kuchnia-domowa.pl/dania-glowne/481-pierogi-ruskie` as the approved public, unauthenticated Pierogi ruskie source. Its initial HTML contains one complete Recipe JSON-LD object and requires no JavaScript rendering. Its robots policy does not disallow the recipe path. The Recipe object has no declared yield or serving count.
+- Store the reusable operational handoff at `data/docs/recipe-adapters/kuchnia-domowa.md`. Record tools, queries, structured-data paths, rendering needs, access-policy findings, and edge cases without copying page content, Ingredient lines, instructions, HTML, or a source-content checksum.
+- Store one sanitized source-derived HTML fixture at `data/tests/fixtures/kuchnia_domowa/pierogi_ruskie.html`. Retain the exact consumed Recipe JSON-LD and remove scripts, analytics, navigation, comments, and unrelated content. The project owner explicitly does not require a permission or license check and accepts the redistribution risk.
+- Integration tests call public `scrape_recipe` with the approved source URL and replace only the internal network response with the fixture and final URL. This covers registry dispatch, final source URL, adapter parsing, and result mapping. The project owner removed the live-page gate and accepts that tests will not detect website drift.

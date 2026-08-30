@@ -975,20 +975,26 @@ Phase 24.
 
 **Implement**
 
-- Define one typed `scrape_recipe(url)` adapter contract in `obiad-data`.
-- Return source URL, title, raw Ingredient lines, declared finished mass or volume, serving count, and preparation instructions.
-- Represent each absent optional field explicitly.
-- Register adapters by supported hostname and URL pattern.
-- Prefer complete schema.org Recipe JSON-LD.
+- Define one typed `scrape_recipe(url)` adapter contract in `obiad-data` for trusted agent- or developer-selected public recipe URLs. Do not expose it through the application or an end-user API.
+- Return one frozen `ScrapedRecipe` record with the final effective source URL, title, ordered raw Ingredient lines, optional declared yield, optional serving count, and ordered preparation instructions.
+- Represent declared yield as an optional frozen record with a `Decimal` value and unit `g` or `ml`. Normalize exact g, kg, ml, and l values without loss.
+- Represent serving count as an optional positive `Decimal`. For a declared range, use its lower bound. Return a structural error for another present value that cannot be parsed.
+- Represent each absent optional field as `None`.
+- Register adapters by the final URL's parsed hostname and URL pattern. Return a structural error when zero or multiple adapters match.
+- Use one `RecipeStructureError` with stable code `missing_expected_structure`, the requested URL, the optional adapter name, and a concise diagnostic when no adapter matches or expected structure is absent. Never return partial recipe data.
+- Use a separate typed `RecipeFetchError` for network and HTTP failures.
+- Support `https://kuchnia-domowa.pl/dania-glowne/481-pierogi-ruskie` through hostname `kuchnia-domowa.pl` and recipe-article pattern `^/[^/]+/[1-9][0-9]*-[^/]+/?$`.
+- Prefer exactly one complete schema.org Recipe JSON-LD object. Return a structural error when multiple complete Recipe objects are present.
 - Use documented embedded application state when JSON-LD is incomplete.
 - Use site-specific DOM selectors when structured data is insufficient.
 - Use Python Playwright when the supported page requires JavaScript rendering.
-- Return a stable structural error when no registered adapter supports the URL or an expected structure is absent.
-- Have the discovery agent extract one public Pierogi ruskie recipe and record the successful tools, queries, sections, selectors, and edge cases in a handoff.
+- Have the discovery agent record the successful tools, queries, sections, selectors, rendering needs, access-policy findings, and edge cases in `data/docs/recipe-adapters/kuchnia-domowa.md`.
 - Have a second agent implement the adapter from that handoff.
+- Save one sanitized source-derived fixture at `data/tests/fixtures/kuchnia_domowa/pierogi_ruskie.html`. Keep the exact consumed Recipe JSON-LD and remove scripts, analytics, navigation, comments, and unrelated page content.
+- Call public `scrape_recipe` in integration tests with the approved source URL and replace only the internal network response with the committed fixture and final URL.
 - Prefer supported websites during later discovery. Add a new adapter only when supported websites have no suitable recipe.
 - Do not support authenticated, blocked, or prohibited pages.
-- Do not store the handoff's page content, HTML, source text, or checksum as production data.
+- Do not require a permission or license check for the approved fixture. Store no other source HTML, page text, source instruction text, source-content checksum, or production record.
 
 **Requirements that become testable**
 
@@ -996,11 +1002,11 @@ None. This phase adds production-data acquisition tooling.
 
 **Phase gate**
 
-Run the `obiad-data` adapter checks. Run `scrape_recipe` against the selected live Pierogi ruskie URL. Verify the returned title, every Ingredient line, declared yield, serving count, instruction order, and source URL against the visible page. Break one expected selector or structured-data path and verify a structural error rather than partial data. Verify that no source content or checksum is written to the repository.
+Run the `obiad-data` adapter checks. Run public `scrape_recipe` integration against the committed sanitized Pierogi ruskie fixture with only the internal network response replaced. Verify the returned title, every Ingredient line, absent declared yield, absent serving count, instruction order, and final source URL against the fixture. Remove or change one expected Recipe JSON-LD path and verify `missing_expected_structure` rather than partial data. Verify that the repository contains only the approved sanitized source fixture and no other source HTML, page text, source instruction text, or source-content checksum.
 
 **Review stop**
 
-Read the Phase 25 diff. Approve the adapter interface, live extraction, failure contract, and agent handoff before Phase 26 tasks are generated.
+Read the Phase 25 diff. Approve the adapter interface, fixture-backed extraction, failure contract, and agent handoff before Phase 26 tasks are generated.
 
 ## Phase 26 — Ingredient catalog vertical slice
 
