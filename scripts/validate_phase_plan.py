@@ -7,6 +7,7 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -460,7 +461,7 @@ def validate_identifiers_and_dependencies(tasks: list[Task], errors: list[str]) 
         else:
             task_by_id[task.number] = task
 
-    for previous, current in zip(tasks, tasks[1:]):
+    for previous, current in pairwise(tasks):
         if current.number <= previous.number:
             errors.append(
                 f"task IDs are not growing at line {current.line}: {current.number} follows {previous.number}"

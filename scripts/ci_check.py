@@ -41,9 +41,7 @@ def run_checked(
     )
 
 
-def run_no_output_check(
-    command: list[str], *, cwd: Path, failure: str
-) -> None:
+def run_no_output_check(command: list[str], *, cwd: Path, failure: str) -> None:
     """Run a command and fail when it reports matching files."""
 
     result = run_checked(command, cwd=cwd, capture_output=True)
@@ -242,11 +240,12 @@ def run_e2e_checks() -> None:
 def run_ci_checks(
     *, backend: bool = False, frontend: bool = False, e2e: bool = False
 ) -> None:
-    """Run selected CI checks, or every check when no selection is provided."""
+    """Run the data-boundary check and selected CI checks."""
+
+    run_checked([sys.executable, "scripts/check_data_boundary.py"])
 
     if not any((backend, frontend, e2e)):
         backend = frontend = e2e = True
-
     if frontend:
         run_frontend_checks()
     if backend:
