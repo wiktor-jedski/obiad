@@ -13,6 +13,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APPLICATION_HTML = "frontend/index.html"
+APPROVED_RECIPE_FIXTURE = "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html"
+
 
 PROHIBITED_ARTIFACTS = (
     ("production Ingredient record", re.compile(r"(?:^|/)ingredients/[^/]+\.json$")),
@@ -41,11 +43,14 @@ def tracked_paths(repository: Path) -> list[str]:
     return [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
 
-def prohibited_artifacts(paths: Iterable[str]) -> list[tuple[str, str]]:
+def prohibited_artifacts(
+    paths: Iterable[str],
+    allowed_source_html: str | None = None,
+) -> list[tuple[str, str]]:
     """Return each tracked path together with its prohibited artifact type."""
     violations: list[tuple[str, str]] = []
     for path in paths:
-        if path == APPLICATION_HTML:
+        if path in (APPLICATION_HTML, allowed_source_html):
             continue
         for artifact, pattern in PROHIBITED_ARTIFACTS:
             if pattern.search(path):
@@ -94,8 +99,15 @@ def check(repository: Path) -> int:
     """Report prohibited tracked artifacts in the application boundary."""
     violations: list[tuple[Path, str, str]] = []
     for tree in repositories_to_check(repository):
+        allowed_source_html = (
+            APPROVED_RECIPE_FIXTURE if tree == repository / "data" else None
+        )
         violations.extend(
-            (tree, path, artifact) for path, artifact in prohibited_artifacts(tracked_paths(tree))
+            (tree, path, artifact)
+            for path, artifact in prohibited_artifacts(
+                tracked_paths(tree),
+                allowed_source_html,
+            )
         )
     if violations:
         for tree, path, artifact in violations:
