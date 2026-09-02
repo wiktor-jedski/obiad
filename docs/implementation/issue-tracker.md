@@ -419,3 +419,29 @@ Status: ready-for-agent
 - Store the reusable operational handoff at `data/docs/recipe-adapters/kuchnia-domowa.md`. Record tools, queries, structured-data paths, rendering needs, access-policy findings, and edge cases without copying page content, Ingredient lines, instructions, HTML, or a source-content checksum.
 - Store one sanitized source-derived HTML fixture at `data/tests/fixtures/kuchnia_domowa/pierogi_ruskie.html`. Retain the exact consumed Recipe JSON-LD and remove scripts, analytics, navigation, comments, and unrelated content. The project owner explicitly does not require a permission or license check and accepts the redistribution risk.
 - Integration tests call public `scrape_recipe` with the approved source URL and replace only the internal network response with the fixture and final URL. This covers registry dispatch, final source URL, adapter parsing, and result mapping. The project owner removed the live-page gate and accepts that tests will not detect website drift.
+
+## ISSUE-025: Phase 26 Ingredient identity and conversion decisions
+
+Type: Architecture and product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-09-01. Add optional `conversions` to an Ingredient. Each entry contains `unit`, optional `size`, positive finite `quantity_g`, and one absolute HTTP or HTTPS `source` URL. Phase 26 permits only `tablespoon` with no size and `item` with required size `large`. Reject duplicate or otherwise conflicting entries for the same unit and size.
+- Preserve direct grams without conversion. Convert millilitres only with the Ingredient's stored sourced density. Convert a household quantity only with the exact stored sourced conversion. Reject more than one applicable path. Do not convert a household unit to millilitres, use a universal household-volume table, or apply a universal density.
+- Use exactly six canonical Ingredients: ID 1 `Wheat flour type 500` / `Mąka pszenna typ 500`; ID 2 `Water` / `Woda`; ID 3 `Raw potatoes` / `Surowe ziemniaki`; ID 4 `Semi-fat twaróg` / `Twaróg półtłusty`; ID 5 `Yellow onion` / `Cebula żółta`; and ID 6 `Rapeseed oil` / `Olej rzepakowy`. No prior production Ingredient ID exists in Git history.
+- Treat the measured salt and pepper as seasonings outside the Ingredient set. Exclude the optional onion and oil, sour cream, and natural yoghurt serving accompaniments. These choices do not enter Phase 26 quantity conversion or Macro Profile coverage.
+- Permit a sourced all-zero Macro Profile for a production Ingredient such as water. Keep every Ingredient nutrient on a 100 g basis. Do not change the application Food Object rule that requires at least one positive macronutrient.
+- Store each reviewed recipe term in optional `recipe_terms` on the Ingredient that it identifies. Normalize terms with Unicode NFKC, case folding, and whitespace collapse; reject empty normalized terms, duplicate normalized terms on one record, and terms claimed by different Ingredient IDs. Build the normalized term-to-ID lookup only in memory during catalog load. Do not store or generate a global recipe-term map, and do not permit a run-local override.
+- Query only the first Open Food Facts page and first USDA page for each exact kind. Attempt both providers. Permit one provider to fail when the other returns at least one candidate, but return a typed visible warning for the failed provider. Permit an empty successful page. Fail when both providers fail or the combined result has no candidate. Keep warnings and provider details out of production records.
+- Read `USDA_API_KEY` from `data/.env` with `python-dotenv` for production-authoring commands. Add `.env*` to `data/.gitignore`. Never commit or log the key. The project owner will add the local key after this planning session.
+- For `P26-G2`, the Phase 26 acceptance reviewer compares each committed Ingredient record directly with its selected public source URL and records approval in the Phase 26 review. Do not duplicate mutable nutrition values in committed test code or another review matrix.
+
+### Actions needed
+
+- Task 76 must revise ARCH-013 and the production Ingredient validator for sourced household conversions and all-zero Ingredient Macro Profiles. It must not change the application Food Object aggregate schema or runtime catalog.
+- The project owner must add `USDA_API_KEY` to `data/.env` before the real task 77 and task 79 provider searches.
+
+### Testing coverage deviations
+
+- Do not run live Open Food Facts or USDA calls in committed integration tests. Provider availability, mutable results, and the rule that upstream downloads stay outside Git make live CI nondeterministic. Integration tests use minimal generated provider responses through the public acquisition boundary. They verify schema, stable identity rules, provider completion and warning behavior, source retention, nutrient normalization, conversion provenance, and gram conversion. The explicit Phase 26 acceptance review verifies each mutable source value directly.

@@ -45,6 +45,8 @@ def tracked_paths(repository: Path) -> list[str]:
 
 def prohibited_artifacts(
     paths: Iterable[str],
+    *,
+    allow_ingredient_records: bool = False,
     allowed_source_html: str | None = None,
 ) -> list[tuple[str, str]]:
     """Return each tracked path together with its prohibited artifact type."""
@@ -53,6 +55,8 @@ def prohibited_artifacts(
         if path in (APPLICATION_HTML, allowed_source_html):
             continue
         for artifact, pattern in PROHIBITED_ARTIFACTS:
+            if artifact == "production Ingredient record" and allow_ingredient_records:
+                continue
             if pattern.search(path):
                 violations.append((path, artifact))
                 break
@@ -106,7 +110,8 @@ def check(repository: Path) -> int:
             (tree, path, artifact)
             for path, artifact in prohibited_artifacts(
                 tracked_paths(tree),
-                allowed_source_html,
+                allow_ingredient_records=tree == repository / "data",
+                allowed_source_html=allowed_source_html,
             )
         )
     if violations:
