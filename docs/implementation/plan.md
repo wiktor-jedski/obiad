@@ -1027,11 +1027,15 @@ Phase 25.
 - Store only the source URL. Do not store the provider type, upstream record ID, product name, or brand.
 - Use a direct available-carbohydrate value when present.
 - For USDA carbohydrate by difference, subtract dietary fibre and reject an invalid result. Do not store the calculation method.
-- Define versioned documented defaults for ambiguous recipe terms such as flour or oil.
-- Store an optional `density_g_per_ml` and its source URL when a recipe needs volume-to-mass conversion.
-- Search for and store an Ingredient-specific household-unit conversion when a direct gram quantity is absent.
-- Do not use a universal density or an unstored approximation.
-- Let agent-found quantity conversions enter production automatically when required fields and numeric bounds validate.
+- Store each reviewed recipe term in optional `recipe_terms` on the Ingredient that it identifies.
+- Normalize recipe terms with Unicode NFKC, case folding, and whitespace collapse. Build the reverse term-to-ID index only in memory during catalog load, and reject normalized aliases claimed by different Ingredients.
+- Do not store or generate a global recipe-term map. Use no RAG or database resolver.
+- Store an optional sourced Ingredient density when a recipe needs volume-to-mass conversion.
+- Search for and store an Ingredient-specific direct conversion when a direct gram quantity is absent.
+- Treat each stored direct conversion as an exact data-defined `(unit, optional size)` key. Use no fixed unit or size whitelist.
+- For an `item` request with no size, use `medium` before exact conversion lookup. Do not infer a size for another unit.
+- Do not use a universal density, household-volume table, item-mass table, or unstored approximation.
+- Let agent-found quantity conversions enter production automatically when required fields, exact-key uniqueness, source URLs, and numeric bounds validate.
 - Create the complete Ingredient set required by the selected Pierogi ruskie recipe.
 - Keep upstream downloads outside Git.
 
@@ -1041,11 +1045,11 @@ None. Runtime Ingredient access remains out of scope.
 
 **Phase gate**
 
-Run the `obiad-data` validation command for the complete Pierogi ruskie Ingredient set. For every Ingredient, verify the exact kind, names, stable ID, source URL, and Macro Profile against the selected source. For every volume or household quantity, verify a stored sourced density or direct conversion. Prove that each recipe quantity converts to grams without an unstored default.
+Run the `obiad-data` validation command for the complete Pierogi ruskie Ingredient set. For every Ingredient, verify the exact kind, names, stable ID, source URL, and Macro Profile against the selected source. For every volume or household quantity, verify a stored sourced density or direct conversion. Prove that each recipe quantity converts to grams without an unstored default. Prove that data-defined unit tokens with absent or present sizes validate and convert through exact Ingredient-specific entries. Prove that invalid conversion shapes, duplicate exact keys, missing evidence, competing paths, and universal fallbacks fail without a gram result. Prove that an omitted `item` size uses only the exact sourced `medium` conversion. Prove that local recipe terms validate and that duplicate normalized or cross-Ingredient aliases fail. Prove that all migrated Pierogi ruskie terms resolve to their unchanged stable Ingredient IDs and that an unmapped term fails. Prove that no committed or generated global reverse index remains and that the application/data boundary checks pass.
 
 **Review stop**
 
-Read the Phase 26 diff. Approve every Ingredient identity, source, conversion, density, and default rule before Phase 27 tasks are generated.
+Read the Phase 26 diff. Approve every Ingredient identity, source, conversion, density, alias, and default rule before Phase 27 tasks are generated.
 
 ## Phase 27 — Meal compiler vertical slice
 
