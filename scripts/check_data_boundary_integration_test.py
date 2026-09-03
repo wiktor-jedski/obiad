@@ -24,6 +24,7 @@ def initialized_repository() -> Iterator[Path]:
         data_origin.mkdir()
         _run("git", "init", data_origin)
         _write(data_origin / "ingredients/1-wheat-flour.json", "{}\n")
+        _write(data_origin / "meals/1-pierogi.json", "{}\n")
         _write(
             data_origin / "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html", "fixture\n"
         )
@@ -93,8 +94,8 @@ def _assert_data_rejects(root: Path, path: str, artifact: str) -> None:
     assert f"data: {path}: prohibited {artifact}" in result.stderr, result.stderr
 
 
-def test_permits_ingredients_only_in_initialized_data() -> None:
-    """Accept the Ingredient and approved recipe fixture in initialized data."""
+def test_permits_authoring_records_only_in_initialized_data() -> None:
+    """Accept Ingredient and Meal records only in initialized production data."""
     with initialized_repository() as root:
         _assert_passes(root)
         _assert_rejects(root, "ingredients/1-wheat-flour.json", "production Ingredient record")
@@ -118,7 +119,6 @@ def test_rejects_application_artifacts() -> None:
 def test_rejects_prohibited_data_artifacts() -> None:
     """Reject every still-prohibited artifact inside initialized data."""
     cases = (
-        ("meals/1-pierogi.json", "production Meal record"),
         ("cache/usda.json", "Open Food Facts or USDA download"),
         ("catalogs/catalog.json", "generated aggregate catalog"),
         ("source.html", "source HTML"),
@@ -132,7 +132,7 @@ def test_rejects_prohibited_data_artifacts() -> None:
 
 def main() -> int:
     """Run integration coverage without an external test framework."""
-    test_permits_ingredients_only_in_initialized_data()
+    test_permits_authoring_records_only_in_initialized_data()
     test_rejects_application_artifacts()
     test_rejects_prohibited_data_artifacts()
     print("Data boundary integration test passed.")

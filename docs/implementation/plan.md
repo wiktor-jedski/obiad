@@ -1076,6 +1076,8 @@ Phase 26.
 - Store `declared_finished_mass`, `declared_finished_volume`, or `summed_input_mass` as the required yield-method enum.
 - Use a 100 ml Nutrition Basis only when the recipe declares finished volume. Otherwise use 100 g.
 - Derive one Serving as finished yield divided by declared serving count.
+- Divide the Decimal finished yield by the positive declared serving count. Quantize the result to six fractional decimal places with Decimal `ROUND_HALF_UP`, store the finite decimal in `g` or `ml`, and accept nonterminating divisions without an exact-representability rule.
+- Send that finite stored decimal through the existing `float64` catalog-storage and browser-projection paths. Do not promise arbitrary end-to-end precision.
 - Store no Serving when the recipe has no serving count.
 - Export stable Food Object IDs, localized names, Macro Profiles, explicit basis units, optional Servings, optional source URLs, and Food Family membership.
 - Validate every authoring record before calculation and the complete aggregate before output.
