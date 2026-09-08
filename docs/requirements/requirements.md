@@ -935,10 +935,12 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-091 — Aggregate catalog interface
 
-**Statement:** The application-owned aggregate catalog interface shall require a positive integer schema version, the full production-data Git commit ID, Food Families, and Food Objects. Each Food Object shall contain its stable ID, localized names, Macro Profile, and Nutrition Basis and may contain one Serving, one source URL, and one Food Family ID.
+**Statement:** The source-agnostic application-owned aggregate catalog interface shall require exactly `schemaVersion: 1`, at least one Food Object in `foodObjects`, and zero or more Food Families in `foodFamilies`. It shall reject `dataCommit`, other provenance fields, and catalog-kind discriminators. Each Food Object shall contain its stable ID, localized names, Macro Profile, and Nutrition Basis and may contain one Serving, one source URL, one Food Family ID, and an optional nonempty string `imageKey`.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog-schema validation: Empty and complete synthetic catalogs succeed. Invalid metadata, records, references, or unknown fields fail without writing generated output. |
+| Verification | Catalog-schema validation: Version `1` synthetic catalogs with at least one Food Object succeed, including catalogs with no Food Families and with omitted or valid nonempty `imageKey`. Other schema versions, empty Food Object arrays, empty or nonstring `imageKey`, `dataCommit`, other provenance fields, catalog-kind discriminators, invalid records or references, and unknown fields fail without writing generated output. |
+
+**Notes:** Phase 30 release verification and the Phase 31 pinned-submodule launcher retain ownership of production provenance and attribution outside the generic catalog contract.
