@@ -397,7 +397,7 @@ Status: ready-for-agent
 - A Meal contains `id`, `names`, ordered `composition` entries, ordered `steps`, `yield`, and `nutrition_basis`. Each composition entry contains one `ingredient_id` and retained `quantity_g`; duplicate Ingredient IDs fail. Steps are short agent-authored text and can mention salt, dry herbs, and dry spices that composition and macro calculation omit. Meal records have no separate omission list or cooking-operation enum.
 - Yield methods are `declared_finished_mass`, `declared_finished_volume`, and `summed_input_mass`. The yield object contains `method` and `value`. `nutrition_basis` is `g` or `ml`. Optional `serving` uses the Nutrition Basis unit. Optional `source` is one URL string. Optional `food_family_id` references one entry in `food_families.json`.
 - `food_families.json` contains one array of positive opaque family IDs and localized names. Each Meal belongs to zero or one Food Family.
-- The application catalog contains positive integer `schemaVersion`, full `obiad-data` Git commit `dataCommit`, `foodFamilies`, and `foodObjects`. Each Food Object contains `id`, `names`, `macroProfile`, and `nutritionBasis`, with optional `serving`, `source`, and `foodFamilyId`. The catalog has no record revision, license-notice, catalog-version, or release-download-URL field.
+- As amended by resolved ISSUE-027, the source-agnostic application catalog contains exactly `schemaVersion: 1`, zero or more `foodFamilies`, and at least one `foodObjects` entry. Each Food Object contains `id`, `names`, `macroProfile`, and `nutritionBasis`, with optional `serving`, `source`, `foodFamilyId`, and nonempty string `imageKey`. The catalog has no `dataCommit`, other provenance field, catalog-kind discriminator, record revision, license notice, catalog version, or release download URL.
 - Data-source and license credit appears only in the application Data Sources footer. It is not stored in the aggregate catalog.
 
 ### Assumptions
@@ -488,7 +488,7 @@ Status: ready-for-agent
 - Resolved with the project owner on 2026-09-08. Remove `dataCommit` from the generic catalog contract. A required Git commit would couple third-party catalogs to Obiad's production-data workflow. Phase 30 release verification and the Phase 31 pinned-submodule launcher own production provenance and attribution. `catalogload` does not accept or persist catalog provenance metadata.
 - Resolved with the project owner on 2026-09-08. Accept exactly `schemaVersion: 1`. Reject every other version before database mutation.
 - Resolved with the project owner on 2026-09-08. Require at least one Food Object and permit zero Food Families. The generic loader accepts the Phase 27 one-Meal artifact. The Phase 31 production launcher separately requires at least ten accepted Meals before database mutation.
-- Resolved with the project owner on 2026-09-08. `catalogload` accepts one required catalog-file path, connects through `OBIAD_SCHEMA_OWNER_DATABASE_URL`, and uses the exact advisory-lock key shared with `dbsetup`. The connection variable selects the target PostgreSQL database; it is not the catalog location.
+- Resolved with the project owner on 2026-09-08. `catalogload` accepts one required catalog-file path, connects through `OBIAD_SCHEMA_OWNER_DATABASE_URL`, and uses the exact advisory-lock key `0x0B1AD0001` shared with `dbsetup`. The connection variable selects the target PostgreSQL database; it is not the catalog location.
 
 ### Actions needed
 
