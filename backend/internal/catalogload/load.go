@@ -112,6 +112,7 @@ func decode(body []byte) (catalog, error) {
 		return c, errors.New("invalid Unicode")
 	}
 	d := json.NewDecoder(bytes.NewReader(body))
+	d.UseNumber()
 	if err := checkJSON(d, "catalog"); err != nil {
 		return c, err
 	}
@@ -215,6 +216,16 @@ func checkJSON(d *json.Decoder, kind string) error {
 	}
 	if text, ok := token.(string); ok && strings.ContainsRune(text, 0) {
 		return errors.New("NUL is not supported in catalog strings")
+	}
+	if number, ok := token.(json.Number); ok && (kind == "protein" || kind == "availableCarbohydrate" || kind == "fat") {
+		// Check the exact mantissa before float64 conversion can underflow to negative zero.
+		mantissa := number.String()
+		if exponent := strings.IndexAny(mantissa, "eE"); exponent >= 0 {
+			mantissa = mantissa[:exponent]
+		}
+		if strings.HasPrefix(mantissa, "-") && strings.Trim(mantissa, "-0.") != "" {
+			return fmt.Errorf("%s: negative Macro Profile value", kind)
+		}
 	}
 	switch token {
 	case json.Delim('{'):

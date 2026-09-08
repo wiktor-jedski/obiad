@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -52,5 +53,24 @@ func TestRunValidatesCompleteCatalogBeforeReplacement(t *testing.T) {
 	}
 	if after != before {
 		t.Fatal("invalid catalog changed the previous complete snapshot")
+	}
+}
+
+func TestRunRejectsNegativeMacrosBeforeConnection(t *testing.T) {
+	for _, field := range []string{"protein", "availableCarbohydrate", "fat"} {
+		for _, number := range []string{"-1e-400", "-2E-324", "-0." + strings.Repeat("0", 400) + "1"} {
+			t.Run(field+"/"+number, func(t *testing.T) {
+				body := `{"schemaVersion":1,"foodFamilies":[],"foodObjects":[{"id":1,"names":{"en":"Meal","pl":"Posiłek"},"nutritionBasis":"g","macroProfile":{"protein":1,"availableCarbohydrate":1,"fat":1}}]}`
+				body = strings.Replace(body, `"`+field+`":1`, `"`+field+`":`+number, 1)
+				path := filepath.Join(t.TempDir(), "catalog.json")
+				if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				err := Run(context.Background(), "not-a-database-url", path)
+				if err == nil || !strings.HasPrefix(err.Error(), "validate catalog:") {
+					t.Fatalf("negative %s reached connection: %v", field, err)
+				}
+			})
+		}
 	}
 }
