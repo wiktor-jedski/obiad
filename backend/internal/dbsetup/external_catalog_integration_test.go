@@ -62,7 +62,20 @@ func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
 	ctx := context.Background()
 	const insert = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, source)
 		VALUES (1, '{"en":"Meal","pl":"Posiłek"}', 'g', 1, 0, 0, $1)`
-	for _, source := range []any{nil, "https://example.org/recipe?q=one%20two#step", "http://localhost:8080/recipe", "https://[::1]:8080/recipe", "urn:example:recipe"} {
+	for _, source := range []any{
+		nil,
+		"https://example.org/recipe?q=one%20two#step",
+		"http://localhost:8080/recipe",
+		"https://[::1]:8080/recipe",
+		"https://[2001:db8:0:1:2:3:4:5]/recipe",
+		"https://[::ffff:192.0.2.1]/recipe",
+		"https://user:password@[2001:db8::1]:65535/recipe",
+		"http://example.org:1/recipe",
+		"https://example.org:65535/recipe",
+		"https://example.org:00065535/recipe",
+		"https://example.org:/recipe",
+		"urn:example:recipe",
+	} {
 		if _, err := owner.Exec(ctx, insert, source); err != nil {
 			t.Fatalf("valid source %v: %v", source, err)
 		}
@@ -77,6 +90,29 @@ func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
 	for _, source := range []string{"", "relative/path", "//example.org/recipe", "https://", "https:///recipe", "https://:", "https://example.org:bad/recipe", "https://example.org/a b", "https://example.org/%ZZ", "https://example.org/%2", "https://example.org/\nrecipe", "https://example.org/<recipe>"} {
 		_, err := owner.Exec(ctx, insert, source)
 		wantSQLState(t, err, "23514")
+	}
+	for _, source := range []string{
+		"https://[1]/recipe",
+		"https://[:::]/recipe",
+		"https://[192.0.2.1]/recipe",
+		"https://[1:2:3:4:5:6:7:8:9]/recipe",
+		"https://[2001:db8::1::2]/recipe",
+		"https://[::ffff:192.0.2.999]/recipe",
+		"https://[::1/recipe",
+		"https://::1]/recipe",
+		"https://example.org:0/recipe",
+		"http://example.org:65536/recipe",
+		"https://[::1]:65536/recipe",
+		"https://user:password@[::1]:0/recipe",
+		"https://example.org:999999999999999999999999999999/recipe",
+	} {
+		t.Run(source, func(t *testing.T) {
+			_, err := owner.Exec(ctx, insert, source)
+			wantSQLState(t, err, "23514")
+		})
+		if _, err := owner.Exec(ctx, "DELETE FROM food_objects"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	const insertFamily = `INSERT INTO food_families (id, names) VALUES (1, $1::jsonb)`
 	for _, names := range []string{`{}`, `{"en":"Meal"}`, `{"en":"","pl":"Posiłek"}`, `{"en":null,"pl":"Posiłek"}`, `{"en":"Meal","pl":42}`, `[]`, `{"en":"Meal","pl":"Posiłek","de":false}`, `{"en":"Meal","pl":"Posiłek","de":""}`} {

@@ -302,14 +302,14 @@ func TestFoodObjectNutritionBasis(t *testing.T) {
 
 	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0)`
 
-	for id, state := range map[int]string{50: "g", 51: "ml"} {
-		if _, err := conn.Exec(ctx, insertFoodObject, id, fmt.Sprintf(`{"en": "S%d", "pl": "P%d"}`, id, id), state); err != nil {
-			t.Fatalf("valid state %q insert failed: %v", state, err)
+	for id, basis := range map[int]string{50: "g", 51: "ml"} {
+		if _, err := conn.Exec(ctx, insertFoodObject, id, fmt.Sprintf(`{"en": "S%d", "pl": "P%d"}`, id, id), basis); err != nil {
+			t.Fatalf("valid Nutrition Basis %q insert failed: %v", basis, err)
 		}
 	}
 
-	for _, state := range []string{"solid", "liquid", "kg", "G", "ML", "g ", " ml", ""} {
-		_, err := conn.Exec(ctx, insertFoodObject, 52, `{"en": "Bad", "pl": "Zly"}`, state)
+	for _, basis := range []string{"solid", "liquid", "kg", "G", "ML", "g ", " ml", ""} {
+		_, err := conn.Exec(ctx, insertFoodObject, 52, `{"en": "Bad", "pl": "Zly"}`, basis)
 		wantSQLState(t, err, "23514")
 	}
 

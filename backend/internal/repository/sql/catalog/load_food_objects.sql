@@ -4,7 +4,7 @@
 -- statement text is never repeated inline in repository Go files.
 --
 -- The read returns the complete ARCH-013 Food Object row set: stable ID,
--- localized names, Physical State, Macro Profile, optional Serving, optional
+-- localized names, Nutrition Basis, Macro Profile, optional Serving, optional
 -- Food Family reference, and optional image key, in ascending stable ID
 -- This statement has no dynamic values. If a catalog query later has dynamic
 -- values, the loader must bind them through pgx parameters and must not
