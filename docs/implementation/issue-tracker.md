@@ -470,3 +470,31 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Do not call the live recipe page in committed Phase 27 integration tests. Reuse the sanitized fixture and final source URL through public `scrape_recipe`, as approved in ISSUE-024, because live website state is mutable. The clean-checkout phase gate uses only committed authoring records and the application-owned aggregate schema.
+
+## ISSUE-027: Phase 28 external catalog loader decisions
+
+Type: Architecture and product decision
+Status: ready-for-agent
+
+### Clarifications
+
+- `api/catalog.schema.json` and ARCH-013 omit `imageKey`, but the current application-owned dummy catalog has four approved image keys that remain observable through the Substitute API. The Phase 28 plan requires one catalog interface and the same stable IDs and test-designed values. Decide whether the application catalog adds an optional `imageKey` field for dummy and production inputs or the cutover removes those keys and revises the affected API and acceptance evidence.
+- The aggregate contract defines `dataCommit` as the full `obiad-data` Git commit, while dummy setup and CI must not initialize or read `data/`. Decide the validated 40-character provenance value for `backend/catalog/dummy.json` and whether catalog metadata is persisted in PostgreSQL or used only during pre-mutation validation.
+- The aggregate schema accepts every positive `schemaVersion`, but Phase 27 exports version `1` and Phase 28 requires invalid-schema rejection. Decide whether `catalogload` accepts exactly version `1` and define the stable failure for every other version.
+- Define an incomplete catalog at the loader boundary. The Phase 28 gate requires the one-Meal production artifact to load, while REQ-071 and Phase 31 require at least ten production Meals before production startup. Decide whether the generic loader accepts one Food Object, whether it accepts empty arrays, and confirm that the ten-Meal minimum belongs only to the Phase 31 production launcher before database mutation.
+- Define the `catalogload` command interface: how it receives the catalog file, which owner-credential environment variable it uses, and whether it shares the exact migration advisory-lock key so `dbsetup` and catalog replacement cannot mutate the same database concurrently.
+
+- Resolved with the project owner on 2026-09-08. Add optional nonempty `imageKey` to the generic application catalog Food Object. Preserve the four approved dummy image keys. Production and third-party catalogs can omit it.
+- Resolved with the project owner on 2026-09-08. Remove `dataCommit` from the generic catalog contract. A required Git commit would couple third-party catalogs to Obiad's production-data workflow. Phase 30 release verification and the Phase 31 pinned-submodule launcher own production provenance and attribution. `catalogload` does not accept or persist catalog provenance metadata.
+- Resolved with the project owner on 2026-09-08. Accept exactly `schemaVersion: 1`. Reject every other version before database mutation.
+- Resolved with the project owner on 2026-09-08. Require at least one Food Object and permit zero Food Families. The generic loader accepts the Phase 27 one-Meal artifact. The Phase 31 production launcher separately requires at least ten accepted Meals before database mutation.
+- Resolved with the project owner on 2026-09-08. `catalogload` accepts one required catalog-file path, connects through `OBIAD_SCHEMA_OWNER_DATABASE_URL`, and uses the exact advisory-lock key shared with `dbsetup`. The connection variable selects the target PostgreSQL database; it is not the catalog location.
+
+### Actions needed
+
+- Task 92 must apply these resolved contracts to all affected requirement, architecture, aggregate-schema, and production-export sources before tasks 93 through 96 change migrations, loader code, dummy data, or setup orchestration.
+
+### Testing coverage deviations
+
+- Phase 28 adds no frontend component or Playwright scenario. The changed behavior is the offline catalog file, command, PostgreSQL transaction, privilege, and setup boundary. Real-PostgreSQL command integration tests and the aggregate CI command exercise those interfaces; the existing frontend and browser checks run as regression coverage through the dummy setup.
+- Phase 28 verifies REQ-071 for the complete dummy catalog but does not reject the one-Meal production artifact. The plan explicitly requires that artifact to load here. Phase 31 owns the production-launcher check that rejects fewer than ten accepted Meals before database mutation.
