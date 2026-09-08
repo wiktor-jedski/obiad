@@ -4,12 +4,14 @@ package testdb
 import (
 	"context"
 	"crypto/rand"
-	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -234,13 +236,17 @@ func connect(t testing.TB, dbURL string) *pgx.Conn {
 	return conn
 }
 
-//go:embed catalog.sql
-var catalogSQL string
-
-// LoadCatalog inserts the application-owned integration fixture into an empty schema.
-func LoadCatalog(t testing.TB, owner *pgx.Conn) {
+// LoadCatalog runs the real loader with the application-owned dummy catalog after migrations.
+func LoadCatalog(t testing.TB, ownerURL string) {
 	t.Helper()
-	if _, err := owner.Exec(context.Background(), catalogSQL, pgx.QueryExecModeSimpleProtocol); err != nil {
-		t.Fatalf("load integration catalog: %v", err)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate backend module")
+	}
+	root := filepath.Join(filepath.Dir(file), "..", "..")
+	cmd := exec.Command("go", "-C", root, "run", "./cmd/catalogload", "catalog/dummy.json")
+	cmd.Env = append(os.Environ(), "OBIAD_SCHEMA_OWNER_DATABASE_URL="+ownerURL)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("load dummy catalog: %v\n%s", err, output)
 	}
 }

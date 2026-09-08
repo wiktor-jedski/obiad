@@ -120,7 +120,7 @@ The Module reads no `data/` submodule file, production Ingredient, Meal authorin
 
 **Responsibility:** Apply database migrations before the offline catalog load and before Fiber starts.
 
-**Contract:** The explicit Go `dbsetup` command applies embedded versioned migrations in transactions. It uses `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. Setup then calls `catalogload` with one required catalog-file path under the same owner credential and lock policy. The connection variable selects the database, not the catalog location. Normal setup uses the application-owned dummy catalog with fixed IDs and test-designed nutrition values. The catalog has the source-agnostic ARCH-013 format. The request-serving process does not execute DDL or catalog writes. Dummy setup does not read the `data/` submodule.
+**Contract:** The explicit Go `dbsetup` command applies embedded versioned migrations in transactions. It uses `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. Setup then calls `catalogload` with one required catalog-file path under the same owner credential and lock policy. The connection variable selects the database, not the catalog location. Normal setup uses `backend/catalog/dummy.json`, the application-owned 38-row catalog with fixed IDs and test-designed nutrition values. The catalog has the source-agnostic ARCH-013 format. `scripts/setup_local_database.sh`, the local launcher, browser stacks, and disposable backend fixtures run migrations before the dummy loader. The request-serving process does not execute DDL or catalog writes. Dummy setup and aggregate CI do not read or initialize the `data/` submodule; the production artifact gate remains an explicit separate check.
 
 ## ARCH-008 — OpenAPI HTTP Interface
 
@@ -407,7 +407,7 @@ After a successful new Search or MORE! request with one or more result cards, fo
 
 **Responsibility:** Verify the architecture through its real interfaces and Adapters.
 
-**Behavior:** Backend integration tests create a disposable database in real PostgreSQL. They run the real setup command and exercise the real Catalog Loader, operation Modules, and Fiber Adapter. They drop the database after the run. CI provides PostgreSQL as a process.
+**Behavior:** Backend integration tests create a disposable database in real PostgreSQL. They run the real `dbsetup` command before `catalogload` with `backend/catalog/dummy.json`, then exercise the real Catalog Loader, operation Modules, and Fiber Adapter. Migration-only tests leave the catalog empty. Historical upgrade coverage compares all 38 loaded Food Object values with the immutable seed result and verifies that a second dummy load preserves both ordered catalog tables. The tests drop the database after the run. CI provides PostgreSQL as a process.
 
 Every frontend integration test uses the generated client, real Fiber backend, and real PostgreSQL. Normal tests share one seeded stack. Browser calculation tests verify the pure projection formulas, Serving base conversion, full precision, and display rounding boundaries. Database-outage tests use a separate Fiber process and disposable PostgreSQL database and run serially. Playwright verifies primary flows, accessibility, motion, responsive widths, focus, failure states, and visual states against the complete deployment.
 

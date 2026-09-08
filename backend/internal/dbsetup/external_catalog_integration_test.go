@@ -7,6 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/jackc/pgx/v5"
+
 	sqlfiles "obiad/backend/internal/repository/sql"
 	"obiad/backend/internal/testdb"
 )
@@ -35,6 +37,13 @@ func TestExternalCatalogUpgrade(t *testing.T) {
 	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 38 {
 		t.Fatalf("historical migrations produced %d Food Objects, want 38", n)
 	}
+	var historicalRows string
+	if err := owner.QueryRow(ctx, `SELECT jsonb_agg(
+		(to_jsonb(f) - 'physical_state') || jsonb_build_object(
+			'nutrition_basis', CASE physical_state WHEN 'solid' THEN 'g' ELSE 'ml' END)
+		ORDER BY id)::text FROM food_objects f`).Scan(&historicalRows); err != nil {
+		t.Fatal(err)
+	}
 	db.GrantRuntimeCatalogRead(t, owner)
 	runDBSetupCommand(t, db.OwnerURL)
 	for _, table := range []string{"food_objects", "food_families"} {
@@ -45,7 +54,7 @@ func TestExternalCatalogUpgrade(t *testing.T) {
 	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 6 {
 		t.Fatalf("upgrade recorded %d migrations, want 6", n)
 	}
-	testdb.LoadCatalog(t, owner)
+	testdb.LoadCatalog(t, db.OwnerURL)
 	runDBSetupCommand(t, db.OwnerURL)
 	runtime := connect(t, db.RuntimeURL)
 	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects WHERE nutrition_basis IN ('g', 'ml')"); n != 38 {
@@ -53,6 +62,46 @@ func TestExternalCatalogUpgrade(t *testing.T) {
 	}
 	_, err = runtime.Exec(ctx, "UPDATE food_objects SET source = 'https://example.org/recipe' WHERE id = 1")
 	wantSQLState(t, err, "42501")
+	fresh := testdb.NewDB(t)
+	runDBSetupCommand(t, fresh.OwnerURL)
+	freshOwner := connect(t, fresh.OwnerURL)
+	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("fresh migrations left %d catalog rows before loading", n)
+	}
+	testdb.LoadCatalog(t, fresh.OwnerURL)
+	for _, conn := range []*pgx.Conn{owner, freshOwner} {
+		var loaded string
+		if err := conn.QueryRow(ctx, `SELECT jsonb_agg(
+			to_jsonb(f) - 'source' - 'serving_unit' ORDER BY id)::text
+			FROM food_objects f`).Scan(&loaded); err != nil {
+			t.Fatal(err)
+		}
+		if loaded != historicalRows {
+			t.Fatalf("dummy catalog differs from the immutable historical seed\nloaded: %s\nhistorical: %s", loaded, historicalRows)
+		}
+	}
+	const snapshot = `SELECT jsonb_build_object(
+		'objects', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_objects f),
+		'families', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_families f))::text`
+	var before, after string
+	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	testdb.LoadCatalog(t, fresh.OwnerURL)
+	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("repeated dummy load changed ordered rows\nbefore: %s\nafter: %s", before, after)
+	}
+	if n := countRows(t, freshOwner, `SELECT count(*) FROM food_families
+		WHERE id = 1 AND names = '{"en":"Pizza","pl":"Pizza"}'::jsonb`); n != 1 {
+		t.Fatal("dummy catalog did not preserve the Pizza Food Family")
+	}
+	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects WHERE source IS NOT NULL"); n != 0 {
+		t.Fatal("dummy catalog added production sources")
+	}
+	t.Log("P28-G1/P28-G2: fresh and upgraded catalogs equal all 38 historical rows; repeated load preserves both ordered tables")
 }
 
 func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
