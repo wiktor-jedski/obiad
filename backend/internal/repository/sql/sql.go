@@ -22,3 +22,23 @@ var Setup embed.FS
 //
 //go:embed privileges/*.sql
 var Privileges embed.FS
+
+// LockCatalog serializes offline catalog replacement with migrations.
+//
+//go:embed catalog/lock_catalog.sql
+var LockCatalog string
+
+// ClearCatalog removes both parts of the previous snapshot.
+//
+//go:embed catalog/clear_catalog.sql
+var ClearCatalog string
+
+// InsertFamily stores one validated Food Family.
+//
+//go:embed catalog/insert_family.sql
+var InsertFamily string
+
+// InsertFoodObject stores one validated Food Object.
+//
+//go:embed catalog/insert_food_object.sql
+var InsertFoodObject string
