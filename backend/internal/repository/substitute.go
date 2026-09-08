@@ -237,7 +237,7 @@ func (f *FindSubstitutePage) Run(ctx context.Context, foodObjectID int32, pageIn
 				Carbohydrate: inputObject.carbohydrate,
 				Fat:          inputObject.fat,
 			},
-			BaseUnit: baseUnit(inputObject.physicalState),
+			BaseUnit: inputObject.nutritionBasis,
 			Serving:  inputObject.serving,
 		},
 		Items: make([]SubstituteItem, 0, end-start),
@@ -252,19 +252,11 @@ func (f *FindSubstitutePage) Run(ctx context.Context, foodObjectID int32, pageIn
 				Carbohydrate: r.object.carbohydrate,
 				Fat:          r.object.fat,
 			},
-			BaseUnit:          baseUnit(r.object.physicalState),
+			BaseUnit:          r.object.nutritionBasis,
 			Serving:           r.object.serving,
 			Similarity:        r.similarity,
 			SimilarityPercent: projectSimilarityPercent(r.similarity),
 		})
 	}
 	return page, nil
-}
-
-// baseUnit returns the base unit for state.
-func baseUnit(state physicalState) Unit {
-	if state == stateLiquid {
-		return UnitMillilitre
-	}
-	return UnitGram
 }

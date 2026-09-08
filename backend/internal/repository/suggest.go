@@ -304,10 +304,7 @@ func defaultQuantity(object foodObject) Quantity {
 	if object.serving != nil {
 		return Quantity{Value: 1, Unit: UnitServing}
 	}
-	if object.physicalState == stateLiquid {
-		return Quantity{Value: 100, Unit: UnitMillilitre}
-	}
-	return Quantity{Value: 100, Unit: UnitGram}
+	return Quantity{Value: 100, Unit: object.nutritionBasis}
 }
 
 // servingMaximum returns the largest whole serving count within the limit.
@@ -323,10 +320,7 @@ func servingMaximumIsRepresentable(serving float64) bool {
 
 // allowedQuantities returns editable units with the default first.
 func allowedQuantities(object foodObject) []AllowedQuantity {
-	baseUnit := UnitGram
-	if object.physicalState == stateLiquid {
-		baseUnit = UnitMillilitre
-	}
+	baseUnit := object.nutritionBasis
 	if object.serving == nil {
 		return []AllowedQuantity{{Unit: baseUnit, MaximumValue: maxBaseQuantity}}
 	}

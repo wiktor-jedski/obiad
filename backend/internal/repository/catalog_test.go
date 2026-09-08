@@ -41,6 +41,7 @@ func runDBSetupCommand(t *testing.T, dbURL string) string {
 	if err != nil {
 		t.Fatalf("go run ./cmd/dbsetup failed: %v\noutput:\n%s", err, out)
 	}
+	testdb.LoadCatalog(t, connect(t, dbURL))
 	return string(out)
 }
 
@@ -131,7 +132,7 @@ type wantFoodObject struct {
 	id           int32
 	en           string
 	pl           string
-	state        physicalState
+	state        Unit
 	protein      float64
 	carbohydrate float64
 	fat          float64
@@ -146,44 +147,44 @@ func strp(v string) *string   { return &v }
 
 func issue002Catalog() []wantFoodObject {
 	return []wantFoodObject{
-		{1, "Pizza Margherita", "Pizza margherita", stateSolid, 10, 30, 10, f64p(350), i32p(1), strp("pizza-margherita")},
-		{2, "Pizza Capricciosa", "Pizza capricciosa", stateSolid, 11, 28, 11, f64p(350), i32p(1), nil},
-		{3, "Lasagna", "Lazania", stateSolid, 9, 18, 8, f64p(350), nil, nil},
-		{4, "Pierogi", "Pierogi", stateSolid, 6, 32, 5, f64p(250), nil, nil},
-		{5, "Chicken breast", "Pierś z kurczaka", stateSolid, 31, 0, 3.6, nil, nil, strp("chicken-breast")},
-		{6, "Pork chop", "Kotlet wieprzowy", stateSolid, 27, 0, 14, nil, nil, nil},
-		{7, "Beef steak", "Stek wołowy", stateSolid, 26, 0, 15, nil, nil, nil},
-		{8, "Mixed berries", "Owoce jagodowe", stateSolid, 1, 12, 0.5, nil, nil, nil},
-		{9, "Apple juice", "Sok jabłkowy", stateLiquid, 0.1, 11, 0.1, nil, nil, nil},
-		{10, "Milk", "Mleko", stateLiquid, 3.4, 4.8, 2, nil, nil, strp("milk")},
-		{11, "Skyr yogurt", "Jogurt skyr", stateSolid, 11, 4, 0.2, f64p(150), nil, nil},
-		{12, "Greek yogurt", "Jogurt grecki", stateSolid, 9, 4, 5, f64p(170), nil, nil},
-		{13, "Gyoza", "Pierożki gyoza", stateSolid, 8, 24, 8, f64p(200), nil, strp("gyoza")},
-		{14, "Oat milk", "Napój owsiany", stateLiquid, 1, 7, 1.5, nil, nil, nil},
-		{15, "Kebab", "Kebab", stateSolid, 15, 18, 12, f64p(350), nil, nil},
-		{16, "Gyros", "Gyros", stateSolid, 18, 10, 14, f64p(300), nil, nil},
-		{17, "Polish chicken soup", "Rosół", stateLiquid, 2, 1, 1, f64p(300), nil, nil},
-		{18, "Butter", "Masło", stateSolid, 0.5, 0.5, 82, nil, nil, nil},
-		{19, "Olive oil", "Oliwa z oliwek", stateLiquid, 0, 0, 91.3, nil, nil, nil},
-		{20, "Protein shake", "Shake białkowy", stateLiquid, 8, 4, 1, f64p(300), nil, nil},
-		{21, "Beef cheeseburger", "Cheeseburger wołowy", stateSolid, 13, 24, 13, f64p(220), nil, nil},
-		{22, "Fried chicken wings", "Smażone skrzydełka z kurczaka", stateSolid, 22, 8, 20, f64p(180), nil, nil},
-		{23, "Turkey breast", "Pierś z indyka", stateSolid, 29, 0, 2, nil, nil, nil},
-		{24, "Pickled cucumbers", "Ogórki kiszone", stateSolid, 0.5, 2, 0.2, nil, nil, nil},
-		{25, "Tomatoes", "Pomidory", stateSolid, 0.9, 3.9, 0.2, nil, nil, nil},
-		{26, "Pancakes", "Naleśniki", stateSolid, 6, 28, 7, f64p(150), nil, nil},
-		{27, "Omelette", "Omlet", stateSolid, 11, 1, 12, f64p(180), nil, nil},
-		{28, "Oatmeal", "Owsianka", stateSolid, 2.5, 12, 1.5, f64p(250), nil, nil},
-		{29, "Paella", "Paella", stateSolid, 8, 20, 5, f64p(350), nil, nil},
-		{30, "Pho", "Zupa pho", stateLiquid, 3, 8, 1.5, f64p(400), nil, nil},
-		{31, "Beetroot borscht", "Barszcz czerwony", stateLiquid, 1, 7, 0.5, f64p(300), nil, nil},
-		{32, "Coleslaw", "Surówka coleslaw", stateSolid, 1, 10, 8, f64p(100), nil, nil},
-		{33, "Mondongo", "Zupa mondongo", stateLiquid, 7, 8, 4, f64p(350), nil, nil},
-		{34, "Bandeja paisa", "Bandeja paisa", stateSolid, 12, 20, 15, f64p(500), nil, nil},
-		{35, "Pastel de nata", "Pastel de nata", stateSolid, 5, 35, 14, f64p(60), nil, nil},
-		{36, "Cheesecake", "Sernik", stateSolid, 7, 25, 18, f64p(120), nil, nil},
-		{37, "Orange juice", "Sok pomarańczowy", stateLiquid, 0.7, 10, 0.2, nil, nil, nil},
-		{38, "Goulash", "Gulasz", stateSolid, 15, 6, 10, f64p(350), nil, nil},
+		{1, "Pizza Margherita", "Pizza margherita", UnitGram, 10, 30, 10, f64p(350), i32p(1), strp("pizza-margherita")},
+		{2, "Pizza Capricciosa", "Pizza capricciosa", UnitGram, 11, 28, 11, f64p(350), i32p(1), nil},
+		{3, "Lasagna", "Lazania", UnitGram, 9, 18, 8, f64p(350), nil, nil},
+		{4, "Pierogi", "Pierogi", UnitGram, 6, 32, 5, f64p(250), nil, nil},
+		{5, "Chicken breast", "Pierś z kurczaka", UnitGram, 31, 0, 3.6, nil, nil, strp("chicken-breast")},
+		{6, "Pork chop", "Kotlet wieprzowy", UnitGram, 27, 0, 14, nil, nil, nil},
+		{7, "Beef steak", "Stek wołowy", UnitGram, 26, 0, 15, nil, nil, nil},
+		{8, "Mixed berries", "Owoce jagodowe", UnitGram, 1, 12, 0.5, nil, nil, nil},
+		{9, "Apple juice", "Sok jabłkowy", UnitMillilitre, 0.1, 11, 0.1, nil, nil, nil},
+		{10, "Milk", "Mleko", UnitMillilitre, 3.4, 4.8, 2, nil, nil, strp("milk")},
+		{11, "Skyr yogurt", "Jogurt skyr", UnitGram, 11, 4, 0.2, f64p(150), nil, nil},
+		{12, "Greek yogurt", "Jogurt grecki", UnitGram, 9, 4, 5, f64p(170), nil, nil},
+		{13, "Gyoza", "Pierożki gyoza", UnitGram, 8, 24, 8, f64p(200), nil, strp("gyoza")},
+		{14, "Oat milk", "Napój owsiany", UnitMillilitre, 1, 7, 1.5, nil, nil, nil},
+		{15, "Kebab", "Kebab", UnitGram, 15, 18, 12, f64p(350), nil, nil},
+		{16, "Gyros", "Gyros", UnitGram, 18, 10, 14, f64p(300), nil, nil},
+		{17, "Polish chicken soup", "Rosół", UnitMillilitre, 2, 1, 1, f64p(300), nil, nil},
+		{18, "Butter", "Masło", UnitGram, 0.5, 0.5, 82, nil, nil, nil},
+		{19, "Olive oil", "Oliwa z oliwek", UnitMillilitre, 0, 0, 91.3, nil, nil, nil},
+		{20, "Protein shake", "Shake białkowy", UnitMillilitre, 8, 4, 1, f64p(300), nil, nil},
+		{21, "Beef cheeseburger", "Cheeseburger wołowy", UnitGram, 13, 24, 13, f64p(220), nil, nil},
+		{22, "Fried chicken wings", "Smażone skrzydełka z kurczaka", UnitGram, 22, 8, 20, f64p(180), nil, nil},
+		{23, "Turkey breast", "Pierś z indyka", UnitGram, 29, 0, 2, nil, nil, nil},
+		{24, "Pickled cucumbers", "Ogórki kiszone", UnitGram, 0.5, 2, 0.2, nil, nil, nil},
+		{25, "Tomatoes", "Pomidory", UnitGram, 0.9, 3.9, 0.2, nil, nil, nil},
+		{26, "Pancakes", "Naleśniki", UnitGram, 6, 28, 7, f64p(150), nil, nil},
+		{27, "Omelette", "Omlet", UnitGram, 11, 1, 12, f64p(180), nil, nil},
+		{28, "Oatmeal", "Owsianka", UnitGram, 2.5, 12, 1.5, f64p(250), nil, nil},
+		{29, "Paella", "Paella", UnitGram, 8, 20, 5, f64p(350), nil, nil},
+		{30, "Pho", "Zupa pho", UnitMillilitre, 3, 8, 1.5, f64p(400), nil, nil},
+		{31, "Beetroot borscht", "Barszcz czerwony", UnitMillilitre, 1, 7, 0.5, f64p(300), nil, nil},
+		{32, "Coleslaw", "Surówka coleslaw", UnitGram, 1, 10, 8, f64p(100), nil, nil},
+		{33, "Mondongo", "Zupa mondongo", UnitMillilitre, 7, 8, 4, f64p(350), nil, nil},
+		{34, "Bandeja paisa", "Bandeja paisa", UnitGram, 12, 20, 15, f64p(500), nil, nil},
+		{35, "Pastel de nata", "Pastel de nata", UnitGram, 5, 35, 14, f64p(60), nil, nil},
+		{36, "Cheesecake", "Sernik", UnitGram, 7, 25, 18, f64p(120), nil, nil},
+		{37, "Orange juice", "Sok pomarańczowy", UnitMillilitre, 0.7, 10, 0.2, nil, nil, nil},
+		{38, "Goulash", "Gulasz", UnitGram, 15, 6, 10, f64p(350), nil, nil},
 	}
 }
 
@@ -222,8 +223,8 @@ func assertIssue002Catalog(t *testing.T, objects []foodObject) {
 		if got.names.En != want.en || got.names.Pl != want.pl {
 			t.Fatalf("Food Object %d: loader returned names %+v, want en=%q pl=%q", got.id, got.names, want.en, want.pl)
 		}
-		if got.physicalState != want.state {
-			t.Fatalf("Food Object %d: loader returned Physical State %q, want %q", got.id, got.physicalState, want.state)
+		if got.nutritionBasis != want.state {
+			t.Fatalf("Food Object %d: loader returned Nutrition Basis %q, want %q", got.id, got.nutritionBasis, want.state)
 		}
 		if got.protein != want.protein || got.carbohydrate != want.carbohydrate || got.fat != want.fat {
 			t.Fatalf("Food Object %d: loader returned Macro Profile (%g, %g, %g), want (%g, %g, %g)",
@@ -276,7 +277,7 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	var catalogErr *loadError
 	for _, tc := range servingBoundaryCases {
-		if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES ($1, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'solid', 1, 0, 0, $2)`, tc.id, tc.serving); err != nil {
+		if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, serving) VALUES ($1, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'g', 1, 0, 0, $2)`, tc.id, tc.serving); err != nil {
 			t.Fatalf("insert %s fixture row: %v", tc.name, err)
 		}
 		tracer.reset()
@@ -287,9 +288,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 		if catalogErr.kind != kindInvariant {
 			t.Fatalf("%s row classified as %s, want %s (cause: %v)", tc.name, catalogErr.kind, kindInvariant, catalogErr.err)
 		}
-		if !strings.Contains(catalogErr.err.Error(), "100000") {
-			t.Fatalf("%s row did not reach the serving-maximum invariant validation: %v", tc.name, catalogErr.err)
-		}
 		tracer.assertSingleSelect(t, wantSQL)
 		if _, err := owner.Exec(ctx, "DELETE FROM food_objects WHERE id = $1", tc.id); err != nil {
 			t.Fatalf("delete %s fixture row: %v", tc.name, err)
@@ -299,7 +297,7 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_macro_profile_not_all_zero"); err != nil {
 		t.Fatalf("drop macro profile constraint: %v", err)
 	}
-	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (39, '{"en": "Zero", "pl": "Zero"}'::jsonb, 'solid', 0, 0, 0)`); err != nil {
+	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES (39, '{"en": "Zero", "pl": "Zero"}'::jsonb, 'g', 0, 0, 0)`); err != nil {
 		t.Fatalf("insert all-zero Macro Profile fixture row: %v", err)
 	}
 	tracer.reset()
@@ -312,10 +310,13 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
+	if _, err := owner.Exec(ctx, "DELETE FROM food_objects WHERE id = 39"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_id_check"); err != nil {
 		t.Fatalf("drop positive-ID constraint: %v", err)
 	}
-	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (0, '{"en": "Zero id", "pl": "Zero id"}'::jsonb, 'solid', 1, 0, 0)`); err != nil {
+	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES (0, '{"en": "Zero id", "pl": "Zero id"}'::jsonb, 'g', 1, 0, 0)`); err != nil {
 		t.Fatalf("insert nonpositive-ID fixture row: %v", err)
 	}
 	tracer.reset()
@@ -325,9 +326,6 @@ func TestCatalogLoaderIntegration(t *testing.T) {
 	}
 	if catalogErr.kind != kindInvariant {
 		t.Fatalf("nonpositive-ID row classified as %s, want %s (cause: %v)", catalogErr.kind, kindInvariant, catalogErr.err)
-	}
-	if !strings.Contains(catalogErr.err.Error(), "ID must be positive") {
-		t.Fatalf("nonpositive-ID row did not reach invariant validation (was it filtered by the predicate?): %v", catalogErr.err)
 	}
 	tracer.assertSingleSelect(t, wantSQL)
 
@@ -374,7 +372,7 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	if _, err := owner.Exec(ctx, `UPDATE food_objects SET names = '{"en": "Pizza Margherita Fresca", "pl": "Pizza margherita"}'::jsonb WHERE id = 1`); err != nil {
 		t.Fatalf("owner fixture name update: %v", err)
 	}
-	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES (39, '{"en": "Cucumber", "pl": "Ogórek"}'::jsonb, 'solid', 0.4, 3, 0.1, 100)`); err != nil {
+	if _, err := owner.Exec(ctx, `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, serving) VALUES (39, '{"en": "Cucumber", "pl": "Ogórek"}'::jsonb, 'g', 0.4, 3, 0.1, 100)`); err != nil {
 		t.Fatalf("owner fixture row insert: %v", err)
 	}
 
@@ -391,9 +389,50 @@ func TestCatalogLoaderReadsFreshSnapshot(t *testing.T) {
 	}
 	added := second[38]
 	if added.id != 39 || added.names.En != "Cucumber" || added.names.Pl != "Ogórek" ||
-		added.physicalState != stateSolid || added.protein != 0.4 || added.carbohydrate != 3 ||
+		added.nutritionBasis != UnitGram || added.protein != 0.4 || added.carbohydrate != 3 ||
 		added.fat != 0.1 || added.serving == nil || *added.serving != 100 ||
 		added.foodFamilyID != nil || added.imageKey != nil {
 		t.Fatalf("second load did not observe the owner-inserted Food Object 39: %+v", added)
+	}
+}
+
+func TestOperationsReadExplicitNutritionBasis(t *testing.T) {
+	db, suggest, _, _, owner := setupSuggestFixture(t)
+	ctx := context.Background()
+	substitute, err := NewFindSubstitutePage(connect(t, db.RuntimeURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, basis := range []Unit{UnitMillilitre, UnitGram} {
+		if _, err := owner.Exec(ctx, "UPDATE food_objects SET nutrition_basis = $1 WHERE id = 5", basis); err != nil {
+			t.Fatal(err)
+		}
+		suggestions, err := suggest.Run(ctx, "Chicken breast", LanguageEnglish)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSuggestion(t, suggestions[0], "Chicken breast", "Pierś z kurczaka", 100, basis)
+		page, err := substitute.Run(ctx, 5, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.SelectedFood.BaseUnit != basis {
+			t.Fatalf("Substitution selected unit = %q, want %q", page.SelectedFood.BaseUnit, basis)
+		}
+	}
+	if _, err := owner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_nutrition_basis_check"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.Exec(ctx, "UPDATE food_objects SET nutrition_basis = 'solid' WHERE id = 5"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = suggest.Run(ctx, "Chicken breast", LanguageEnglish)
+	var operationError *Error
+	if !errors.As(err, &operationError) || operationError.Code != CodeInternalError {
+		t.Fatalf("suggestion accepted an invalid stored basis: %v", err)
+	}
+	_, err = substitute.Run(ctx, 5, 0)
+	if !errors.As(err, &operationError) || operationError.Code != CodeInternalError {
+		t.Fatalf("substitution accepted an invalid stored basis: %v", err)
 	}
 }

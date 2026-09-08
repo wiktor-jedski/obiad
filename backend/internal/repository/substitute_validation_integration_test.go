@@ -104,14 +104,14 @@ func TestFindSubstitutePageValidationIntegration(t *testing.T) {
 		})
 	}
 
-	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id) VALUES (99)"); err != nil {
+	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id, names) VALUES (99, '{\"en\":\"Test\",\"pl\":\"Test\"}')"); err != nil {
 		t.Fatalf("owner insert food_families 99: %v", err)
 	}
 	if _, err := owner.Exec(ctx, "UPDATE food_objects SET food_family_id = 99"); err != nil {
 		t.Fatalf("owner update food_objects to food_family_id 99: %v", err)
 	}
 	if _, err := owner.Exec(ctx,
-		`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, 'solid', $3, $4, $5, 99)`,
+		`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, 'g', $3, $4, $5, 99)`,
 		95, `{"en": "Zero input", "pl": "Wprowadzenie zero"}`, 10.0, 20.0, 5.0,
 	); err != nil {
 		t.Fatalf("insert zero input: %v", err)

@@ -16,25 +16,17 @@ import (
 
 const catalogSelectPath = "catalog/load_food_objects.sql"
 
-// physicalState identifies whether quantities use grams or millilitres.
-type physicalState string
-
-const (
-	stateSolid  physicalState = "solid"
-	stateLiquid physicalState = "liquid"
-)
-
 // foodObject stores one validated catalog row.
 type foodObject struct {
-	id            int32
-	names         LocalizedNames
-	physicalState physicalState
-	protein       float64
-	carbohydrate  float64
-	fat           float64
-	serving       *float64
-	foodFamilyID  *int32
-	imageKey      *string
+	id             int32
+	names          LocalizedNames
+	nutritionBasis Unit
+	protein        float64
+	carbohydrate   float64
+	fat            float64
+	serving        *float64
+	foodFamilyID   *int32
+	imageKey       *string
 }
 
 // kind classifies catalog load failures.
@@ -87,7 +79,7 @@ func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 		var (
 			id           int32
 			namesJSON    []byte
-			state        string
+			basisUnit    string
 			protein      float64
 			carbohydrate float64
 			fat          float64
@@ -95,10 +87,10 @@ func (l *loader) load(ctx context.Context) ([]foodObject, error) {
 			family       *int32
 			imageKey     *string
 		)
-		if err := rows.Scan(&id, &namesJSON, &state, &protein, &carbohydrate, &fat, &serving, &family, &imageKey); err != nil {
+		if err := rows.Scan(&id, &namesJSON, &basisUnit, &protein, &carbohydrate, &fat, &serving, &family, &imageKey); err != nil {
 			return nil, &loadError{kind: kindInvariant, err: fmt.Errorf("scan Food Object row: %w", err)}
 		}
-		object, err := mapFoodObject(id, namesJSON, state, protein, carbohydrate, fat, serving, family, imageKey)
+		object, err := mapFoodObject(id, namesJSON, basisUnit, protein, carbohydrate, fat, serving, family, imageKey)
 		if err != nil {
 			return nil, &loadError{kind: kindInvariant, err: err}
 		}
@@ -119,7 +111,7 @@ func loadCatalogSelect() (string, error) {
 }
 
 // mapFoodObject validates one catalog row.
-func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (foodObject, error) {
+func mapFoodObject(id int32, namesJSON []byte, basisUnit string, protein, carbohydrate, fat float64, serving *float64, family *int32, imageKey *string) (foodObject, error) {
 	if id <= 0 {
 		return foodObject{}, fmt.Errorf("food object %d: ID must be positive", id)
 	}
@@ -127,11 +119,11 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 	if err != nil {
 		return foodObject{}, fmt.Errorf("food object %d: %w", id, err)
 	}
-	stateValue := physicalState(state)
-	switch stateValue {
-	case stateLiquid, stateSolid:
+	basis := Unit(basisUnit)
+	switch basis {
+	case UnitMillilitre, UnitGram:
 	default:
-		return foodObject{}, fmt.Errorf("food object %d: Physical State %q must be %q or %q", id, state, stateSolid, stateLiquid)
+		return foodObject{}, fmt.Errorf("food object %d: Nutrition Basis %q must be %q or %q", id, basisUnit, UnitGram, UnitMillilitre)
 	}
 	if err := validateMacroProfile(id, protein, carbohydrate, fat); err != nil {
 		return foodObject{}, err
@@ -149,15 +141,15 @@ func mapFoodObject(id int32, namesJSON []byte, state string, protein, carbohydra
 		return foodObject{}, fmt.Errorf("food object %d: image key must be nonempty when present", id)
 	}
 	return foodObject{
-		id:            id,
-		names:         names,
-		physicalState: stateValue,
-		protein:       protein,
-		carbohydrate:  carbohydrate,
-		fat:           fat,
-		serving:       serving,
-		foodFamilyID:  family,
-		imageKey:      imageKey,
+		id:             id,
+		names:          names,
+		nutritionBasis: basis,
+		protein:        protein,
+		carbohydrate:   carbohydrate,
+		fat:            fat,
+		serving:        serving,
+		foodFamilyID:   family,
+		imageKey:       imageKey,
 	}, nil
 }
 

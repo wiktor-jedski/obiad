@@ -14,7 +14,7 @@
 -- order, not SQL ranking: suggestion ranking belongs to the Suggest Food
 -- Objects module and never happens in SQL.
 
-SELECT id, names, physical_state, protein, carbohydrate, fat, serving,
+SELECT id, names, nutrition_basis, protein, carbohydrate, fat, serving,
        food_family_id, image_key
 FROM food_objects
 ORDER BY id;

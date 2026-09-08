@@ -4,6 +4,7 @@ package testdb
 import (
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -231,4 +232,15 @@ func connect(t testing.TB, dbURL string) *pgx.Conn {
 		}
 	})
 	return conn
+}
+
+//go:embed catalog.sql
+var catalogSQL string
+
+// LoadCatalog inserts the application-owned integration fixture into an empty schema.
+func LoadCatalog(t testing.TB, owner *pgx.Conn) {
+	t.Helper()
+	if _, err := owner.Exec(context.Background(), catalogSQL, pgx.QueryExecModeSimpleProtocol); err != nil {
+		t.Fatalf("load integration catalog: %v", err)
+	}
 }

@@ -51,6 +51,7 @@ func runDBSetupCommand(t *testing.T, dbURL string) string {
 	if err != nil {
 		t.Fatalf("go run ./cmd/dbsetup failed: %v\noutput:\n%s", err, out)
 	}
+	testdb.LoadCatalog(t, connect(t, dbURL))
 	return string(out)
 }
 
