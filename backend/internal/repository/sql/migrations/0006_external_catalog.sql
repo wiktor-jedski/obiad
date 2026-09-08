@@ -14,7 +14,7 @@ ALTER TABLE food_objects
         source IS NULL OR (
             source ~ '^[A-Za-z][A-Za-z0-9+.-]*:([A-Za-z0-9._~!$&''()*+,;=:@/?#-]|%[0-9A-Fa-f]{2}|\[[0-9A-Fa-f:.]+\])+$'
             AND source !~ '#.*#'
-            AND (source !~* '^https?:' OR source ~* '^https?://[^/?#]+([/?#]|$)')
+            AND (source !~* '^https?:' OR source ~* '^https?://([A-Za-z0-9._~!$&''()*+,;=:%-]+@)?([A-Za-z0-9._~!$&''()*+,;=%-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]*)?([/?#]|$)')
         )
     );
 

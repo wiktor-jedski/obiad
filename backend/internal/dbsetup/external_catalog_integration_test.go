@@ -62,7 +62,7 @@ func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
 	ctx := context.Background()
 	const insert = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, source)
 		VALUES (1, '{"en":"Meal","pl":"Posiłek"}', 'g', 1, 0, 0, $1)`
-	for _, source := range []any{nil, "https://example.org/recipe?q=one%20two#step", "http://localhost:8080/recipe", "urn:example:recipe"} {
+	for _, source := range []any{nil, "https://example.org/recipe?q=one%20two#step", "http://localhost:8080/recipe", "https://[::1]:8080/recipe", "urn:example:recipe"} {
 		if _, err := owner.Exec(ctx, insert, source); err != nil {
 			t.Fatalf("valid source %v: %v", source, err)
 		}
@@ -74,7 +74,7 @@ func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
 			t.Fatalf("source round trip: got %v, want %v", got, source)
 		}
 	}
-	for _, source := range []string{"", "relative/path", "//example.org/recipe", "https://", "https:///recipe", "https://example.org/a b", "https://example.org/%ZZ", "https://example.org/%2", "https://example.org/\nrecipe", "https://example.org/<recipe>"} {
+	for _, source := range []string{"", "relative/path", "//example.org/recipe", "https://", "https:///recipe", "https://:", "https://example.org:bad/recipe", "https://example.org/a b", "https://example.org/%ZZ", "https://example.org/%2", "https://example.org/\nrecipe", "https://example.org/<recipe>"} {
 		_, err := owner.Exec(ctx, insert, source)
 		wantSQLState(t, err, "23514")
 	}
