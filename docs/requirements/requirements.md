@@ -16,11 +16,13 @@ This document is the source of truth for the active product requirements of the 
 
 **Statement:** The POC shall load every runtime Food Object from a validated application catalog into local PostgreSQL. `scripts/start.py`, CI, and integration checks shall use only application-owned dummy catalog data. The production launcher shall load only a validated production Meal catalog.
 
+**Catalog contract:** The source-agnostic application catalog shall require exactly `schemaVersion: 1`, at least one `foodObjects` entry, and a `foodFamilies` array that may be empty. It shall not accept `dataCommit`, another provenance field, or a catalog-kind discriminator. The offline `catalogload` command shall accept one required catalog-file path and connect through `OBIAD_SCHEMA_OWNER_DATABASE_URL`. This variable selects the target database, not the catalog file. It shall share the `dbsetup` advisory-lock key `0x0B1AD0001` to prevent concurrent database mutation.
+
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Integration check: Dummy setup loads only the application-owned dummy catalog without an initialized production-data submodule. Production startup loads a validated production Meal catalog. |
+| Verification | Catalog validation: Version `1` and a one-Food-Object catalog with no Food Families succeed; other versions, empty Food Object arrays, and provenance fields fail. Integration check: Dummy setup loads only the application-owned dummy catalog without an initialized production-data submodule. Production startup loads a validated production Meal catalog. |
 
 ## REQ-003 — Single-page interface
 
@@ -115,11 +117,13 @@ This document is the source of truth for the active product requirements of the 
 
 **Statement:** IF a Food Object has no usable image, THEN its card shall show the bundled placeholder.
 
+**Catalog contract:** A Food Object may contain one optional nonempty string `imageKey`. Dummy, production, and third-party catalogs use the same field. An absent key is valid.
+
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: An image-less fixture shows the placeholder and a valid card. |
+| Verification | Catalog validation: An absent or nonempty string `imageKey` succeeds; an empty or nonstring key fails. Playwright: An image-less fixture shows the placeholder and a valid card. |
 
 ## REQ-012 — Five suggestions
 
@@ -727,13 +731,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-071 — Catalog coverage
 
-**Statement:** The application-owned dummy catalog shall contain at least 30 Food Objects and at least nine eligible Substitutes for each designated acceptance input. The production catalog shall contain at least ten accepted generic Meals before production startup.
+**Statement:** The application-owned dummy catalog shall contain at least 30 Food Objects and at least nine eligible Substitutes for each designated acceptance input. The production catalog shall contain at least ten accepted generic Meals before production startup. The Phase 31 production launcher shall enforce this ten-Meal minimum before database mutation. The generic catalog interface shall accept one or more Food Objects and zero or more Food Families, including the Phase 27 one-Meal artifact.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog check: The dummy catalog meets both acceptance limits. Production startup rejects fewer than ten accepted Meals. |
+| Verification | Catalog check: The generic interface accepts one Food Object and zero Food Families and rejects an empty Food Object list. The dummy catalog meets both acceptance limits. Production startup rejects fewer than ten accepted Meals before database mutation. |
 
 ## REQ-072 — Test-designed nutrition
 
