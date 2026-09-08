@@ -11,67 +11,68 @@ import (
 )
 
 type catalogCoverageCase struct {
-	id            int
-	englishName   string
-	polishName    string
-	physicalState string
-	serving       *float64
-	familyID      *int
-	imageKey      *string
-	eligibleCount int
+	id             int
+	englishName    string
+	polishName     string
+	nutritionBasis string
+	serving        *float64
+	familyID       *int
+	imageKey       *string
+	eligibleCount  int
 }
 
 func TestAcceptanceCatalogCoverage(t *testing.T) {
 	dbURL := testdb.NewDB(t).OwnerURL
 	runDBSetupCommand(t, dbURL)
 	conn := connect(t, dbURL)
+	testdb.LoadCatalog(t, conn)
 	ctx := context.Background()
 
 	cases := []catalogCoverageCase{
 		{
-			id:            1,
-			englishName:   "Pizza Margherita",
-			polishName:    "Pizza margherita",
-			physicalState: "solid",
-			serving:       f64p(350),
-			familyID:      i32p(1),
-			imageKey:      strp("pizza-margherita"),
-			eligibleCount: 36,
+			id:             1,
+			englishName:    "Pizza Margherita",
+			polishName:     "Pizza margherita",
+			nutritionBasis: "g",
+			serving:        f64p(350),
+			familyID:       i32p(1),
+			imageKey:       strp("pizza-margherita"),
+			eligibleCount:  36,
 		},
 		{
-			id:            5,
-			englishName:   "Chicken breast",
-			polishName:    "Pierś z kurczaka",
-			physicalState: "solid",
-			imageKey:      strp("chicken-breast"),
-			eligibleCount: 37,
+			id:             5,
+			englishName:    "Chicken breast",
+			polishName:     "Pierś z kurczaka",
+			nutritionBasis: "g",
+			imageKey:       strp("chicken-breast"),
+			eligibleCount:  37,
 		},
 		{
-			id:            10,
-			englishName:   "Milk",
-			polishName:    "Mleko",
-			physicalState: "liquid",
-			imageKey:      strp("milk"),
-			eligibleCount: 37,
+			id:             10,
+			englishName:    "Milk",
+			polishName:     "Mleko",
+			nutritionBasis: "ml",
+			imageKey:       strp("milk"),
+			eligibleCount:  37,
 		},
 	}
 
 	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("fresh setup has %d Food Objects, want 38", n)
+		t.Fatalf("integration fixture has %d Food Objects, want 38", n)
 	}
 
 	eligibleByInput := make(map[int][]int, len(cases))
 	for _, tc := range cases {
-		var englishName, polishName, physicalState string
+		var englishName, polishName, nutritionBasis string
 		var serving *float64
 		var familyID *int
 		var imageKey *string
-		err := conn.QueryRow(ctx, `SELECT names ->> 'en', names ->> 'pl', physical_state,
+		err := conn.QueryRow(ctx, `SELECT names ->> 'en', names ->> 'pl', nutrition_basis,
 			serving, food_family_id, image_key
 			FROM food_objects WHERE id = $1`, tc.id).Scan(
 			&englishName,
 			&polishName,
-			&physicalState,
+			&nutritionBasis,
 			&serving,
 			&familyID,
 			&imageKey,
@@ -79,11 +80,11 @@ func TestAcceptanceCatalogCoverage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read designated Food Object %d: %v", tc.id, err)
 		}
-		if englishName != tc.englishName || polishName != tc.polishName || physicalState != tc.physicalState ||
+		if englishName != tc.englishName || polishName != tc.polishName || nutritionBasis != tc.nutritionBasis ||
 			!equalFloatPtr(serving, tc.serving) || !equalIntPtr(familyID, tc.familyID) || !equalStrPtr(imageKey, tc.imageKey) {
 			t.Fatalf("designated Food Object %d is (%q, %q, %q, serving=%v, family=%v, image=%v), want (%q, %q, %q, serving=%v, family=%v, image=%v)",
-				tc.id, englishName, polishName, physicalState, serving, familyID, imageKey,
-				tc.englishName, tc.polishName, tc.physicalState, tc.serving, tc.familyID, tc.imageKey)
+				tc.id, englishName, polishName, nutritionBasis, serving, familyID, imageKey,
+				tc.englishName, tc.polishName, tc.nutritionBasis, tc.serving, tc.familyID, tc.imageKey)
 		}
 
 		for language, name := range map[string]string{"en": tc.englishName, "pl": tc.polishName} {
@@ -130,8 +131,8 @@ func TestAcceptanceCatalogCoverage(t *testing.T) {
 		name  string
 		query string
 	}{
-		{name: "solid Food Objects", query: "SELECT count(*) FROM food_objects WHERE physical_state = 'solid'"},
-		{name: "liquid Food Objects", query: "SELECT count(*) FROM food_objects WHERE physical_state = 'liquid'"},
+		{name: "g Food Objects", query: "SELECT count(*) FROM food_objects WHERE nutrition_basis = 'g'"},
+		{name: "ml Food Objects", query: "SELECT count(*) FROM food_objects WHERE nutrition_basis = 'ml'"},
 		{name: "Food Objects with a Serving", query: "SELECT count(*) FROM food_objects WHERE serving IS NOT NULL"},
 		{name: "Food Objects without a Serving", query: "SELECT count(*) FROM food_objects WHERE serving IS NULL"},
 		{name: "Food Objects with an image", query: "SELECT count(*) FROM food_objects WHERE image_key IS NOT NULL"},
