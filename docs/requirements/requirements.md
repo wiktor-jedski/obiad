@@ -74,13 +74,22 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-008 — One optional Serving
 
-**Statement:** A catalog shall permit zero or one positive standard Serving for each Food Object. Its unit shall match the Food Object Nutrition Basis unit.
+**Statement:** A catalog shall permit zero or one positive standard Serving for each Food Object. Its unit shall match the Food Object Nutrition Basis unit. Where a Meal derives a Serving, it shall divide the Decimal finished yield by the positive declared serving count, quantize the result to six fractional decimal places with Decimal `ROUND_HALF_UP`, and store that finite decimal in `g` or `ml`. It shall accept nonterminating divisions; no exact-representability rule applies. The finite stored decimal then follows the existing `float64` catalog-storage and browser-projection paths. This requirement does not promise arbitrary end-to-end precision.
+
+**Serving derivation examples:**
+
+| Finished yield | Declared serving count | Stored Serving |
+| --- | ---: | --- |
+| `1000 g` | `4` | `250.000000 g` |
+| `1000 g` | `3` | `333.333333 g` |
+| `1000 ml` | `4` | `250.000000 ml` |
+| `1000 ml` | `3` | `333.333333 ml` |
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog validation: Zero or one valid Serving succeeds. A second, nonpositive, or mismatched-unit Serving fails. |
+| Verification | Catalog validation: Zero or one valid Serving succeeds. A second, nonpositive, or mismatched-unit Serving fails. Meal compiler integration: Exact and nonterminating declared mass and volume yields derive the specified six-place half-up Serving value. |
 
 ## REQ-009 — One optional Food Family
 

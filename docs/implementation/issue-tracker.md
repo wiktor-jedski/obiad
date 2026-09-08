@@ -445,3 +445,28 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Do not run live Open Food Facts or USDA calls in committed integration tests. Provider availability, mutable results, and the rule that upstream downloads stay outside Git make live CI nondeterministic. Integration tests use minimal generated provider responses through the public acquisition boundary. They verify schema, stable identity rules, provider completion and warning behavior, source retention, nutrient normalization, conversion provenance, and gram conversion. The explicit Phase 26 acceptance review verifies each mutable source value directly.
+
+## ISSUE-026: Phase 27 Meal identity and retained-yield decisions
+
+Type: Product and data decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-09-02. Use stable Meal ID 1 with English and Polish names `Pierogi ruskie`. Create Food Family ID 1 with English name `Dumplings` and Polish name `Pierogi`, and assign the Meal to it.
+- Store retained quantities of 500 g Wheat flour type 500, 300 g Water, 500 g Raw potatoes, 500 g Semi-fat twaróg, 143 g Yellow onion, and 14 g Rapeseed oil. The summed input mass is 1,957 g. Use `summed_input_mass`, Nutrition Basis `g`, and no Serving because the approved source declares no finished yield or serving count.
+- Exclude optional serving onion and oil, sour cream, natural yoghurt, boiling water, and other discarded preparation material. Keep salt and pepper only in the preparation steps. The main onion, frying oil, and dough water remain in composition and macro calculation.
+- Revise the Water Ingredient density from `0.9982 g/ml` to the approved kitchen reference value `1 g/ml`. Keep the current Engineering ToolBox source, which states the 1000 kg/m³ reference value. The project owner approves all six Ingredient identities, names, source URLs, Macro Profiles, recipe terms, exact data-defined conversion rules, the 143 g large-onion conversion, the 14 g tablespoon-oil conversion, and the omitted-item-size `medium` default without fallback, with this Water density revision.
+- Store these 11 agent-authored steps in order: `Boil the potatoes.`; `Mash the potatoes.`; `Crumble the twaróg.`; `Dice the onion.`; `Fry the onion in rapeseed oil.`; `Mix the potatoes, twaróg, onion, salt, and pepper.`; `Mix the flour, hot water, and salt.`; `Knead the dough.`; `Roll the dough.`; `Fill and fold the pierogi.`; `Boil the pierogi.`
+- Calculate Meal macronutrients with decimal arithmetic and round each exported per-100-unit value half-up to six decimal places only after the complete calculation. For Pierogi ruskie, the approved composition gives totals of 141.4369 g protein, 475.5953 g available carbohydrate, and 40.5215 g fat and exported values of 7.227230 g protein, 24.302264 g available carbohydrate, and 2.070593 g fat per 100 g.
+- Export aggregate schema version 1 with the full lowercase Git `HEAD` of the production-data repository. Reject export before calculation or output when that repository has tracked or nonignored untracked changes.
+- Resolved with the project owner on 2026-09-03. For a Meal with declared yield and a positive declared serving count, divide the Decimal finished yield by that count and quantize to six fractional decimal places with Decimal `ROUND_HALF_UP`. Store the resulting finite decimal in the Nutrition Basis unit, `g` or `ml`. Accept nonterminating divisions; no exact-representability rule applies. Worked values are `1000 g ÷ 4 = 250.000000 g`, `1000 g ÷ 3 = 333.333333 g`, `1000 ml ÷ 4 = 250.000000 ml`, and `1000 ml ÷ 3 = 333.333333 ml`. The finite stored decimal then follows the existing `float64` catalog-storage and browser-projection paths; the policy does not promise arbitrary end-to-end precision.
+
+### Actions needed
+
+- Task 83 must apply the approved Water density change and migrate all affected Phase 26 conversion evidence before Meal authoring compilation.
+- Tasks 85 and 86 must materialize the approved Meal, Food Family, calculation, and clean-repository export decisions without adding a second data source.
+
+### Testing coverage deviations
+
+- Do not call the live recipe page in committed Phase 27 integration tests. Reuse the sanitized fixture and final source URL through public `scrape_recipe`, as approved in ISSUE-024, because live website state is mutable. The clean-checkout phase gate uses only committed authoring records and the application-owned aggregate schema.
