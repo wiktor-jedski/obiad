@@ -213,6 +213,7 @@ def run_backend_checks() -> None:
             f"@127.0.0.1:{port}/postgres?sslmode=disable"
         )
         test_env = os.environ.copy()
+        test_env.pop("OBIAD_TEST_PHASE27", None)
         test_env["OBIAD_TEST_ADMIN_DATABASE_URL"] = database_url
         run_checked(
             ["go", "test", "-v", "-count=1", "./..."],
@@ -242,7 +243,9 @@ def run_ci_checks(
 ) -> None:
     """Run the data-boundary check and selected CI checks."""
 
-    run_checked([sys.executable, "scripts/check_data_boundary.py"])
+    run_checked(
+        [sys.executable, "scripts/check_data_boundary.py", "--application-only"]
+    )
 
     if not any((backend, frontend, e2e)):
         backend = frontend = e2e = True

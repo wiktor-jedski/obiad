@@ -2,16 +2,14 @@ package catalogload
 
 import (
 	"context"
-	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
-	"obiad/backend/internal/dbsetup"
-	sqlfiles "obiad/backend/internal/repository/sql"
 	"obiad/backend/internal/testdb"
 )
 
@@ -23,14 +21,12 @@ func TestRunValidatesCompleteCatalogBeforeReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer owner.Close(ctx) //nolint:errcheck
-	migrations, err := fs.Sub(sqlfiles.Migrations, "migrations")
-	if err != nil {
-		t.Fatal(err)
+	setup := exec.Command("go", "run", "../../cmd/dbsetup")
+	setup.Env = append(os.Environ(), "OBIAD_SCHEMA_OWNER_DATABASE_URL="+db.OwnerURL)
+	if output, err := setup.CombinedOutput(); err != nil {
+		t.Fatalf("dbsetup: %v\n%s", err, output)
 	}
-	if _, err := dbsetup.Apply(ctx, owner, migrations); err != nil {
-		t.Fatal(err)
-	}
-	testdb.LoadCatalog(t, owner)
+	testdb.LoadCatalog(t, db.OwnerURL)
 	var before, after string
 	const snapshot = `SELECT jsonb_build_object(
 		'objects', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_objects f),

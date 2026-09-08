@@ -25,7 +25,7 @@ func TestAcceptanceCatalogCoverage(t *testing.T) {
 	dbURL := testdb.NewDB(t).OwnerURL
 	runDBSetupCommand(t, dbURL)
 	conn := connect(t, dbURL)
-	testdb.LoadCatalog(t, conn)
+	testdb.LoadCatalog(t, dbURL)
 	ctx := context.Background()
 
 	cases := []catalogCoverageCase{

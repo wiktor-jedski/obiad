@@ -4,8 +4,8 @@
 # Creates the local PostgreSQL database and the two login roles — the
 # schema-owner role and the SELECT-only runtime role — BEFORE dbsetup runs,
 # removes PUBLIC object-creation and temporary-table privileges, applies the
-# real setup command (go run ./cmd/dbsetup) with the schema-owner credential,
-# and grants the runtime role SELECT-only access to the Food Catalog tables.
+# real dbsetup and catalogload commands with the schema-owner credential,
+# and grants the runtime role SELECT-only access to the dummy Food Catalog.
 # Application commands never create database users; this deployment script
 # does (ISSUE-001). The script is idempotent: re-running it restores the same
 # topology with the passwords from the environment.
@@ -295,6 +295,8 @@ echo "removed PUBLIC object-creation and temporary-table privileges"
 
 echo "running dbsetup with the schema-owner credential"
 (cd "$ROOT/backend" && OBIAD_SCHEMA_OWNER_DATABASE_URL="$OWNER_URL" go run ./cmd/dbsetup)
+echo "loading the application-owned dummy catalog with the schema-owner credential"
+(cd "$ROOT/backend" && OBIAD_SCHEMA_OWNER_DATABASE_URL="$OWNER_URL" go run ./cmd/catalogload catalog/dummy.json)
 
 PGPASSWORD="$OBIAD_OWNER_PASSWORD" apply_sql "$OWNER_ENDPOINT" "$PRIVILEGES_DIR/runtime_catalog_read.sql" \
     "__OBIAD_RUNTIME_USER__=${RUNTIME_ROLE}"
@@ -349,5 +351,5 @@ echo "Local database ready:"
 echo "  endpoint: postgres://${ADMIN_HOST}:${ADMIN_PORT}/${DB_NAME}"
 echo "  credentials (mode 0600, never printed): ${CRED_FILE}"
 echo "  load them with: set -a; source ${CRED_FILE}; set +a"
-echo "  OBIAD_SCHEMA_OWNER_DATABASE_URL  schema-owner connection for dbsetup (user ${OWNER_ROLE})"
+echo "  OBIAD_SCHEMA_OWNER_DATABASE_URL  schema-owner connection for dbsetup and catalogload (user ${OWNER_ROLE})"
 echo "  OBIAD_RUNTIME_DATABASE_URL       SELECT-only connection for the Fiber process (user ${RUNTIME_ROLE})"

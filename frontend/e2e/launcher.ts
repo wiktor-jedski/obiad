@@ -1065,7 +1065,7 @@ async function runStack(
     "OBIAD_RUNTIME_DATABASE_URL",
   );
   log(
-    "local database setup complete; seeded catalog and runtime credential ready",
+    "local database setup complete; migrations, dummy catalog, and runtime credential ready",
   );
 
   const serverBinary = join(tempDir, "obiad-server");

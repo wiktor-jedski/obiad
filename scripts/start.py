@@ -271,6 +271,7 @@ def run_stack() -> None:
             )
             run_checked(["bash", str(DATABASE_SETUP)], env=setup_env)
 
+            print("Migrations applied and application-owned dummy catalog loaded.")
             backend_env = os.environ.copy()
             backend_env["OBIAD_RUNTIME_DATABASE_URL"] = runtime_url
             backend = spawn(
