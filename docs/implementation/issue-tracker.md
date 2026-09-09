@@ -498,3 +498,15 @@ Status: ready-for-agent
 
 - Phase 28 adds no frontend component or Playwright scenario. The changed behavior is the offline catalog file, command, PostgreSQL transaction, privilege, and setup boundary. Real-PostgreSQL command integration tests and the aggregate CI command exercise those interfaces; the existing frontend and browser checks run as regression coverage through the dummy setup.
 - Phase 28 verifies REQ-071 for the complete dummy catalog but does not reject the one-Meal production artifact. The plan explicitly requires that artifact to load here. Phase 31 owns the production-launcher check that rejects fewer than ten accepted Meals before database mutation.
+
+## ISSUE-028: Remove the obsolete catalog seed migration
+
+Type: Architecture cleanup
+Status: ready-for-agent
+
+### Comments
+
+- Resolved with the project owner on 2026-09-09. All project databases are disposable. Remove `backend/internal/repository/sql/migrations/0005_seed_food_catalog.sql` and replace the migration sequence with a fresh baseline that creates the Phase 28 external-catalog schema without inserting then deleting legacy catalog rows.
+- Reset every local, CI, and shared development database that records the old migration history. Do not support upgrades from a database that applied the old seed migration.
+- Keep `backend/catalog/dummy.json` as the application-owned dummy catalog source. `dbsetup` must leave the catalog empty; `catalogload` remains the only path that inserts dummy or production catalog rows.
+- Update migration, database-setup, fixture, and migration-order evidence. Verify a fresh disposable database reaches the external-catalog schema, starts with zero catalog rows after `dbsetup`, and receives the exact dummy catalog only through `catalogload`.
