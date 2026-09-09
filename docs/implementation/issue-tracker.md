@@ -510,3 +510,33 @@ Status: ready-for-agent
 - Reset every local, CI, and shared development database that records the old migration history. Do not support upgrades from a database that applied the old seed migration.
 - Keep `backend/catalog/dummy.json` as the application-owned dummy catalog source. `dbsetup` must leave the catalog empty; `catalogload` remains the only path that inserts dummy or production catalog rows.
 - Update migration, database-setup, fixture, and migration-order evidence. Verify a fresh disposable database reaches the external-catalog schema, starts with zero catalog rows after `dbsetup`, and receives the exact dummy catalog only through `catalogload`.
+
+## ISSUE-029: Phase 29 recipe-source and rejection decisions
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Assumptions
+
+- Resolved ISSUE-028 is the first Phase 29 task and the only task in this phase that changes application code. All later tasks remain inside `obiad-data`.
+- The existing Pierogi ruskie Meal counts as the attempt and one accepted Meal for that target when Phase 29 evidence reconfirms it against the selected recipe.
+- Use the existing Kuchnia Domowa adapter first for its four verified compatible targets. Use `www.giallozafferano.com` for both pizzas, Lasagna, Beef steak, Gyoza, Kebab, Gyros, and Beef cheeseburger. Use `www.bbcgoodfood.com` for Protein shake.
+- Do not put discovery and implementation for another website in a Meal task. After source discovery, add one handoff task and one second-agent adapter task for each required new website before an affected Meal task becomes `PREPARED`.
+
+### Clarifications
+
+- Define the path and closed record shape for a versioned rejection. Define how validation proves that each of the 13 targets has exactly one terminal result without treating a rejection as a Meal.
+- Confirm whether Phase 29 can reject a target because no recipe is available through a currently supported website, or whether source discovery must continue and add website-adapter tasks until every target with a suitable public recipe is attempted through an adapter.
+- Resolved with the project owner on 2026-09-09. Store one closed `attempts.json` file with exactly 13 discriminated entries. An accepted entry references one `meal_id`; a rejected entry contains one exact reason. Git versions the file. Validation enforces exactly one terminal outcome per target, and aggregate export ignores the complete file.
+- Resolved with the project owner on 2026-09-09. Adopt the smallest verified portfolio from the [Phase 29 source survey](../../data/docs/recipe-adapters/phase-29-source-survey.md): retain Kuchnia Domowa and add GialloZafferano plus Good Food. Add a separate Phase 25-format handoff task and a separate second-agent adapter task for each new hostname. RecipeTin Eats remains a technical contingency; Kwestia Smaku and Ania Gotuje remain fallbacks; do not support Allrecipes under its observed policy and HTTP 403 response.
+- Resolved with the project owner on 2026-09-09. The existing Pierogi ruskie Meal counts as one attempted and accepted target only after Phase 29 reconfirms its source, composition, calculation, and stable identity. Do not duplicate it.
+
+### Actions needed
+
+- Tasks 99 and 100 must create the GialloZafferano handoff and adapter before any GialloZafferano-backed Meal task starts.
+- Tasks 101 and 102 must create the Good Food handoff and adapter before the Protein shake task starts.
+- Task 103 must freeze the 13 exact approved URLs from the [Phase 29 source survey](../../data/docs/recipe-adapters/phase-29-source-survey.md), reconfirm the four Kuchnia Domowa pages against the existing adapter, and verify that all 13 targets remain technically extractable before Meal work starts.
+
+### Testing coverage deviations
+
+- Do not add a live-page integration gate. Fixture-backed adapter integration tests retain the website-drift limitation accepted in ISSUE-024. The Phase 29 review compares each accepted record with its current public source URL.
