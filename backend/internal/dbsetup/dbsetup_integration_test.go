@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -97,14 +95,11 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	dbURL := testdb.NewDB(t).OwnerURL
 	ctx := context.Background()
 
-	out := runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 5 pending migration(s)") {
-		t.Fatalf("first run output %q does not report five applied migrations", out)
-	}
+	runDBSetupCommand(t, dbURL)
 
 	conn := connect(t, dbURL)
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows, want 5 (one transaction per migration)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
+		t.Fatalf("schema_migrations has %d rows, want 6 (one transaction per migration)", n)
 	}
 	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations ORDER BY version")
 	if err != nil {
@@ -117,6 +112,7 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 		3: "add_food_family",
 		4: "add_image_key",
 		5: "seed_food_catalog",
+		6: "external_catalog",
 	}
 	gotVersions := map[int]string{}
 	for rows.Next() {
@@ -144,8 +140,8 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	if !exists {
 		t.Fatal("food_objects table does not exist after dbsetup")
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("food_objects has %d rows after dbsetup, want 38 (ISSUE-002 catalog)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("food_objects has %d rows after dbsetup, want 0 before catalog loading", n)
 	}
 	if err := conn.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM information_schema.tables
@@ -155,81 +151,22 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	if !exists {
 		t.Fatal("food_families table does not exist after dbsetup")
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 1 {
-		t.Fatalf("food_families has %d rows after dbsetup, want 1 (Food Family ID 1)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows after dbsetup, want 0 before catalog loading", n)
 	}
 
-	out = runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 0 pending migration(s)") {
-		t.Fatalf("second run output %q does not report zero applied migrations", out)
+	runDBSetupCommand(t, dbURL)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
+		t.Fatalf("schema_migrations has %d rows after second run, want 6", n)
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows after second run, want 5", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("food_objects has %d rows after second run, want 0 before catalog loading", n)
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("food_objects has %d rows after second run, want 38 (seed not re-applied)", n)
-	}
-}
-
-type seedFoodObject struct {
-	id           int
-	en           string
-	pl           string
-	state        string
-	serving      *float64
-	familyID     *int
-	imageKey     *string
-	protein      float64
-	carbohydrate float64
-	fat          float64
 }
 
 func f64p(v float64) *float64 { return &v }
 func i32p(v int) *int         { return &v }
 func strp(v string) *string   { return &v }
-
-func issue002Catalog() []seedFoodObject {
-	return []seedFoodObject{
-		{1, "Pizza Margherita", "Pizza margherita", "solid", f64p(350), i32p(1), strp("pizza-margherita"), 10, 30, 10},
-		{2, "Pizza Capricciosa", "Pizza capricciosa", "solid", f64p(350), i32p(1), nil, 11, 28, 11},
-		{3, "Lasagna", "Lazania", "solid", f64p(350), nil, nil, 9, 18, 8},
-		{4, "Pierogi", "Pierogi", "solid", f64p(250), nil, nil, 6, 32, 5},
-		{5, "Chicken breast", "Pierś z kurczaka", "solid", nil, nil, strp("chicken-breast"), 31, 0, 3.6},
-		{6, "Pork chop", "Kotlet wieprzowy", "solid", nil, nil, nil, 27, 0, 14},
-		{7, "Beef steak", "Stek wołowy", "solid", nil, nil, nil, 26, 0, 15},
-		{8, "Mixed berries", "Owoce jagodowe", "solid", nil, nil, nil, 1, 12, 0.5},
-		{9, "Apple juice", "Sok jabłkowy", "liquid", nil, nil, nil, 0.1, 11, 0.1},
-		{10, "Milk", "Mleko", "liquid", nil, nil, strp("milk"), 3.4, 4.8, 2},
-		{11, "Skyr yogurt", "Jogurt skyr", "solid", f64p(150), nil, nil, 11, 4, 0.2},
-		{12, "Greek yogurt", "Jogurt grecki", "solid", f64p(170), nil, nil, 9, 4, 5},
-		{13, "Gyoza", "Pierożki gyoza", "solid", f64p(200), nil, strp("gyoza"), 8, 24, 8},
-		{14, "Oat milk", "Napój owsiany", "liquid", nil, nil, nil, 1, 7, 1.5},
-		{15, "Kebab", "Kebab", "solid", f64p(350), nil, nil, 15, 18, 12},
-		{16, "Gyros", "Gyros", "solid", f64p(300), nil, nil, 18, 10, 14},
-		{17, "Polish chicken soup", "Rosół", "liquid", f64p(300), nil, nil, 2, 1, 1},
-		{18, "Butter", "Masło", "solid", nil, nil, nil, 0.5, 0.5, 82},
-		{19, "Olive oil", "Oliwa z oliwek", "liquid", nil, nil, nil, 0, 0, 91.3},
-		{20, "Protein shake", "Shake białkowy", "liquid", f64p(300), nil, nil, 8, 4, 1},
-		{21, "Beef cheeseburger", "Cheeseburger wołowy", "solid", f64p(220), nil, nil, 13, 24, 13},
-		{22, "Fried chicken wings", "Smażone skrzydełka z kurczaka", "solid", f64p(180), nil, nil, 22, 8, 20},
-		{23, "Turkey breast", "Pierś z indyka", "solid", nil, nil, nil, 29, 0, 2},
-		{24, "Pickled cucumbers", "Ogórki kiszone", "solid", nil, nil, nil, 0.5, 2, 0.2},
-		{25, "Tomatoes", "Pomidory", "solid", nil, nil, nil, 0.9, 3.9, 0.2},
-		{26, "Pancakes", "Naleśniki", "solid", f64p(150), nil, nil, 6, 28, 7},
-		{27, "Omelette", "Omlet", "solid", f64p(180), nil, nil, 11, 1, 12},
-		{28, "Oatmeal", "Owsianka", "solid", f64p(250), nil, nil, 2.5, 12, 1.5},
-		{29, "Paella", "Paella", "solid", f64p(350), nil, nil, 8, 20, 5},
-		{30, "Pho", "Zupa pho", "liquid", f64p(400), nil, nil, 3, 8, 1.5},
-		{31, "Beetroot borscht", "Barszcz czerwony", "liquid", f64p(300), nil, nil, 1, 7, 0.5},
-		{32, "Coleslaw", "Surówka coleslaw", "solid", f64p(100), nil, nil, 1, 10, 8},
-		{33, "Mondongo", "Zupa mondongo", "liquid", f64p(350), nil, nil, 7, 8, 4},
-		{34, "Bandeja paisa", "Bandeja paisa", "solid", f64p(500), nil, nil, 12, 20, 15},
-		{35, "Pastel de nata", "Pastel de nata", "solid", f64p(60), nil, nil, 5, 35, 14},
-		{36, "Cheesecake", "Sernik", "solid", f64p(120), nil, nil, 7, 25, 18},
-		{37, "Orange juice", "Sok pomarańczowy", "liquid", nil, nil, nil, 0.7, 10, 0.2},
-		{38, "Goulash", "Gulasz", "solid", f64p(350), nil, nil, 15, 6, 10},
-	}
-}
 
 func equalFloatPtr(got, want *float64) bool {
 	if got == nil || want == nil {
@@ -250,186 +187,6 @@ func equalStrPtr(got, want *string) bool {
 		return got == nil && want == nil
 	}
 	return *got == *want
-}
-
-func assertCatalogMatches(t *testing.T, conn *pgx.Conn) {
-	t.Helper()
-	ctx := context.Background()
-	for _, want := range issue002Catalog() {
-		var id int
-		var en, pl, state string
-		var protein, carbohydrate, fat float64
-		var serving *float64
-		var familyID *int
-		var imageKey *string
-		err := conn.QueryRow(ctx, `SELECT id, names ->> 'en', names ->> 'pl', physical_state,
-			protein, carbohydrate, fat, serving, food_family_id, image_key
-			FROM food_objects WHERE id = $1`, want.id).Scan(
-			&id, &en, &pl, &state, &protein, &carbohydrate, &fat, &serving, &familyID, &imageKey)
-		if errors.Is(err, pgx.ErrNoRows) {
-			t.Fatalf("seeded Food Object ID %d (%s) is missing", want.id, want.en)
-		}
-		if err != nil {
-			t.Fatalf("read seeded Food Object ID %d: %v", want.id, err)
-		}
-		if id != want.id {
-			t.Fatalf("row ID is %d, want %d", id, want.id)
-		}
-		if en != want.en {
-			t.Fatalf("ID %d English name is %q, want %q", want.id, en, want.en)
-		}
-		if pl != want.pl {
-			t.Fatalf("ID %d Polish name is %q, want %q", want.id, pl, want.pl)
-		}
-		if state != want.state {
-			t.Fatalf("ID %d physical_state is %q, want %q", want.id, state, want.state)
-		}
-		if protein != want.protein || carbohydrate != want.carbohydrate || fat != want.fat {
-			t.Fatalf("ID %d Macro Profile is (%.17g, %.17g, %.17g), want (%.17g, %.17g, %.17g)",
-				want.id, protein, carbohydrate, fat, want.protein, want.carbohydrate, want.fat)
-		}
-		if !equalFloatPtr(serving, want.serving) {
-			t.Fatalf("ID %d serving is %v, want %v", want.id, serving, want.serving)
-		}
-		if !equalIntPtr(familyID, want.familyID) {
-			t.Fatalf("ID %d food_family_id is %v, want %v", want.id, familyID, want.familyID)
-		}
-		if !equalStrPtr(imageKey, want.imageKey) {
-			t.Fatalf("ID %d image_key is %v, want %v", want.id, imageKey, want.imageKey)
-		}
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("food_objects has %d rows, want exactly 38 (ISSUE-002 catalog)", n)
-	}
-	var familyCount int
-	if err := conn.QueryRow(ctx, "SELECT count(*) FROM food_families").Scan(&familyCount); err != nil {
-		t.Fatalf("count food_families: %v", err)
-	}
-	if familyCount != 1 {
-		t.Fatalf("food_families has %d rows, want exactly 1 (Food Family ID 1)", familyCount)
-	}
-	var familyID int
-	if err := conn.QueryRow(ctx, "SELECT id FROM food_families").Scan(&familyID); err != nil {
-		t.Fatalf("read seed Food Family: %v", err)
-	}
-	if familyID != 1 {
-		t.Fatalf("seed Food Family ID is %d, want 1", familyID)
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects WHERE food_family_id = 1"); n != 2 {
-		t.Fatalf("Food Family 1 has %d members, want 2 (Pizza Margherita and Pizza Capricciosa)", n)
-	}
-}
-
-func catalogSnapshot(t *testing.T, conn *pgx.Conn) string {
-	t.Helper()
-	ctx := context.Background()
-	var b strings.Builder
-	rows, err := conn.Query(ctx, `SELECT id, names::text, physical_state, protein, carbohydrate, fat,
-		serving, food_family_id, image_key FROM food_objects ORDER BY id`)
-	if err != nil {
-		t.Fatalf("snapshot food_objects: %v", err)
-	}
-	for rows.Next() {
-		var id int
-		var names, state string
-		var protein, carbohydrate, fat float64
-		var serving *float64
-		var familyID *int
-		var imageKey *string
-		if err := rows.Scan(&id, &names, &state, &protein, &carbohydrate, &fat, &serving, &familyID, &imageKey); err != nil {
-			t.Fatalf("scan food_objects snapshot: %v", err)
-		}
-		fmt.Fprintf(&b, "object|%d|%s|%s|%s|%s|%s|%s|%s|%s\n",
-			id, names, state,
-			strconv.FormatFloat(protein, 'g', -1, 64),
-			strconv.FormatFloat(carbohydrate, 'g', -1, 64),
-			strconv.FormatFloat(fat, 'g', -1, 64),
-			snapshotFloat(serving), snapshotInt(familyID), snapshotString(imageKey))
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate food_objects snapshot: %v", err)
-	}
-	familyRows, err := conn.Query(ctx, "SELECT id FROM food_families ORDER BY id")
-	if err != nil {
-		t.Fatalf("snapshot food_families: %v", err)
-	}
-	for familyRows.Next() {
-		var id int
-		if err := familyRows.Scan(&id); err != nil {
-			t.Fatalf("scan food_families snapshot: %v", err)
-		}
-		fmt.Fprintf(&b, "family|%d\n", id)
-	}
-	if err := familyRows.Err(); err != nil {
-		t.Fatalf("iterate food_families snapshot: %v", err)
-	}
-	return b.String()
-}
-
-func snapshotFloat(v *float64) string {
-	if v == nil {
-		return "NULL"
-	}
-	return strconv.FormatFloat(*v, 'g', -1, 64)
-}
-
-func snapshotInt(v *int) string {
-	if v == nil {
-		return "NULL"
-	}
-	return strconv.Itoa(*v)
-}
-
-func snapshotString(v *string) string {
-	if v == nil {
-		return "NULL"
-	}
-	return *v
-}
-
-func TestDeterministicCatalogSeed(t *testing.T) {
-	dbURL := testdb.NewDB(t).OwnerURL
-	conn := connect(t, dbURL)
-	ctx := context.Background()
-
-	out := runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 5 pending migration(s)") {
-		t.Fatalf("first run output %q does not report five applied migrations", out)
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows after first run, want 5", n)
-	}
-	var seedVersion int
-	if err := conn.QueryRow(ctx, "SELECT version FROM schema_migrations WHERE name = 'seed_food_catalog'").Scan(&seedVersion); err != nil {
-		t.Fatalf("read seed migration version: %v", err)
-	}
-	if seedVersion != 5 {
-		t.Fatalf("seed migration version is %d, want 5", seedVersion)
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("food_objects has %d rows after first run, want 38 (ISSUE-002 catalog)", n)
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 1 {
-		t.Fatalf("food_families has %d rows after first run, want 1", n)
-	}
-
-	assertCatalogMatches(t, conn)
-
-	first := catalogSnapshot(t, conn)
-
-	out = runDBSetupCommand(t, dbURL)
-	if !strings.Contains(out, "applied 0 pending migration(s)") {
-		t.Fatalf("second run output %q does not report zero applied migrations", out)
-	}
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows after second run, want 5 (no re-apply)", n)
-	}
-
-	second := catalogSnapshot(t, conn)
-	if second != first {
-		t.Fatalf("catalog snapshot changed between dbsetup runs:\n--- first run ---\n%s--- second run ---\n%s", first, second)
-	}
-	assertCatalogMatches(t, conn)
 }
 
 func TestDBSetupMigrationTransaction(t *testing.T) {
@@ -481,9 +238,9 @@ func TestFoodObjectIdentityAndLocalizedNames(t *testing.T) {
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0)`
 
-	if _, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Almond milk", "pl": "Napój migdałowy"}`, "liquid"); err != nil {
+	if _, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Almond milk", "pl": "Napój migdałowy"}`, "ml"); err != nil {
 		t.Fatalf("valid Food Object insert failed: %v", err)
 	}
 
@@ -501,7 +258,7 @@ func TestFoodObjectIdentityAndLocalizedNames(t *testing.T) {
 		t.Fatalf("both localized names resolve to ID %d, want 100", idEn)
 	}
 
-	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Bread", "pl": "Chleb"}`, "solid"); err != nil {
+	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Bread", "pl": "Chleb"}`, "g"); err != nil {
 		t.Fatalf("second valid Food Object insert failed: %v", err)
 	}
 	var breadID int
@@ -514,7 +271,7 @@ func TestFoodObjectIdentityAndLocalizedNames(t *testing.T) {
 
 	reject := func(id int, names string) {
 		t.Helper()
-		_, err := conn.Exec(ctx, insertFoodObject, id, names, "solid")
+		_, err := conn.Exec(ctx, insertFoodObject, id, names, "g")
 		wantSQLState(t, err, "23514")
 	}
 	reject(0, `{"en": "Zero", "pl": "Zero"}`)
@@ -529,38 +286,38 @@ func TestFoodObjectIdentityAndLocalizedNames(t *testing.T) {
 	reject(102, `["Milk", "Mleko"]`)
 	reject(102, `"Milk"`)
 
-	_, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Milk2", "pl": "Mleko2"}`, "liquid")
+	_, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Milk2", "pl": "Mleko2"}`, "ml")
 	wantSQLState(t, err, "23505")
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 40 {
-		t.Fatalf("food_objects has %d rows, want 40 (38 seeded + 2 valid test rows)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 2 {
+		t.Fatalf("food_objects has %d rows, want 2 valid test rows", n)
 	}
 }
 
-func TestFoodObjectPhysicalState(t *testing.T) {
+func TestFoodObjectNutritionBasis(t *testing.T) {
 	dbURL := testdb.NewDB(t).OwnerURL
 	runDBSetupCommand(t, dbURL)
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0)`
 
-	for id, state := range map[int]string{50: "solid", 51: "liquid"} {
-		if _, err := conn.Exec(ctx, insertFoodObject, id, fmt.Sprintf(`{"en": "S%d", "pl": "P%d"}`, id, id), state); err != nil {
-			t.Fatalf("valid state %q insert failed: %v", state, err)
+	for id, basis := range map[int]string{50: "g", 51: "ml"} {
+		if _, err := conn.Exec(ctx, insertFoodObject, id, fmt.Sprintf(`{"en": "S%d", "pl": "P%d"}`, id, id), basis); err != nil {
+			t.Fatalf("valid Nutrition Basis %q insert failed: %v", basis, err)
 		}
 	}
 
-	for _, state := range []string{"gas", "Solid", "SOLID", "solid ", " liquid", ""} {
-		_, err := conn.Exec(ctx, insertFoodObject, 52, `{"en": "Bad", "pl": "Zly"}`, state)
+	for _, basis := range []string{"solid", "liquid", "kg", "G", "ML", "g ", " ml", ""} {
+		_, err := conn.Exec(ctx, insertFoodObject, 52, `{"en": "Bad", "pl": "Zly"}`, basis)
 		wantSQLState(t, err, "23514")
 	}
 
 	_, err := conn.Exec(ctx, insertFoodObject, 52, `{"en": "Bad", "pl": "Zly"}`, nil)
 	wantSQLState(t, err, "23502")
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 40 {
-		t.Fatalf("food_objects has %d rows, want 40 (38 seeded + 2 valid test rows)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 2 {
+		t.Fatalf("food_objects has %d rows, want 2 valid test rows", n)
 	}
 }
 
@@ -570,7 +327,7 @@ func TestMacroProfileConstraints(t *testing.T) {
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, $4::float8, $5::float8, $6::float8)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, $3, $4::float8, $5::float8, $6::float8)`
 	valid := []struct {
 		id      int
 		protein string
@@ -586,14 +343,14 @@ func TestMacroProfileConstraints(t *testing.T) {
 	}
 	for _, v := range valid {
 		names := fmt.Sprintf(`{"en": "V%d", "pl": "P%d"}`, v.id, v.id)
-		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "solid", v.protein, v.carb, v.fat); err != nil {
+		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "g", v.protein, v.carb, v.fat); err != nil {
 			t.Fatalf("valid Macro Profile (%s, %s, %s) insert failed: %v", v.protein, v.carb, v.fat, err)
 		}
 	}
 
 	reject := func(id int, protein, carb, fat string) {
 		t.Helper()
-		_, err := conn.Exec(ctx, insertFoodObject, id, `{"en": "Bad", "pl": "Zly"}`, "solid", protein, carb, fat)
+		_, err := conn.Exec(ctx, insertFoodObject, id, `{"en": "Bad", "pl": "Zly"}`, "g", protein, carb, fat)
 		wantSQLState(t, err, "23514")
 	}
 	reject(7, "0", "0", "0")
@@ -613,15 +370,15 @@ func TestMacroProfileConstraints(t *testing.T) {
 
 	rejectNull := func(id int, protein, carb, fat any) {
 		t.Helper()
-		_, err := conn.Exec(ctx, insertFoodObject, id, `{"en": "Bad", "pl": "Zly"}`, "solid", protein, carb, fat)
+		_, err := conn.Exec(ctx, insertFoodObject, id, `{"en": "Bad", "pl": "Zly"}`, "g", protein, carb, fat)
 		wantSQLState(t, err, "23502")
 	}
 	rejectNull(107, nil, "0", "0")
 	rejectNull(107, "0", nil, "0")
 	rejectNull(107, "0", "0", nil)
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38+len(valid) {
-		t.Fatalf("food_objects has %d rows, want %d (38 seeded + %d valid test rows)", n, 38+len(valid), len(valid))
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != len(valid) {
+		t.Fatalf("food_objects has %d rows, want %d (%d valid test rows)", n, len(valid), len(valid))
 	}
 }
 
@@ -631,7 +388,7 @@ func TestServingConstraints(t *testing.T) {
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES ($1, $2::jsonb, $3, 1.0, 0.0, 0.0, $4::float8)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, serving) VALUES ($1, $2::jsonb, $3, 1.0, 0.0, 0.0, $4::float8)`
 	valid := []struct {
 		id      int
 		serving any
@@ -644,14 +401,14 @@ func TestServingConstraints(t *testing.T) {
 	}
 	for _, v := range valid {
 		names := fmt.Sprintf(`{"en": "S%d", "pl": "P%d"}`, v.id, v.id)
-		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "liquid", v.serving); err != nil {
+		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "ml", v.serving); err != nil {
 			t.Fatalf("valid Serving %v insert failed: %v", v.serving, err)
 		}
 	}
 
 	reject := func(serving string) {
 		t.Helper()
-		_, err := conn.Exec(ctx, insertFoodObject, 106, `{"en": "Bad", "pl": "Zly"}`, "solid", serving)
+		_, err := conn.Exec(ctx, insertFoodObject, 106, `{"en": "Bad", "pl": "Zly"}`, "g", serving)
 		wantSQLState(t, err, "23514")
 	}
 	reject("0")
@@ -661,8 +418,8 @@ func TestServingConstraints(t *testing.T) {
 	reject("Infinity")
 	reject("-Infinity")
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 38+len(valid) {
-		t.Fatalf("food_objects has %d rows, want %d (38 seeded + %d valid test rows)", n, 38+len(valid), len(valid))
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != len(valid) {
+		t.Fatalf("food_objects has %d rows, want %d (%d valid test rows)", n, len(valid), len(valid))
 	}
 }
 
@@ -672,19 +429,19 @@ func TestFoodFamilyConstraints(t *testing.T) {
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 1 {
-		t.Fatalf("food_families has %d rows after dbsetup, want 1 (seed Food Family ID 1)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows after dbsetup, want 0 before catalog loading", n)
 	}
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, food_family_id) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
 
-	if _, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Milk", "pl": "Mleko"}`, "liquid", nil); err != nil {
+	if _, err := conn.Exec(ctx, insertFoodObject, 100, `{"en": "Milk", "pl": "Mleko"}`, "ml", nil); err != nil {
 		t.Fatalf("zero-membership Food Object insert failed: %v", err)
 	}
-	if _, err := conn.Exec(ctx, "INSERT INTO food_families (id) VALUES (2)"); err != nil {
+	if _, err := conn.Exec(ctx, `INSERT INTO food_families (id, names) VALUES (2, '{"en":"Test","pl":"Test"}')`); err != nil {
 		t.Fatalf("valid Food Family insert failed: %v", err)
 	}
-	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Greek yogurt", "pl": "Jogurt grecki"}`, "solid", 2); err != nil {
+	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Greek yogurt", "pl": "Jogurt grecki"}`, "g", 2); err != nil {
 		t.Fatalf("one-membership Food Object insert failed: %v", err)
 	}
 	var familyID int
@@ -697,13 +454,13 @@ func TestFoodFamilyConstraints(t *testing.T) {
 
 	rejectFamily := func(id int) {
 		t.Helper()
-		_, err := conn.Exec(ctx, "INSERT INTO food_families (id) VALUES ($1)", id)
+		_, err := conn.Exec(ctx, `INSERT INTO food_families (id, names) VALUES ($1, '{"en":"Test","pl":"Test"}')`, id)
 		wantSQLState(t, err, "23514")
 	}
 	rejectFamily(0)
 	rejectFamily(-5)
 
-	_, err := conn.Exec(ctx, insertFoodObject, 102, `{"en": "Bad", "pl": "Zly"}`, "solid", 99)
+	_, err := conn.Exec(ctx, insertFoodObject, 102, `{"en": "Bad", "pl": "Zly"}`, "g", 99)
 	wantSQLState(t, err, "23503")
 
 	if n := countRows(t, conn, `SELECT count(*) FROM pg_constraint
@@ -752,15 +509,15 @@ func TestFoodFamilyConstraints(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate food_families columns: %v", err)
 	}
-	if len(columns) != 1 || columns[0] != "id" {
-		t.Fatalf("food_families columns are %v, want exactly [id] (no hierarchy column)", columns)
+	if len(columns) != 2 || columns[0] != "id" || columns[1] != "names" {
+		t.Fatalf("food_families columns are %v, want exactly [id names] (no hierarchy column)", columns)
 	}
 
-	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 2 {
-		t.Fatalf("food_families has %d rows, want 2 (seed Family 1 + test Family 2)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_families"); n != 1 {
+		t.Fatalf("food_families has %d rows, want 1 test Family", n)
 	}
-	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 40 {
-		t.Fatalf("food_objects has %d rows, want 40 (38 seeded + 2 test rows)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 2 {
+		t.Fatalf("food_objects has %d rows, want 2 test rows", n)
 	}
 }
 
@@ -768,14 +525,11 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	db := testdb.NewDB(t)
 	ctx := context.Background()
 
-	out := runDBSetupCommand(t, db.OwnerURL)
-	if !strings.Contains(out, "applied 5 pending migration(s)") {
-		t.Fatalf("setup output %q does not report five applied migrations", out)
-	}
+	runDBSetupCommand(t, db.OwnerURL)
 	owner := connect(t, db.OwnerURL)
 
-	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows, want 5", n)
+	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 6 {
+		t.Fatalf("schema_migrations has %d rows, want 6", n)
 	}
 	for _, table := range []string{"food_objects", "food_families"} {
 		var exists bool
@@ -792,17 +546,17 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	db.GrantRuntimeCatalogRead(t, owner)
 	runtime := connect(t, db.RuntimeURL)
 
-	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("runtime SELECT on food_objects returns %d rows, want 38 (seeded catalog)", n)
+	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("runtime SELECT on food_objects returns %d rows, want 0 before catalog loading", n)
 	}
-	if n := countRows(t, runtime, "SELECT count(*) FROM food_families"); n != 1 {
-		t.Fatalf("runtime SELECT on food_families returns %d rows, want 1 (seeded catalog)", n)
+	if n := countRows(t, runtime, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("runtime SELECT on food_families returns %d rows, want 0 before catalog loading", n)
 	}
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (100, '{"en": "Milk", "pl": "Mleko"}'::jsonb, 'liquid', 10.0, 5.0, 1.0)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES (100, '{"en": "Milk", "pl": "Mleko"}'::jsonb, 'ml', 10.0, 5.0, 1.0)`
 	for _, stmt := range []string{
 		insertFoodObject,
-		`UPDATE food_objects SET physical_state = 'solid' WHERE id = 1`,
+		`UPDATE food_objects SET nutrition_basis = 'g' WHERE id = 1`,
 		`DELETE FROM food_objects WHERE id = 1`,
 	} {
 		_, err := runtime.Exec(ctx, stmt)
@@ -820,11 +574,11 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	_, err = anon.Exec(ctx, "CREATE TEMP TABLE anon_temp (id integer)")
 	wantSQLState(t, err, "42501")
 
-	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("food_objects has %d rows, want 38 (seeded catalog unchanged)", n)
+	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("food_objects has %d rows, want 0 (catalog unchanged)", n)
 	}
-	if n := countRows(t, owner, "SELECT count(*) FROM food_families"); n != 1 {
-		t.Fatalf("food_families has %d rows, want 1 (seeded catalog unchanged)", n)
+	if n := countRows(t, owner, "SELECT count(*) FROM food_families"); n != 0 {
+		t.Fatalf("food_families has %d rows, want 0 (catalog unchanged)", n)
 	}
 }
 
@@ -834,13 +588,13 @@ func TestFoodObjectImageKey(t *testing.T) {
 	conn := connect(t, dbURL)
 	ctx := context.Background()
 
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 5 {
-		t.Fatalf("schema_migrations has %d rows, want 5 (0001-0005)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
+		t.Fatalf("schema_migrations has %d rows, want 6 (0001-0006)", n)
 	}
 
-	const insertFoodObject = `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, image_key) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
+	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, image_key) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
 
-	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Milk", "pl": "Mleko"}`, "liquid", nil); err != nil {
+	if _, err := conn.Exec(ctx, insertFoodObject, 101, `{"en": "Milk", "pl": "Mleko"}`, "ml", nil); err != nil {
 		t.Fatalf("NULL image_key insert failed: %v", err)
 	}
 	var imageKey *string
@@ -870,7 +624,7 @@ func TestFoodObjectImageKey(t *testing.T) {
 	}
 	for _, v := range opaqueKeys {
 		names := fmt.Sprintf(`{"en": "K%d", "pl": "P%d"}`, v.id, v.id)
-		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "solid", v.key); err != nil {
+		if _, err := conn.Exec(ctx, insertFoodObject, v.id, names, "g", v.key); err != nil {
 			t.Fatalf("opaque image key %q insert failed: %v", v.key, err)
 		}
 		var got string
@@ -883,11 +637,11 @@ func TestFoodObjectImageKey(t *testing.T) {
 	}
 
 	for _, bad := range []string{"", "   "} {
-		_, err := conn.Exec(ctx, insertFoodObject, 120, `{"en": "Bad", "pl": "Zly"}`, "solid", bad)
+		_, err := conn.Exec(ctx, insertFoodObject, 120, `{"en": "Bad", "pl": "Zly"}`, "g", bad)
 		wantSQLState(t, err, "23514")
 	}
 
-	wantColumns := []string{"id", "names", "physical_state", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key"}
+	wantColumns := []string{"id", "names", "nutrition_basis", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key", "serving_unit", "source"}
 	rows, err := conn.Query(ctx, `SELECT column_name FROM information_schema.columns
 		WHERE table_schema = 'public' AND table_name = 'food_objects'
 		ORDER BY ordinal_position`)

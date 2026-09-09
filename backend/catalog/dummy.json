@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "foodFamilies": [
+    {
+      "id": 1,
+      "names": {
+        "en": "Pizza",
+        "pl": "Pizza"
+      }
+    }
+  ],
+  "foodObjects": [
+    {
+      "id": 1,
+      "names": {
+        "en": "Pizza Margherita",
+        "pl": "Pizza margherita"
+      },
+      "macroProfile": {
+        "protein": 10.0,
+        "availableCarbohydrate": 30.0,
+        "fat": 10.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      },
+      "foodFamilyId": 1,
+      "imageKey": "pizza-margherita"
+    },
+    {
+      "id": 2,
+      "names": {
+        "en": "Pizza Capricciosa",
+        "pl": "Pizza capricciosa"
+      },
+      "macroProfile": {
+        "protein": 11.0,
+        "availableCarbohydrate": 28.0,
+        "fat": 11.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      },
+      "foodFamilyId": 1
+    },
+    {
+      "id": 3,
+      "names": {
+        "en": "Lasagna",
+        "pl": "Lazania"
+      },
+      "macroProfile": {
+        "protein": 9.0,
+        "availableCarbohydrate": 18.0,
+        "fat": 8.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 4,
+      "names": {
+        "en": "Pierogi",
+        "pl": "Pierogi"
+      },
+      "macroProfile": {
+        "protein": 6.0,
+        "availableCarbohydrate": 32.0,
+        "fat": 5.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 250,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 5,
+      "names": {
+        "en": "Chicken breast",
+        "pl": "Pierś z kurczaka"
+      },
+      "macroProfile": {
+        "protein": 31.0,
+        "availableCarbohydrate": 0.0,
+        "fat": 3.6
+      },
+      "nutritionBasis": "g",
+      "imageKey": "chicken-breast"
+    },
+    {
+      "id": 6,
+      "names": {
+        "en": "Pork chop",
+        "pl": "Kotlet wieprzowy"
+      },
+      "macroProfile": {
+        "protein": 27.0,
+        "availableCarbohydrate": 0.0,
+        "fat": 14.0
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 7,
+      "names": {
+        "en": "Beef steak",
+        "pl": "Stek wołowy"
+      },
+      "macroProfile": {
+        "protein": 26.0,
+        "availableCarbohydrate": 0.0,
+        "fat": 15.0
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 8,
+      "names": {
+        "en": "Mixed berries",
+        "pl": "Owoce jagodowe"
+      },
+      "macroProfile": {
+        "protein": 1.0,
+        "availableCarbohydrate": 12.0,
+        "fat": 0.5
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 9,
+      "names": {
+        "en": "Apple juice",
+        "pl": "Sok jabłkowy"
+      },
+      "macroProfile": {
+        "protein": 0.1,
+        "availableCarbohydrate": 11.0,
+        "fat": 0.1
+      },
+      "nutritionBasis": "ml"
+    },
+    {
+      "id": 10,
+      "names": {
+        "en": "Milk",
+        "pl": "Mleko"
+      },
+      "macroProfile": {
+        "protein": 3.4,
+        "availableCarbohydrate": 4.8,
+        "fat": 2.0
+      },
+      "nutritionBasis": "ml",
+      "imageKey": "milk"
+    },
+    {
+      "id": 11,
+      "names": {
+        "en": "Skyr yogurt",
+        "pl": "Jogurt skyr"
+      },
+      "macroProfile": {
+        "protein": 11.0,
+        "availableCarbohydrate": 4.0,
+        "fat": 0.2
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 150,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 12,
+      "names": {
+        "en": "Greek yogurt",
+        "pl": "Jogurt grecki"
+      },
+      "macroProfile": {
+        "protein": 9.0,
+        "availableCarbohydrate": 4.0,
+        "fat": 5.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 170,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 13,
+      "names": {
+        "en": "Gyoza",
+        "pl": "Pierożki gyoza"
+      },
+      "macroProfile": {
+        "protein": 8.0,
+        "availableCarbohydrate": 24.0,
+        "fat": 8.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 200,
+        "unit": "g"
+      },
+      "imageKey": "gyoza"
+    },
+    {
+      "id": 14,
+      "names": {
+        "en": "Oat milk",
+        "pl": "Napój owsiany"
+      },
+      "macroProfile": {
+        "protein": 1.0,
+        "availableCarbohydrate": 7.0,
+        "fat": 1.5
+      },
+      "nutritionBasis": "ml"
+    },
+    {
+      "id": 15,
+      "names": {
+        "en": "Kebab",
+        "pl": "Kebab"
+      },
+      "macroProfile": {
+        "protein": 15.0,
+        "availableCarbohydrate": 18.0,
+        "fat": 12.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 16,
+      "names": {
+        "en": "Gyros",
+        "pl": "Gyros"
+      },
+      "macroProfile": {
+        "protein": 18.0,
+        "availableCarbohydrate": 10.0,
+        "fat": 14.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 300,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 17,
+      "names": {
+        "en": "Polish chicken soup",
+        "pl": "Rosół"
+      },
+      "macroProfile": {
+        "protein": 2.0,
+        "availableCarbohydrate": 1.0,
+        "fat": 1.0
+      },
+      "nutritionBasis": "ml",
+      "serving": {
+        "value": 300,
+        "unit": "ml"
+      }
+    },
+    {
+      "id": 18,
+      "names": {
+        "en": "Butter",
+        "pl": "Masło"
+      },
+      "macroProfile": {
+        "protein": 0.5,
+        "availableCarbohydrate": 0.5,
+        "fat": 82.0
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 19,
+      "names": {
+        "en": "Olive oil",
+        "pl": "Oliwa z oliwek"
+      },
+      "macroProfile": {
+        "protein": 0.0,
+        "availableCarbohydrate": 0.0,
+        "fat": 91.3
+      },
+      "nutritionBasis": "ml"
+    },
+    {
+      "id": 20,
+      "names": {
+        "en": "Protein shake",
+        "pl": "Shake białkowy"
+      },
+      "macroProfile": {
+        "protein": 8.0,
+        "availableCarbohydrate": 4.0,
+        "fat": 1.0
+      },
+      "nutritionBasis": "ml",
+      "serving": {
+        "value": 300,
+        "unit": "ml"
+      }
+    },
+    {
+      "id": 21,
+      "names": {
+        "en": "Beef cheeseburger",
+        "pl": "Cheeseburger wołowy"
+      },
+      "macroProfile": {
+        "protein": 13.0,
+        "availableCarbohydrate": 24.0,
+        "fat": 13.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 220,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 22,
+      "names": {
+        "en": "Fried chicken wings",
+        "pl": "Smażone skrzydełka z kurczaka"
+      },
+      "macroProfile": {
+        "protein": 22.0,
+        "availableCarbohydrate": 8.0,
+        "fat": 20.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 180,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 23,
+      "names": {
+        "en": "Turkey breast",
+        "pl": "Pierś z indyka"
+      },
+      "macroProfile": {
+        "protein": 29.0,
+        "availableCarbohydrate": 0.0,
+        "fat": 2.0
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 24,
+      "names": {
+        "en": "Pickled cucumbers",
+        "pl": "Ogórki kiszone"
+      },
+      "macroProfile": {
+        "protein": 0.5,
+        "availableCarbohydrate": 2.0,
+        "fat": 0.2
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 25,
+      "names": {
+        "en": "Tomatoes",
+        "pl": "Pomidory"
+      },
+      "macroProfile": {
+        "protein": 0.9,
+        "availableCarbohydrate": 3.9,
+        "fat": 0.2
+      },
+      "nutritionBasis": "g"
+    },
+    {
+      "id": 26,
+      "names": {
+        "en": "Pancakes",
+        "pl": "Naleśniki"
+      },
+      "macroProfile": {
+        "protein": 6.0,
+        "availableCarbohydrate": 28.0,
+        "fat": 7.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 150,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 27,
+      "names": {
+        "en": "Omelette",
+        "pl": "Omlet"
+      },
+      "macroProfile": {
+        "protein": 11.0,
+        "availableCarbohydrate": 1.0,
+        "fat": 12.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 180,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 28,
+      "names": {
+        "en": "Oatmeal",
+        "pl": "Owsianka"
+      },
+      "macroProfile": {
+        "protein": 2.5,
+        "availableCarbohydrate": 12.0,
+        "fat": 1.5
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 250,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 29,
+      "names": {
+        "en": "Paella",
+        "pl": "Paella"
+      },
+      "macroProfile": {
+        "protein": 8.0,
+        "availableCarbohydrate": 20.0,
+        "fat": 5.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 30,
+      "names": {
+        "en": "Pho",
+        "pl": "Zupa pho"
+      },
+      "macroProfile": {
+        "protein": 3.0,
+        "availableCarbohydrate": 8.0,
+        "fat": 1.5
+      },
+      "nutritionBasis": "ml",
+      "serving": {
+        "value": 400,
+        "unit": "ml"
+      }
+    },
+    {
+      "id": 31,
+      "names": {
+        "en": "Beetroot borscht",
+        "pl": "Barszcz czerwony"
+      },
+      "macroProfile": {
+        "protein": 1.0,
+        "availableCarbohydrate": 7.0,
+        "fat": 0.5
+      },
+      "nutritionBasis": "ml",
+      "serving": {
+        "value": 300,
+        "unit": "ml"
+      }
+    },
+    {
+      "id": 32,
+      "names": {
+        "en": "Coleslaw",
+        "pl": "Surówka coleslaw"
+      },
+      "macroProfile": {
+        "protein": 1.0,
+        "availableCarbohydrate": 10.0,
+        "fat": 8.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 100,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 33,
+      "names": {
+        "en": "Mondongo",
+        "pl": "Zupa mondongo"
+      },
+      "macroProfile": {
+        "protein": 7.0,
+        "availableCarbohydrate": 8.0,
+        "fat": 4.0
+      },
+      "nutritionBasis": "ml",
+      "serving": {
+        "value": 350,
+        "unit": "ml"
+      }
+    },
+    {
+      "id": 34,
+      "names": {
+        "en": "Bandeja paisa",
+        "pl": "Bandeja paisa"
+      },
+      "macroProfile": {
+        "protein": 12.0,
+        "availableCarbohydrate": 20.0,
+        "fat": 15.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 500,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 35,
+      "names": {
+        "en": "Pastel de nata",
+        "pl": "Pastel de nata"
+      },
+      "macroProfile": {
+        "protein": 5.0,
+        "availableCarbohydrate": 35.0,
+        "fat": 14.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 60,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 36,
+      "names": {
+        "en": "Cheesecake",
+        "pl": "Sernik"
+      },
+      "macroProfile": {
+        "protein": 7.0,
+        "availableCarbohydrate": 25.0,
+        "fat": 18.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 120,
+        "unit": "g"
+      }
+    },
+    {
+      "id": 37,
+      "names": {
+        "en": "Orange juice",
+        "pl": "Sok pomarańczowy"
+      },
+      "macroProfile": {
+        "protein": 0.7,
+        "availableCarbohydrate": 10.0,
+        "fat": 0.2
+      },
+      "nutritionBasis": "ml"
+    },
+    {
+      "id": 38,
+      "names": {
+        "en": "Goulash",
+        "pl": "Gulasz"
+      },
+      "macroProfile": {
+        "protein": 15.0,
+        "availableCarbohydrate": 6.0,
+        "fat": 10.0
+      },
+      "nutritionBasis": "g",
+      "serving": {
+        "value": 350,
+        "unit": "g"
+      }
+    }
+  ]
+}

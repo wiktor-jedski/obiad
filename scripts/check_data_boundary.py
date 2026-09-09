@@ -102,10 +102,11 @@ def repositories_to_check(repository: Path) -> list[Path]:
     return repositories
 
 
-def check(repository: Path) -> int:
+def check(repository: Path, *, application_only: bool = False) -> int:
     """Report prohibited tracked artifacts in the application boundary."""
     violations: list[tuple[Path, str, str]] = []
-    for tree in repositories_to_check(repository):
+    trees = [repository] if application_only else repositories_to_check(repository)
+    for tree in trees:
         allowed_source_html = (
             APPROVED_RECIPE_FIXTURE if tree == repository / "data" else None
         )
@@ -135,9 +136,14 @@ def main() -> int:
         default=REPO_ROOT,
         help="application Git working tree to check (default: repository root)",
     )
+    parser.add_argument(
+        "--application-only",
+        action="store_true",
+        help="check application paths without inspecting the production-data submodule",
+    )
     args = parser.parse_args()
     try:
-        return check(args.repository.resolve())
+        return check(args.repository.resolve(), application_only=args.application_only)
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

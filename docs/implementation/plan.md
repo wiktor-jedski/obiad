@@ -1119,11 +1119,11 @@ Phase 27.
 - Keep historical applied migrations immutable.
 - Add a migration that removes the historical embedded seed result and leaves an empty current catalog.
 - Move the current 38 rows into an application-owned dummy catalog JSON file with the same stable IDs and test-designed values.
-- Add an Obiad-owned `catalogload` command that reads the application-owned catalog JSON interface.
-- Validate schema version, full data commit ID, IDs, localized names, Macro Profiles, basis units, Servings, source URLs, and Food Family references before mutation.
-- Reject duplicate IDs, invalid references, unknown fields, nonfinite values, and incomplete catalogs.
+- Add an Obiad-owned source-agnostic `catalogload` command with one required catalog-file path. Connect through `OBIAD_SCHEMA_OWNER_DATABASE_URL`; this variable selects the target database, not the catalog file.
+- Require exactly `schemaVersion: 1`, at least one Food Object, and zero or more Food Families. Accept optional nonempty `imageKey`. Reject `dataCommit`, other provenance fields, and catalog-kind discriminators; add no PostgreSQL metadata table.
+- Validate IDs, localized names, Macro Profiles, basis units, Servings, source URLs, image keys, and Food Family references before mutation. Reject duplicate IDs, invalid references, unknown fields, nonfinite values, and incomplete catalogs. Accept the Phase 27 one-Meal artifact; only the Phase 31 production launcher enforces the ten-Meal minimum before database mutation.
 - Replace Food Families and Food Objects in one offline transaction.
-- Serialize concurrent loaders with the existing database advisory-lock policy.
+- Serialize catalog loading and migration runs with the exact `dbsetup` advisory-lock key `0x0B1AD0001`.
 - Leave every existing row unchanged when validation or database mutation fails.
 - Keep schema-owner writes and SELECT-only runtime access.
 - Make CI, integration checks, and normal dummy setup call `dbsetup` and then `catalogload` with the dummy catalog.

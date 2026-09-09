@@ -1,0 +1,213 @@
+package dbsetup
+
+import (
+	"context"
+	"fmt"
+	"io/fs"
+	"testing"
+	"testing/fstest"
+
+	"github.com/jackc/pgx/v5"
+
+	sqlfiles "obiad/backend/internal/repository/sql"
+	"obiad/backend/internal/testdb"
+)
+
+func TestExternalCatalogUpgrade(t *testing.T) {
+	db := testdb.NewDB(t)
+	owner := connect(t, db.OwnerURL)
+	ctx := context.Background()
+	migrations, err := fs.Sub(sqlfiles.Migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := Load(migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	historical := fstest.MapFS{}
+	for _, migration := range all {
+		if migration.Version < 6 {
+			historical[fmt.Sprintf("%04d_%s.sql", migration.Version, migration.Name)] = &fstest.MapFile{Data: []byte(migration.SQL)}
+		}
+	}
+	if _, err := Apply(ctx, owner, historical); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 38 {
+		t.Fatalf("historical migrations produced %d Food Objects, want 38", n)
+	}
+	var historicalRows string
+	if err := owner.QueryRow(ctx, `SELECT jsonb_agg(
+		(to_jsonb(f) - 'physical_state') || jsonb_build_object(
+			'nutrition_basis', CASE physical_state WHEN 'solid' THEN 'g' ELSE 'ml' END)
+		ORDER BY id)::text FROM food_objects f`).Scan(&historicalRows); err != nil {
+		t.Fatal(err)
+	}
+	db.GrantRuntimeCatalogRead(t, owner)
+	runDBSetupCommand(t, db.OwnerURL)
+	for _, table := range []string{"food_objects", "food_families"} {
+		if n := countRows(t, owner, "SELECT count(*) FROM "+table); n != 0 {
+			t.Fatalf("upgrade left %d rows in %s", n, table)
+		}
+	}
+	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 6 {
+		t.Fatalf("upgrade recorded %d migrations, want 6", n)
+	}
+	testdb.LoadCatalog(t, db.OwnerURL)
+	runDBSetupCommand(t, db.OwnerURL)
+	runtime := connect(t, db.RuntimeURL)
+	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects WHERE nutrition_basis IN ('g', 'ml')"); n != 38 {
+		t.Fatalf("repeat setup changed the loaded catalog: %d rows", n)
+	}
+	_, err = runtime.Exec(ctx, "UPDATE food_objects SET source = 'https://example.org/recipe' WHERE id = 1")
+	wantSQLState(t, err, "42501")
+	fresh := testdb.NewDB(t)
+	runDBSetupCommand(t, fresh.OwnerURL)
+	freshOwner := connect(t, fresh.OwnerURL)
+	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects"); n != 0 {
+		t.Fatalf("fresh migrations left %d catalog rows before loading", n)
+	}
+	testdb.LoadCatalog(t, fresh.OwnerURL)
+	for _, conn := range []*pgx.Conn{owner, freshOwner} {
+		var loaded string
+		if err := conn.QueryRow(ctx, `SELECT jsonb_agg(
+			to_jsonb(f) - 'source' - 'serving_unit' ORDER BY id)::text
+			FROM food_objects f`).Scan(&loaded); err != nil {
+			t.Fatal(err)
+		}
+		if loaded != historicalRows {
+			t.Fatalf("dummy catalog differs from the immutable historical seed\nloaded: %s\nhistorical: %s", loaded, historicalRows)
+		}
+	}
+	const snapshot = `SELECT jsonb_build_object(
+		'objects', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_objects f),
+		'families', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_families f))::text`
+	var before, after string
+	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	testdb.LoadCatalog(t, fresh.OwnerURL)
+	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("repeated dummy load changed ordered rows\nbefore: %s\nafter: %s", before, after)
+	}
+	if n := countRows(t, freshOwner, `SELECT count(*) FROM food_families
+		WHERE id = 1 AND names = '{"en":"Pizza","pl":"Pizza"}'::jsonb`); n != 1 {
+		t.Fatal("dummy catalog did not preserve the Pizza Food Family")
+	}
+	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects WHERE source IS NOT NULL"); n != 0 {
+		t.Fatal("dummy catalog added production sources")
+	}
+	t.Log("P28-G1/P28-G2: fresh and upgraded catalogs equal all 38 historical rows; repeated load preserves both ordered tables")
+}
+
+func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {
+	db := testdb.NewDB(t)
+	runDBSetupCommand(t, db.OwnerURL)
+	owner := connect(t, db.OwnerURL)
+	ctx := context.Background()
+	const insert = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, source)
+		VALUES (1, '{"en":"Meal","pl":"Posiłek"}', 'g', 1, 0, 0, $1)`
+	for _, source := range []any{
+		nil,
+		"https://example.org/recipe?q=one%20two#step",
+		"http://localhost:8080/recipe",
+		"https://[::1]:8080/recipe",
+		"https://[2001:db8:0:1:2:3:4:5]/recipe",
+		"https://[::ffff:192.0.2.1]/recipe",
+		"https://user:password@[2001:db8::1]:65535/recipe",
+		"http://example.org:1/recipe",
+		"https://example.org:65535/recipe",
+		"https://example.org:00065535/recipe",
+		"https://example.org:/recipe",
+		"urn:example:recipe",
+	} {
+		if _, err := owner.Exec(ctx, insert, source); err != nil {
+			t.Fatalf("valid source %v: %v", source, err)
+		}
+		var got *string
+		if err := owner.QueryRow(ctx, "DELETE FROM food_objects RETURNING source").Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if source == nil && got != nil || source != nil && (got == nil || *got != source) {
+			t.Fatalf("source round trip: got %v, want %v", got, source)
+		}
+	}
+	for _, source := range []string{"", "relative/path", "//example.org/recipe", "https://", "https:///recipe", "https://:", "https://example.org:bad/recipe", "https://example.org/a b", "https://example.org/%ZZ", "https://example.org/%2", "https://example.org/\nrecipe", "https://example.org/<recipe>"} {
+		_, err := owner.Exec(ctx, insert, source)
+		wantSQLState(t, err, "23514")
+	}
+	for _, source := range []string{
+		"https://[1]/recipe",
+		"https://[:::]/recipe",
+		"https://[192.0.2.1]/recipe",
+		"https://[1:2:3:4:5:6:7:8:9]/recipe",
+		"https://[2001:db8::1::2]/recipe",
+		"https://[::ffff:192.0.2.999]/recipe",
+		"https://[::1/recipe",
+		"https://::1]/recipe",
+		"https://example.org:0/recipe",
+		"http://example.org:65536/recipe",
+		"https://[::1]:65536/recipe",
+		"https://user:password@[::1]:0/recipe",
+		"https://example.org:999999999999999999999999999999/recipe",
+	} {
+		t.Run(source, func(t *testing.T) {
+			_, err := owner.Exec(ctx, insert, source)
+			wantSQLState(t, err, "23514")
+		})
+		if _, err := owner.Exec(ctx, "DELETE FROM food_objects"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const insertFamily = `INSERT INTO food_families (id, names) VALUES (1, $1::jsonb)`
+	for _, names := range []string{`{}`, `{"en":"Meal"}`, `{"en":"","pl":"Posiłek"}`, `{"en":null,"pl":"Posiłek"}`, `{"en":"Meal","pl":42}`, `[]`, `{"en":"Meal","pl":"Posiłek","de":false}`, `{"en":"Meal","pl":"Posiłek","de":""}`} {
+		_, err := owner.Exec(ctx, insertFamily, names)
+		wantSQLState(t, err, "23514")
+	}
+	_, err := owner.Exec(ctx, insertFamily, nil)
+	wantSQLState(t, err, "23502")
+	if _, err := owner.Exec(ctx, insertFamily, `{"en":"Meals","pl":"Posiłki","de":"Gerichte"}`); err != nil {
+		t.Fatal(err)
+	}
+	var names string
+	if err := owner.QueryRow(ctx, "SELECT names ->> 'de' FROM food_families WHERE id = 1").Scan(&names); err != nil || names != "Gerichte" {
+		t.Fatalf("localized Family name: %q, %v", names, err)
+	}
+}
+
+func TestServingUnitFollowsNutritionBasis(t *testing.T) {
+	db := testdb.NewDB(t)
+	runDBSetupCommand(t, db.OwnerURL)
+	owner := connect(t, db.OwnerURL)
+	ctx := context.Background()
+	const insert = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, serving)
+		VALUES (1, '{"en":"Meal","pl":"Posiłek"}', $1, 1, 0, 0, 333.333333)`
+	for _, basis := range []string{"g", "ml"} {
+		if _, err := owner.Exec(ctx, insert, basis); err != nil {
+			t.Fatal(err)
+		}
+		var unit string
+		var serving float64
+		if err := owner.QueryRow(ctx, "SELECT serving, serving_unit FROM food_objects WHERE id = 1").Scan(&serving, &unit); err != nil {
+			t.Fatal(err)
+		}
+		if unit != basis || serving != 333.333333 {
+			t.Fatalf("Serving = %v %s, want 333.333333 %s", serving, unit, basis)
+		}
+		_, err := owner.Exec(ctx, "UPDATE food_objects SET serving_unit = $1 WHERE id = 1", map[string]string{"g": "ml", "ml": "g"}[basis])
+		wantSQLState(t, err, "428C9")
+		if _, err := owner.Exec(ctx, "UPDATE food_objects SET serving = NULL WHERE id = 1"); err != nil {
+			t.Fatal(err)
+		}
+		if n := countRows(t, owner, "SELECT count(*) FROM food_objects WHERE serving_unit IS NULL"); n != 1 {
+			t.Fatal("absent Serving retained a unit")
+		}
+		if _, err := owner.Exec(ctx, "DELETE FROM food_objects"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -368,7 +368,7 @@ func TestFoodSuggestionFailuresHTTPIntegration(t *testing.T) {
 	if _, err := invariantOwner.Exec(ctx, "ALTER TABLE food_objects DROP CONSTRAINT food_objects_macro_profile_not_all_zero"); err != nil {
 		t.Fatalf("drop macro profile constraint: %v", err)
 	}
-	if _, err := invariantOwner.Exec(ctx, `INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (39, '{"en": "Zero", "pl": "Zero"}'::jsonb, 'solid', 0, 0, 0)`); err != nil {
+	if _, err := invariantOwner.Exec(ctx, `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES (39, '{"en": "Zero", "pl": "Zero"}'::jsonb, 'g', 0, 0, 0)`); err != nil {
 		t.Fatalf("insert all-zero Macro Profile fixture row: %v", err)
 	}
 	status, body, contentType := getSuggestions(t, invariantBaseURL, "pizza", "en")

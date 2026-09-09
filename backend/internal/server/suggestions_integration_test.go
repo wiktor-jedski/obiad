@@ -298,7 +298,7 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	}
 	for _, f := range fixtures {
 		if _, err := owner.Exec(ctx,
-			`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'solid', 1, 0, 0)`,
+			`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'g', 1, 0, 0)`,
 			f.id, `{"en": "`+f.en+`", "pl": "`+f.pl+`"}`,
 		); err != nil {
 			t.Fatalf("owner fixture insert for ID %d: %v", f.id, err)
@@ -336,7 +336,7 @@ func TestFoodSuggestionAllowedQuantityBoundaryHTTPIntegration(t *testing.T) {
 			baseURL, _ := startServer(t, db.RuntimeURL)
 			owner := connect(t, db.OwnerURL)
 			if _, err := owner.Exec(ctx,
-				`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat, serving) VALUES (39, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'solid', 10, 5, 1, $1)`,
+				`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, serving) VALUES (39, '{"en": "Boundary serving", "pl": "Graniczna porcja"}'::jsonb, 'g', 10, 5, 1, $1)`,
 				tc.serving,
 			); err != nil {
 				t.Fatalf("insert %s fixture row: %v", tc.name, err)

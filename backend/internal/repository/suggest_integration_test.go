@@ -247,7 +247,7 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	}
 	for _, f := range fixtureNames {
 		if _, err := owner.Exec(ctx,
-			`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'solid', 1, 0, 0)`,
+			`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'g', 1, 0, 0)`,
 			f.id, `{"en": "`+f.en+`", "pl": "`+f.pl+`"}`,
 		); err != nil {
 			t.Fatalf("owner fixture insert for ID %d: %v", f.id, err)
@@ -363,7 +363,7 @@ func TestSuggestionRankingMemoryBound(t *testing.T) {
 		return `{"en": "` + strings.Repeat("a", codePoints) + `", "pl": "Długi"}`
 	}
 	if _, err := owner.Exec(ctx,
-		`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES (39, $1::jsonb, 'solid', 1, 0, 0)`,
+		`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES (39, $1::jsonb, 'g', 1, 0, 0)`,
 		namesJSON(8192),
 	); err != nil {
 		t.Fatalf("owner fixture insert: %v", err)

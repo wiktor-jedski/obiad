@@ -266,7 +266,7 @@ func assertCandidateItem(t *testing.T, item SubstituteItem, want wantCandidate, 
 	if item.MacroProfile != wantProfile {
 		t.Fatalf("item %d MacroProfile %+v, want %+v", item.FoodObjectID, item.MacroProfile, wantProfile)
 	}
-	wantBaseUnit := baseUnit(candObject.physicalState)
+	wantBaseUnit := candObject.nutritionBasis
 	if item.BaseUnit != wantBaseUnit {
 		t.Fatalf("item %d BaseUnit %q, want %q", item.FoodObjectID, item.BaseUnit, wantBaseUnit)
 	}
@@ -442,13 +442,13 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	if n := countFoodObjects(t, owner); n != 38 {
 		t.Fatalf("catalog has %d Food Objects after the Runs, want the unchanged 38 seeded rows", n)
 	}
-	wantColumns := []string{"id", "names", "physical_state", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key"}
+	wantColumns := []string{"id", "names", "nutrition_basis", "protein", "carbohydrate", "fat", "serving", "food_family_id", "image_key", "serving_unit", "source"}
 	assertFoodObjectColumns(t, owner, wantColumns)
 
 	insertTieObject := func(id int32, en, pl string, protein, carbohydrate, fat float64) {
 		t.Helper()
 		if _, err := owner.Exec(ctx,
-			`INSERT INTO food_objects (id, names, physical_state, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'solid', $3, $4, $5)`,
+			`INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat) VALUES ($1, $2::jsonb, 'g', $3, $4, $5)`,
 			id, `{"en": "`+en+`", "pl": "`+pl+`"}`, protein, carbohydrate, fat,
 		); err != nil {
 			t.Fatalf("owner tie-fixture insert for ID %d: %v", id, err)
@@ -535,7 +535,7 @@ func TestFindSubstitutePageIntegration(t *testing.T) {
 	}
 
 	insertTieObject(95, "Zero result input", "Wprowadzenie zero wynikow", 10, 20, 5)
-	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id) VALUES (99)"); err != nil {
+	if _, err := owner.Exec(ctx, "INSERT INTO food_families (id, names) VALUES (99, '{\"en\":\"Test\",\"pl\":\"Test\"}')"); err != nil {
 		t.Fatalf("owner insert food_families 99: %v", err)
 	}
 	if _, err := owner.Exec(ctx, "UPDATE food_objects SET food_family_id = 99"); err != nil {
