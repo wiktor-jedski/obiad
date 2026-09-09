@@ -2,106 +2,72 @@ package dbsetup
 
 import (
 	"context"
-	"fmt"
-	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
-	"testing/fstest"
 
-	"github.com/jackc/pgx/v5"
-
-	sqlfiles "obiad/backend/internal/repository/sql"
 	"obiad/backend/internal/testdb"
 )
 
-func TestExternalCatalogUpgrade(t *testing.T) {
+func TestExternalCatalogBaselineAndDummyLoad(t *testing.T) {
 	db := testdb.NewDB(t)
+	runDBSetupCommand(t, db.OwnerURL)
 	owner := connect(t, db.OwnerURL)
 	ctx := context.Background()
-	migrations, err := fs.Sub(sqlfiles.Migrations, "migrations")
-	if err != nil {
-		t.Fatal(err)
-	}
-	all, err := Load(migrations)
-	if err != nil {
-		t.Fatal(err)
-	}
-	historical := fstest.MapFS{}
-	for _, migration := range all {
-		if migration.Version < 6 {
-			historical[fmt.Sprintf("%04d_%s.sql", migration.Version, migration.Name)] = &fstest.MapFile{Data: []byte(migration.SQL)}
-		}
-	}
-	if _, err := Apply(ctx, owner, historical); err != nil {
-		t.Fatal(err)
-	}
-	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 38 {
-		t.Fatalf("historical migrations produced %d Food Objects, want 38", n)
-	}
-	var historicalRows string
-	if err := owner.QueryRow(ctx, `SELECT jsonb_agg(
-		(to_jsonb(f) - 'physical_state') || jsonb_build_object(
-			'nutrition_basis', CASE physical_state WHEN 'solid' THEN 'g' ELSE 'ml' END)
-		ORDER BY id)::text FROM food_objects f`).Scan(&historicalRows); err != nil {
-		t.Fatal(err)
-	}
-	db.GrantRuntimeCatalogRead(t, owner)
-	runDBSetupCommand(t, db.OwnerURL)
 	for _, table := range []string{"food_objects", "food_families"} {
 		if n := countRows(t, owner, "SELECT count(*) FROM "+table); n != 0 {
-			t.Fatalf("upgrade left %d rows in %s", n, table)
+			t.Fatalf("baseline left %d rows in %s", n, table)
 		}
 	}
-	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 6 {
-		t.Fatalf("upgrade recorded %d migrations, want 6", n)
+	dummy, err := os.ReadFile(filepath.Join(moduleRoot(t), "catalog", "dummy.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
 	testdb.LoadCatalog(t, db.OwnerURL)
-	runDBSetupCommand(t, db.OwnerURL)
-	runtime := connect(t, db.RuntimeURL)
-	if n := countRows(t, runtime, "SELECT count(*) FROM food_objects WHERE nutrition_basis IN ('g', 'ml')"); n != 38 {
-		t.Fatalf("repeat setup changed the loaded catalog: %d rows", n)
+	if n := countRows(t, owner, "SELECT count(*) FROM food_objects"); n != 38 {
+		t.Fatalf("dummy load produced %d Food Objects, want 38", n)
 	}
-	_, err = runtime.Exec(ctx, "UPDATE food_objects SET source = 'https://example.org/recipe' WHERE id = 1")
-	wantSQLState(t, err, "42501")
-	fresh := testdb.NewDB(t)
-	runDBSetupCommand(t, fresh.OwnerURL)
-	freshOwner := connect(t, fresh.OwnerURL)
-	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects"); n != 0 {
-		t.Fatalf("fresh migrations left %d catalog rows before loading", n)
+	var matches bool
+	if err := owner.QueryRow(ctx, `SELECT jsonb_build_object(
+		'schemaVersion', 1,
+		'foodFamilies', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_families f),
+		'foodObjects', (SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+			'id', id, 'names', names, 'nutritionBasis', nutrition_basis,
+			'macroProfile', jsonb_build_object(
+				'protein', protein, 'availableCarbohydrate', carbohydrate, 'fat', fat),
+			'serving', CASE WHEN serving IS NOT NULL THEN
+				jsonb_build_object('value', serving, 'unit', serving_unit) END,
+			'foodFamilyId', food_family_id, 'imageKey', image_key, 'source', source
+		)) ORDER BY id) FROM food_objects)
+	) = $1::jsonb`, string(dummy)).Scan(&matches); err != nil {
+		t.Fatal(err)
 	}
-	testdb.LoadCatalog(t, fresh.OwnerURL)
-	for _, conn := range []*pgx.Conn{owner, freshOwner} {
-		var loaded string
-		if err := conn.QueryRow(ctx, `SELECT jsonb_agg(
-			to_jsonb(f) - 'source' - 'serving_unit' ORDER BY id)::text
-			FROM food_objects f`).Scan(&loaded); err != nil {
-			t.Fatal(err)
-		}
-		if loaded != historicalRows {
-			t.Fatalf("dummy catalog differs from the immutable historical seed\nloaded: %s\nhistorical: %s", loaded, historicalRows)
-		}
+	if !matches {
+		t.Fatal("loaded catalog differs from catalog/dummy.json")
 	}
 	const snapshot = `SELECT jsonb_build_object(
 		'objects', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_objects f),
-		'families', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_families f))::text`
+		'families', (SELECT jsonb_agg(to_jsonb(f) ORDER BY id) FROM food_families f),
+		'migrations', (SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM schema_migrations m))::text`
 	var before, after string
-	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&before); err != nil {
+	if err := owner.QueryRow(ctx, snapshot).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	testdb.LoadCatalog(t, fresh.OwnerURL)
-	if err := freshOwner.QueryRow(ctx, snapshot).Scan(&after); err != nil {
+	runDBSetupCommand(t, db.OwnerURL)
+	if err := owner.QueryRow(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("repeated setup changed ordered rows\nbefore: %s\nafter: %s", before, after)
+	}
+	testdb.LoadCatalog(t, db.OwnerURL)
+	if err := owner.QueryRow(ctx, snapshot).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
 		t.Fatalf("repeated dummy load changed ordered rows\nbefore: %s\nafter: %s", before, after)
 	}
-	if n := countRows(t, freshOwner, `SELECT count(*) FROM food_families
-		WHERE id = 1 AND names = '{"en":"Pizza","pl":"Pizza"}'::jsonb`); n != 1 {
-		t.Fatal("dummy catalog did not preserve the Pizza Food Family")
-	}
-	if n := countRows(t, freshOwner, "SELECT count(*) FROM food_objects WHERE source IS NOT NULL"); n != 0 {
-		t.Fatal("dummy catalog added production sources")
-	}
-	t.Log("P28-G1/P28-G2: fresh and upgraded catalogs equal all 38 historical rows; repeated load preserves both ordered tables")
+	t.Log("Task 97: baseline leaves both catalog tables empty; catalogload loads the exact 38-row dummy catalog; repeated setup and load preserve both ordered tables and migration history")
 }
 
 func TestExternalCatalogSourceAndFamilyConstraints(t *testing.T) {

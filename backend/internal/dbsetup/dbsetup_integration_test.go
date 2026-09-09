@@ -98,22 +98,15 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	runDBSetupCommand(t, dbURL)
 
 	conn := connect(t, dbURL)
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
-		t.Fatalf("schema_migrations has %d rows, want 6 (one transaction per migration)", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 1 {
+		t.Fatalf("schema_migrations has %d rows, want only the external-catalog baseline", n)
 	}
 	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations ORDER BY version")
 	if err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
 	}
 	defer rows.Close()
-	wantVersions := map[int]string{
-		1: "create_food_objects",
-		2: "add_macro_profile_and_serving",
-		3: "add_food_family",
-		4: "add_image_key",
-		5: "seed_food_catalog",
-		6: "external_catalog",
-	}
+	wantVersions := map[int]string{1: "external_catalog"}
 	gotVersions := map[int]string{}
 	for rows.Next() {
 		var version int
@@ -156,8 +149,8 @@ func TestDBSetupAppliesVersionedMigrations(t *testing.T) {
 	}
 
 	runDBSetupCommand(t, dbURL)
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
-		t.Fatalf("schema_migrations has %d rows after second run, want 6", n)
+	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 1 {
+		t.Fatalf("schema_migrations has %d rows after second run, want 1", n)
 	}
 	if n := countRows(t, conn, "SELECT count(*) FROM food_objects"); n != 0 {
 		t.Fatalf("food_objects has %d rows after second run, want 0 before catalog loading", n)
@@ -528,9 +521,6 @@ func TestDatabaseCredentialSeparation(t *testing.T) {
 	runDBSetupCommand(t, db.OwnerURL)
 	owner := connect(t, db.OwnerURL)
 
-	if n := countRows(t, owner, "SELECT count(*) FROM schema_migrations"); n != 6 {
-		t.Fatalf("schema_migrations has %d rows, want 6", n)
-	}
 	for _, table := range []string{"food_objects", "food_families"} {
 		var exists bool
 		if err := owner.QueryRow(ctx, `SELECT EXISTS (
@@ -587,10 +577,6 @@ func TestFoodObjectImageKey(t *testing.T) {
 	runDBSetupCommand(t, dbURL)
 	conn := connect(t, dbURL)
 	ctx := context.Background()
-
-	if n := countRows(t, conn, "SELECT count(*) FROM schema_migrations"); n != 6 {
-		t.Fatalf("schema_migrations has %d rows, want 6 (0001-0006)", n)
-	}
 
 	const insertFoodObject = `INSERT INTO food_objects (id, names, nutrition_basis, protein, carbohydrate, fat, image_key) VALUES ($1, $2::jsonb, $3, 10.0, 5.0, 1.0, $4)`
 
