@@ -540,3 +540,11 @@ Status: ready-for-agent
 ### Testing coverage deviations
 
 - Do not add a live-page integration gate. Fixture-backed adapter integration tests retain the website-drift limitation accepted in ISSUE-024. The Phase 29 review compares each accepted record with its current public source URL.
+
+### Comments
+
+- Resolved with the project owner on 2026-09-10. For the private, non-production demonstration batch, GialloZafferano and Good Food recipe results may be used for Meal authoring. This does not approve publication, production use, or public distribution. Reassess source-use permission before production.
+- Resolved with the project owner on 2026-09-10. Reopen the Chicken breast composition investigation only for sourced chicken-breast and tomato count-to-mass conversions. Do not investigate trimming, baking retention, or zucchini drainage in this resolution; a later subagent owns that research.
+- Resolved with the project owner on 2026-09-10. For Pork chop and later private, non-production composition investigations, a later subagent may search for sourced count-to-mass conversions. Ignore trimming, cooking, drainage, and other preparation-retention changes in the demonstration composition model.
+- Resolved with the project owner on 2026-09-10. For the private, non-production Gyros demonstration Meal, use the whole listed tzatziki batch as input across the assembled pitas. Ignore frying-medium retention under the demonstration composition rule.
+- Resolved with the project owner on 2026-09-10. For the private, non-production Polish chicken soup demonstration Meal, ignore cooking retention, skimming, trimming, and discarded solids. Use all listed source inputs at sourced mass, summed input mass as batch yield, and a `100 g` Nutrition Basis.
