@@ -1,0 +1,69 @@
+{
+  "task_id": 117,
+  "preparation_status": "blocked",
+  "phase_base_commit": "c1ee055",
+  "data_base_commit": "45b9bfcd507169b8c48947fb518abc33079f2b22",
+  "data_preparation_commit": "a2daac3",
+  "outcomes": {
+    "total": 13,
+    "accepted": 1,
+    "rejected": 12,
+    "accepted_meal_ids": [1],
+    "assembly": "attempts.json preserves only target, status, and the exact reason or meal_id from each frozen task 104 through 116 outcome. The outcome files are unchanged."
+  },
+  "verification": [
+    {
+      "cwd": "data",
+      "command": "uv run python -m unittest tests.test_phase_29_meal_catalog_integration tests.test_phase_29_attempt_records_integration",
+      "result": "Exit 1. Ten tests ran. Nine passed. Only test_requires_five_accepted_meals failed: one accepted Meal is less than five."
+    },
+    {
+      "cwd": "data",
+      "command": "uv run python -m unittest discover -s tests -p 'test_*.py'",
+      "result": "Exit 1. Ninety-five tests ran. Ninety-four passed. Only test_requires_five_accepted_meals failed. Adapter, Ingredient conversion, record validation, Meal calculation, authoring, and export integration checks passed."
+    },
+    {
+      "cwd": "data",
+      "command": "uv run obiad-data validate --ingredients-dir ingredients --meals-dir meals",
+      "result": "Exit 0."
+    },
+    {
+      "cwd": "data",
+      "command": "uv run obiad-data validate-attempts --attempts attempts.json --meals-dir meals",
+      "result": "Exit 0. All 13 production terminal outcomes validate."
+    },
+    {
+      "cwd": "data",
+      "command": "mkdir -p catalogs && uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task117-first.json && uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task117-second.json && cmp catalogs/task117-first.json catalogs/task117-second.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task117-first.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task117-second.json",
+      "result": "Exit 0. Both schema-valid exports are byte-identical and contain only Meal 1. The first export attempt reported the absent catalogs directory; creation of that ignored directory resolved it. Both generated files were removed after verification."
+    },
+    {
+      "cwd": ".",
+      "command": "python3 scripts/check_data_boundary.py && python3 scripts/validate_phase_plan.py --phase 29",
+      "result": "Exit 0. Data boundary passed. Phase-plan validation passed: 117 tasks, one phase, five gate criteria, two requirement references."
+    }
+  ],
+  "gates": {
+    "P29-G1": "PASS for adapter, record-validation, calculation, and export checks. The full suite remains red only because P29-G5 is enforced separately.",
+    "P29-G2": "PASS. Exactly 13 unique targets have one terminal result. The accepted target is Pierogi ruskie with existing Meal ID 1; the other 12 targets are rejected.",
+    "P29-G3": "PASS. Independent Decimal Ingredient-record totals reproduce the exported Macro Profile: protein 7.227230, available carbohydrate 24.302264, fat 2.070593 per 100 g. Retained mass is 1957 g.",
+    "P29-G4": "PASS. cmp reports byte-identical exports; both pass the application-owned schema.",
+    "P29-G5": "BLOCKED. Only one accepted Meal exists; at least five are required. Owner batch approval is not recorded. No threshold, outcome, task status, or phase plan was changed."
+  },
+  "owner_review": {
+    "status": "pending",
+    "scope": "Review all 13 frozen task outcomes, the task 103 source portfolio, the GialloZafferano and Good Food handoffs and adapters, the existing six Ingredients, their density and conversion evidence, and Meal 1 retained composition, operations, yield, names, basis, and Family.",
+    "references": [
+      "data/docs/phase-29-outcomes/task-104-pizza-margherita.json through task-116-beef-cheeseburger.json",
+      "data/docs/recipe-adapters/phase-29-source-portfolio.json",
+      "data/docs/recipe-adapters/giallozafferano.md",
+      "data/docs/recipe-adapters/good-food.md",
+      "data/meals/1-pierogi-ruskie.json",
+      "data/ingredients/",
+      "data/food_families.json"
+    ],
+    "boundary": "Task 117 adds no Ingredient, Meal, adapter, estimate, density, conversion, operation, or raw source prose. Rejection reasons are copied without alteration. The only exported record is the existing generic prepared Pierogi Meal. Application code and the dummy runtime catalog are unchanged. Generated exports are not committed.",
+    "resolution_required": "The owner must resolve the conflict between frozen terminal outcomes and the five-Meal minimum, then approve the batch evidence. Preparation does not grant that approval or alter the requirement."
+  },
+  "command_availability": "The installed obiad-data CLI provides validate, validate-attempts, export-catalog, validate-catalog, and acquire-ingredient. It has no separate adapter or calculation command. The full integration suite exercises those modules and acquisition. No new Ingredient acquisition is needed or authorized for this batch assembly."
+}
