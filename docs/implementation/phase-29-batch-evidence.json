@@ -1,82 +1,272 @@
 {
-  "task_id": 117,
-  "preparation_status": "accepted_nonproduction",
+  "task_id": 118,
+  "preparation_status": "blocked_owner_review",
   "batch_use": "non-production",
   "production_use": {
     "approved": false,
     "minimum_accepted_meals": 5,
-    "required_evidence": ["source-use", "retention"],
-    "deferral": "No production use is approved. A future production review must establish at least five accepted Meals and source-use and retention evidence. The Phase 30 and Phase 31 ten-Meal production-startup requirement remains unchanged."
+    "required_evidence": [
+      "source-use",
+      "retention"
+    ],
+    "startup_minimum_accepted_meals": 10
   },
-  "phase_base_commit": "c1ee055",
-  "data_base_commit": "45b9bfcd507169b8c48947fb518abc33079f2b22",
-  "data_preparation_commit": "a2daac3",
-  "data_resolution_commit": "5541ac84f57011f0403240a9b31c06055e815569",
-  "repair_history": "The prepared five-Meal gate failed with one accepted Meal. The owner approved a non-production one-Meal exception. During repair, export checks rejected the uncommitted data test change as required; after the data commit, all checks passed. Phase-plan validation also caught a missing literal Pass: marker and an extra sentence parsed as a sixth gate; both documentation issues were corrected.",
   "outcomes": {
     "total": 13,
-    "accepted": 1,
-    "rejected": 12,
-    "accepted_meal_ids": [1],
-    "assembly": "attempts.json preserves only target, status, and the exact reason or meal_id from each frozen task 104 through 116 outcome. The outcome files are unchanged."
+    "accepted": 13,
+    "rejected": 0,
+    "accepted_meal_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ]
   },
+  "owner_review": {
+    "status": "pending",
+    "scope": "All 13 completed private demonstration Meals, all new and reused Ingredient sources, recipe terms, count and volume conversions, nutrition proxies, household size assumptions, qualified names, compositions, authored steps, yields, Nutrition Bases, calculated profiles and Food Family relationships.",
+    "boundary": "The owner approved the authoring and quantity policy only. No completed task 118 record review is available. Task 117 approval covers the historical one-Meal batch and must not be reused.",
+    "required_evidence": "Explicit owner review of the completed task 118 records and all documented assumptions. No approval statement is invented."
+  },
+  "quantity_decisions": [
+    {
+      "date": "2026-09-11",
+      "source": "Owner decision in preparation continuation delegation",
+      "decision": "Every recipe line stated to taste is qualitative and has no composition weight, regardless of ingredient category. This includes fresh basil, lettuce, parsley, ginger, scallion, rosemary and spinach, as well as to-taste oils, broth, butter, sauces, water, ice and dusting flour. Do not invent a retained weight. Quantified source lines for the same ingredient remain retained."
+    },
+    {
+      "date": "2026-09-11",
+      "source": "Owner clarification relayed by Main during preparation continuation",
+      "decision": "Source standard sizes for the soup leek piece and parsley sprigs. Treat these as household quantities, document separate sourced conversions and include their defined composition mass."
+    },
+    {
+      "date": "2026-09-11",
+      "source": "Owner decision in preparation continuation delegation",
+      "decision": "Skip Polish chicken soup noodles entirely. Do not add a noodle quantity or create a composite Meal."
+    }
+  ],
+  "source_evidence": "data/docs/task-118-ingredient-evidence.json",
   "verification": [
     {
       "cwd": "data",
-      "command": "uv run python -m unittest tests.test_phase_29_meal_catalog_integration tests.test_phase_29_attempt_records_integration",
-      "result": "Exit 0. All ten tests passed without skips or expected failures."
+      "command": "uv run obiad-data validate --ingredients-dir ingredients --meals-dir meals && uv run obiad-data validate-attempts --attempts attempts.json --meals-dir meals",
+      "result": "Exit 0. All 86 Ingredients, 13 Meals and 13 accepted attempts validate."
+    },
+    {
+      "cwd": "data",
+      "command": "uv run python -c <throwaway source-to-meal authoring smoke>",
+      "scenario": "Compile the live-acquired Margherita recipe with qualitative to-taste decisions; assert the 1304 g yield and exact composition. Exercise required chicken, tomato and pork conversions plus the sourced soup leek and parsley sizes. Check every literal to-taste source line in all eleven newly authored recipes against its outcome decision.",
+      "result": "Exit 0. All assertions passed. No smoke script or source recipe prose was written to the repository."
+    },
+    {
+      "cwd": "data",
+      "command": "uv run python -m unittest tests.test_meal_authoring_compiler_integration",
+      "result": "Exit 0. Eleven compiler integration tests pass, including to-taste exclusion and rejection of invented retained weights or falsely qualitative quantified lines."
     },
     {
       "cwd": "data",
       "command": "uv run python -m unittest discover -s tests -p 'test_*.py'",
-      "result": "Exit 0. All 95 tests passed without skips or expected failures. Adapter, Ingredient conversion, record validation, Meal calculation, authoring, and export integration checks passed. Invalid-JSON diagnostics are expected negative-case output."
+      "result": "Exit 1. Final run: 95 tests, 94 pass, one failure, no skips and no expected failures. The only failure is test_requires_owner_approved_nonproduction_meal_batch at the explicit owner-review assertion: pending != approved_nonproduction. All adapter, record-validation, calculation and export tests pass.",
+      "earlier_result": "First continuation run: 95 tests, five failures. Four obsolete single-family or unscoped Pierogi fixture assumptions were corrected; the completed-record owner-review requirement was not changed or suppressed."
     },
     {
       "cwd": "data",
-      "command": "uv run obiad-data validate --ingredients-dir ingredients --meals-dir meals",
-      "result": "Exit 0."
-    },
-    {
-      "cwd": "data",
-      "command": "uv run obiad-data validate-attempts --attempts attempts.json --meals-dir meals",
-      "result": "Exit 0. All 13 non-production terminal outcomes validate."
-    },
-    {
-      "cwd": "data",
-      "command": "uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task117-first.json && uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task117-second.json && cmp catalogs/task117-first.json catalogs/task117-second.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task117-first.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task117-second.json",
-      "result": "Exit 0. Both schema-valid exports are byte-identical and contain only Meal 1. Both ignored generated files were removed after verification."
+      "command": "mkdir -p catalogs && uv run obiad-data validate --ingredients-dir ingredients --meals-dir meals && uv run obiad-data validate-attempts --attempts attempts.json --meals-dir meals && uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task118-first.json && uv run obiad-data export-catalog --ingredients-dir ingredients --meals-dir meals --schema ../api/catalog.schema.json --output catalogs/task118-second.json && cmp catalogs/task118-first.json catalogs/task118-second.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task118-first.json && uv run obiad-data validate-catalog --schema ../api/catalog.schema.json --catalog catalogs/task118-second.json && sha256sum catalogs/task118-first.json catalogs/task118-second.json",
+      "result": "Exit 0. Both exports contain the 13 accepted Meals and are byte-identical and schema-valid.",
+      "sha256": "a032bd118057c97f31da863958ba3ce63dd52eb2a3e6d7ebb164c7ac63692175",
+      "cleanup_command": "git check-ignore catalogs/task118-first.json catalogs/task118-second.json && git ls-files catalogs && rm catalogs/task118-first.json catalogs/task118-second.json",
+      "cleanup_result": "Exit 0. Both exports were ignored; git ls-files catalogs returned no tracked paths; both temporary files were removed."
     },
     {
       "cwd": ".",
       "command": "python3 scripts/check_data_boundary.py && python3 scripts/validate_phase_plan.py --phase 29",
-      "result": "Exit 0. Data boundary passed. Phase-plan validation passed: 117 tasks, one phase, five gate criteria, three requirement references."
+      "result": "Exit 0. Data boundary passed. Phase-plan validation passed: 118 tasks, one phase, five gate criteria and three requirement references."
+    },
+    {
+      "cwd": ".",
+      "command": "git merge-base --is-ancestor 6af845702942e2461771ec6478048d268a68c442 HEAD && git -C data merge-base --is-ancestor f769852784082686dda4a3633aab9e4a2024e1f3 HEAD && git diff --exit-code ac3c3b5a6c2023fa63203da4043911c1fbe7bd71 -- backend frontend api scripts docs/implementation/task-list.md && git -C data diff --exit-code 19ca3b23cc6e9ab7b3195c3d63650bb76873df33 -- meals/1-pierogi-ruskie.json",
+      "result": "Exit 0. Both prior preparation commits remain ancestors. Application code, website, API, scripts, task list and dummy runtime catalog are unchanged. Pierogi Meal 1 is unchanged."
+    },
+    {
+      "cwd": ".",
+      "command": "Python evaluation of the two exports and all source authoring records",
+      "scenario": "Independently sum Decimal Ingredient macros times composition grams, divide by each Meal yield, round half-up to six places and compare every exported profile. Check exact Meal and source-URL sets, both Food Family relationships, all Ingredient usage and absence of exact copied source instructions in new steps.",
+      "result": "All assertions passed. All 13 exported profiles match; all 86 Ingredient records are used; Pizza Meals 2/3 share Family 2; Pierogi 1/Gyoza 8 share Family 1."
     }
   ],
+  "historical_evidence": {
+    "task_117_application_commit": "a7e49f9",
+    "task_117_data_commit": "19ca3b23cc6e9ab7b3195c3d63650bb76873df33",
+    "prior_preparation_application_commit": "6af845702942e2461771ec6478048d268a68c442",
+    "prior_preparation_data_commit": "f769852784082686dda4a3633aab9e4a2024e1f3",
+    "boundary": "All previous commits remain ancestors. Task 117 records and approval remain in Git history. No old approval applies to these new records."
+  },
+  "scope": "No application code, website, dummy runtime catalog or task list changes. No catalog publication, deployment, source corpus or production release. Generated catalog files must remain ignored and be removed after checks.",
   "gates": {
-    "P29-G1": "PASS. All 95 integration tests pass without skips or expected failures, including adapter, record-validation, calculation, and export checks.",
-    "P29-G2": "PASS. Exactly 13 unique targets have one terminal result. The accepted target is Pierogi ruskie with existing Meal ID 1; the other 12 targets are rejected.",
-    "P29-G3": "PASS. Independent Decimal Ingredient-record totals reproduce the exported Macro Profile: protein 7.227230, available carbohydrate 24.302264, fat 2.070593 per 100 g. Retained mass is 1957 g.",
-    "P29-G4": "PASS. cmp reports byte-identical exports; both pass the application-owned schema.",
-    "P29-G5": "PASS for the owner-approved non-production batch only. One accepted Meal meets the revised one-Meal floor. All 13 frozen outcomes remain unchanged. No product or raw-food Meal, copied source prose, generated output, application change, or dummy runtime catalog change is introduced. Explicit owner approval is recorded below. Production use is deferred pending at least five accepted Meals and source-use and retention evidence; this gate grants neither production readiness nor production approval."
+    "P29-G1": "PASS for adapter, record-validation, calculation and export checks. The full-suite exit remains 1 only because the separate P29-G5 completed-record owner-review assertion fails. No skips or expected failures.",
+    "P29-G2": "PASS. Exactly 13 unique targets have accepted outcomes referencing 13 existing, uniquely identified Meals. No rejection remains.",
+    "P29-G3": "PASS. Independent Decimal Ingredient calculations reproduce all 13 exported Macro Profiles; per-Meal results are recorded below.",
+    "P29-G4": "PASS. Two ignored exports are byte-identical, both schema-valid, and removed after verification.",
+    "P29-G5": "BLOCKED only by explicit owner review of completed task 118 records and assumptions. The 13-Meal floor, generic prepared-dish scope, no copied source prose, unchanged application/dummy catalog and no tracked generated output checks pass. Production approval remains false."
   },
-  "owner_review": {
-    "status": "approved_nonproduction",
-    "approval_source": "Owner confirmation in the Task 117 conversation, recorded on 2026-09-10.",
-    "owner_statement": "ok fine. we will not use this in production. lets resolve it as accepted for now, we will change that later. is that ok for you",
-    "confirmed_resolution": "The assistant stated the non-production scope, P29-G5 change from five accepted Meals to one, explicit owner approval, and deferred five-Meal production requirement. The owner then confirmed.",
-    "confirmation": "I confirm.",
-    "scope": "Review all 13 frozen task outcomes, the task 103 source portfolio, the GialloZafferano and Good Food handoffs and adapters, the existing six Ingredients, their density and conversion evidence, and Meal 1 retained composition, operations, yield, names, basis, and Family.",
-    "references": [
-      "data/docs/phase-29-outcomes/task-104-pizza-margherita.json through task-116-beef-cheeseburger.json",
-      "data/docs/recipe-adapters/phase-29-source-portfolio.json",
-      "data/docs/recipe-adapters/giallozafferano.md",
-      "data/docs/recipe-adapters/good-food.md",
-      "data/meals/1-pierogi-ruskie.json",
-      "data/ingredients/",
-      "data/food_families.json"
-    ],
-    "boundary": "Task 117 adds no Ingredient, Meal, adapter, estimate, density, conversion, operation, or raw source prose. Rejection reasons are copied without alteration. The only exported record is the existing generic prepared Pierogi Meal. Application code and the dummy runtime catalog are unchanged. Generated exports are not committed.",
-    "resolution": "The owner approved this batch and its listed evidence for non-production use only, with a one-accepted-Meal P29-G5 floor. All 13 frozen outcomes remain unchanged. This approval does not establish production readiness, grant source-use or retention permission, or approve production use."
+  "criteria": {
+    "all_required_checks_without_skips_or_expected_failures": "BLOCKED only by the explicit owner-review test: 94 of 95 tests pass, with no skips or expected failures. All other required commands exit 0.",
+    "thirteen_unique_accepted_targets_and_meals": "PASS: IDs 1 through 13; no rejected attempt.",
+    "source_backed_composition_names_identity_steps_yield_basis": "PASS for completed authoring and direct source evidence. All 12 formerly rejected targets now have accepted Meals; owner review of the documented proxies and assumptions is still pending.",
+    "independently_reproduced_macro_profiles": "PASS: all 13, from Ingredient records, not recipe-page nutrition.",
+    "deterministic_schema_valid_exports": "PASS: matching SHA-256 and cmp exit 0; both schema validations exit 0.",
+    "no_tracked_generated_catalog": "PASS: git ls-files catalogs returned no paths; ignored temporary files were removed.",
+    "application_and_dummy_catalog_unchanged": "PASS: base-to-worktree diff for backend, frontend, API, scripts and task list is empty.",
+    "production_use_approved_false": "PASS: false; future source-use, retention and ten-Meal production-startup requirements remain unchanged.",
+    "owner_review_completed_records": "UNMET: no explicit owner approval of the completed task 118 records is available. The task 117 approval is not reused."
   },
-  "command_availability": "The installed obiad-data CLI provides validate, validate-attempts, export-catalog, validate-catalog, and acquire-ingredient. It has no separate adapter or calculation command. The full integration suite exercises those modules and acquisition. No new Ingredient acquisition is needed or authorized for this batch assembly."
+  "independent_macro_profiles": [
+    {
+      "meal_id": 1,
+      "batch_yield_g": 1957.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "7.227230",
+        "availableCarbohydrate": "24.302264",
+        "fat": "2.070593"
+      }
+    },
+    {
+      "meal_id": 2,
+      "batch_yield_g": 1304.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "8.019632",
+        "availableCarbohydrate": "29.718558",
+        "fat": "3.929908"
+      }
+    },
+    {
+      "meal_id": 3,
+      "batch_yield_g": 3455.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "9.861418",
+        "availableCarbohydrate": "22.653766",
+        "fat": "9.169036"
+      }
+    },
+    {
+      "meal_id": 4,
+      "batch_yield_g": 3341.167,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "9.365429",
+        "availableCarbohydrate": "14.989491",
+        "fat": "8.819675"
+      }
+    },
+    {
+      "meal_id": 5,
+      "batch_yield_g": 2420.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "12.879707",
+        "availableCarbohydrate": "1.029698",
+        "fat": "5.517694"
+      }
+    },
+    {
+      "meal_id": 6,
+      "batch_yield_g": 3790.7459,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "7.789083",
+        "availableCarbohydrate": "7.368730",
+        "fat": "5.094642"
+      }
+    },
+    {
+      "meal_id": 7,
+      "batch_yield_g": 1462.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "12.054177",
+        "availableCarbohydrate": "4.352646",
+        "fat": "13.088142"
+      }
+    },
+    {
+      "meal_id": 8,
+      "batch_yield_g": 950.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "8.162505",
+        "availableCarbohydrate": "23.775600",
+        "fat": "7.363621"
+      }
+    },
+    {
+      "meal_id": 9,
+      "batch_yield_g": 3236.0,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "10.692732",
+        "availableCarbohydrate": "10.324864",
+        "fat": "5.614530"
+      }
+    },
+    {
+      "meal_id": 10,
+      "batch_yield_g": 3588.9,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "9.042198",
+        "availableCarbohydrate": "14.009614",
+        "fat": "6.698538"
+      }
+    },
+    {
+      "meal_id": 11,
+      "batch_yield_g": 4682.25,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "4.935714",
+        "availableCarbohydrate": "0.693684",
+        "fat": "3.891468"
+      }
+    },
+    {
+      "meal_id": 12,
+      "batch_yield_g": 486.175,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "5.709719",
+        "availableCarbohydrate": "8.278778",
+        "fat": "2.695364"
+      }
+    },
+    {
+      "meal_id": 13,
+      "batch_yield_g": 1712.418184,
+      "nutrition_basis": "g",
+      "macro_profile_per_100": {
+        "protein": "13.154058",
+        "availableCarbohydrate": "6.525452",
+        "fat": "13.101420"
+      }
+    }
+  ],
+  "command_availability": "All task 118 required commands ran. No unrelated formatter, linter, application build, frontend suite or project-wide CI command ran. Adapter and calculation behavior is exercised by the required full data integration suite and source-to-meal smoke; no separate adapter or calculation CLI command is required.",
+  "risks": [
+    "Some recipe variants use documented generic Ingredient profiles, including Italian flour, small Savoy head size, cooking-wine and vinegar spoon mass, and the simplified whole-chicken soup model. These are explicit assumptions for owner review.",
+    "USDA household portions are representative sizes. A medium item, large egg, large pita or one-ounce cheese slice does not establish the exact size used on the recipe page.",
+    "The soup few sprigs is interpreted as three standard 1 g sprigs; the leek piece is one standard 6 g slice. These are defined household interpretations under the owner clarification, not exact quantities stated on the page.",
+    "The inherited qualitative salt, dry-herb and dry-spice policy remains in force. No new numeric assumption is made for those seasoning lines.",
+    "Ingredient attribution to a product label does not create a product Meal. Public catalog or source-corpus publication remains prohibited."
+  ]
 }
