@@ -13,7 +13,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APPLICATION_HTML = "frontend/index.html"
-APPROVED_RECIPE_FIXTURE = "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html"
+APPROVED_RECIPE_FIXTURES = frozenset({
+    "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html",
+    "tests/fixtures/good_food/protein_shake.html",
+    "tests/fixtures/giallozafferano/recipe.html",
+})
 
 
 PROHIBITED_ARTIFACTS = (
@@ -48,12 +52,12 @@ def prohibited_artifacts(
     *,
     allow_ingredient_records: bool = False,
     allow_meal_records: bool = False,
-    allowed_source_html: str | None = None,
+    allowed_source_html: frozenset[str] = frozenset(),
 ) -> list[tuple[str, str]]:
     """Return each tracked path together with its prohibited artifact type."""
     violations: list[tuple[str, str]] = []
     for path in paths:
-        if path in (APPLICATION_HTML, allowed_source_html):
+        if path == APPLICATION_HTML or path in allowed_source_html:
             continue
         for artifact, pattern in PROHIBITED_ARTIFACTS:
             if artifact == "production Ingredient record" and allow_ingredient_records:
@@ -108,7 +112,7 @@ def check(repository: Path, *, application_only: bool = False) -> int:
     trees = [repository] if application_only else repositories_to_check(repository)
     for tree in trees:
         allowed_source_html = (
-            APPROVED_RECIPE_FIXTURE if tree == repository / "data" else None
+            APPROVED_RECIPE_FIXTURES if tree == repository / "data" else frozenset()
         )
         violations.extend(
             (tree, path, artifact)

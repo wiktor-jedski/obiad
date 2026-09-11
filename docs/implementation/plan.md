@@ -1155,7 +1155,7 @@ Read the Phase 28 diff. Record the listed requirements as verified for dummy set
 
 **Goal**
 
-Create at least five accepted recipe-derived Meals from the first half of the current prepared-dish targets.
+Accept a private, non-production recipe-derived demonstration batch with all 13 target Meals. The historical phase title does not grant production approval.
 
 **Depends on**
 
@@ -1171,22 +1171,24 @@ Phase 28.
 - Reuse existing Ingredients and documented defaults.
 - Add sourced Ingredient records, densities, and conversions only when a Meal requires them.
 - Require resolved composition, ordered agent-authored steps, a yield method, explicit Nutrition Basis, and stable identity for every accepted Meal.
-- Keep one versioned rejection record with the target and exact reason for each rejected Meal.
-- Keep product and raw-food targets out of the production Meal catalog.
-- Reach at least five accepted production Meals.
+- Keep a versioned terminal record for each target.
+- Keep product and raw-food targets out of the Meal catalog.
+- Preserve task 117 as historical evidence of the interim batch with Pierogi ruskie Meal 1 accepted and 12 rejections.
+- In task 118, replace the 12 rejections with accepted Meals backed by source-derived Ingredient and Meal records, calculated nutrition, and the private demonstration composition decisions in ISSUE-029.
+- Defer production use until a future batch has at least five accepted Meals and reviewed source-use and retention evidence. The Phase 30 and Phase 31 ten-Meal production-startup requirement remains unchanged.
 - Do not change application code.
 
 **Requirements that become testable**
 
-Collect production-data evidence for REQ-004 through REQ-010. Do not replace the dummy runtime catalog in this phase.
+Collect non-production batch evidence for REQ-004 through REQ-010 under the Phase 29 exception in REQ-071. Do not replace the dummy runtime catalog in this phase.
 
 **Phase gate**
 
-Run all `obiad-data` adapter, record-validation, calculation, and export checks. Verify that all 13 targets have one accepted Meal or one rejection record. Independently recalculate each accepted Meal from its Ingredient records. Generate the catalog twice and compare it byte for byte. Verify at least five accepted Meals, no product or raw-food record, no copied source prose, and no generated output committed to Git.
+Run all `obiad-data` adapter, record-validation, calculation, and export checks without skips or expected failures. Verify that all 13 targets have accepted Meal records and that `attempts.json` contains exactly 13 accepted entries. Independently recalculate each accepted Meal from its Ingredient records. Generate the catalog twice and compare it byte for byte. P29-G5 requires all 13 accepted Meals for this private, non-production demonstration batch, no product or raw-food record, no copied source prose, no generated output committed to Git, an unchanged dummy runtime catalog, and explicit owner approval of the non-production scope and batch evidence; this gate does not establish production readiness or production approval.
 
 **Review stop**
 
-Read the Phase 29 diff. Approve every accepted Meal, rejection, new Ingredient, adapter, estimate, density, conversion, and operation sequence before Phase 30 tasks are generated.
+Read the Phase 29 diff. Record owner review of all 13 accepted Meals and every new Ingredient, estimate, density, conversion, and operation sequence for private, non-production use before Phase 30 tasks are generated. Keep `production_use.approved` false. Future production review must establish source-use and retention evidence and satisfy the Phase 30 and Phase 31 ten-Meal production-startup requirement; this review does not waive that requirement.
 
 ## Phase 30 — Initial production catalog completion
 

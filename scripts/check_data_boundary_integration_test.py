@@ -28,6 +28,12 @@ def initialized_repository() -> Iterator[Path]:
         _write(
             data_origin / "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html", "fixture\n"
         )
+        _write(
+            data_origin / "tests/fixtures/good_food/protein_shake.html", "fixture\n"
+        )
+        _write(
+            data_origin / "tests/fixtures/giallozafferano/recipe.html", "fixture\n"
+        )
         _run("git", "-C", data_origin, "add", ".")
         _run("git", "-C", data_origin, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture")
         _run("git", "init", root)
@@ -110,6 +116,8 @@ def test_rejects_application_artifacts() -> None:
         ("source.html", "source HTML"),
         ("source.txt", "source page text"),
         ("source.sha256", "source-content checksum"),
+        ("tests/fixtures/good_food/protein_shake.html", "source HTML"),
+        ("tests/fixtures/giallozafferano/recipe.html", "source HTML"),
     )
     for path, artifact in cases:
         with initialized_repository() as root:
@@ -124,6 +132,14 @@ def test_rejects_prohibited_data_artifacts() -> None:
         ("source.html", "source HTML"),
         ("source.txt", "source page text"),
         ("source.sha256", "source-content checksum"),
+        ("tests/fixtures/good_food/other.html", "source HTML"),
+        ("tests/fixtures/good_food/protein_shake.htm", "source HTML"),
+        ("tests/fixtures/good_food/protein_shake.txt", "source page text"),
+        ("tests/fixtures/good_food/protein_shake.sha256", "source-content checksum"),
+        ("tests/fixtures/giallozafferano/other.html", "source HTML"),
+        ("tests/fixtures/giallozafferano/recipe.htm", "source HTML"),
+        ("tests/fixtures/giallozafferano/recipe.txt", "source page text"),
+        ("tests/fixtures/giallozafferano/recipe.sha256", "source-content checksum"),
     )
     for path, artifact in cases:
         with initialized_repository() as root:

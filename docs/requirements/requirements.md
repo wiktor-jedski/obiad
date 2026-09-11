@@ -739,6 +739,10 @@ This document is the source of truth for the active product requirements of the 
 | Status | Active |
 | Verification | Catalog check: The generic interface accepts one Food Object and zero Food Families and rejects an empty Food Object list. The dummy catalog meets both acceptance limits. Production startup rejects fewer than ten accepted Meals before database mutation. |
 
+**Phase 29 non-production exception:** The owner-approved Phase 29 batch shall contain at least one accepted Meal and exactly one frozen terminal outcome for each of its 13 targets. P29-G5 acceptance shall require explicit owner approval of the non-production scope and batch evidence. This acceptance shall not authorize production use. A future production review shall require at least five accepted Meals and source-use and retention evidence. The ten-Meal production-startup minimum remains unchanged.
+
+**Exception verification:** Run the complete data integration suite without skips or expected failures. Verify the one-Meal floor, unchanged frozen outcomes, explicit non-production owner approval, and recorded production-use deferral in the Phase 29 batch evidence.
+
 ## REQ-072 — Test-designed nutrition
 
 **Statement:** Application-owned dummy Macro Profiles shall produce the documented similarities, result order, and Matched Quantities.
