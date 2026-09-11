@@ -14,7 +14,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-002 — Seeded catalog source
 
-**Statement:** The POC shall load every runtime Food Object from a validated application catalog into local PostgreSQL. `scripts/start.py`, CI, and integration checks shall use only application-owned dummy catalog data. The production launcher shall load only a validated production Meal catalog.
+**Statement:** The POC shall load every runtime Food Object from a validated application catalog into local PostgreSQL. `scripts/start.py` shall use the application-owned dummy catalog by default. WHERE a caller supplies `--catalog`, `scripts/start.py` shall load that validated source-agnostic catalog for a private local preview before Fiber starts. CI and integration checks shall use only application-owned dummy catalog data.
 
 **Catalog contract:** The source-agnostic application catalog shall require exactly `schemaVersion: 1`, at least one `foodObjects` entry, and a `foodFamilies` array that may be empty. It shall not accept `dataCommit`, another provenance field, or a catalog-kind discriminator. The offline `catalogload` command shall accept one required catalog-file path and connect through `OBIAD_SCHEMA_OWNER_DATABASE_URL`. This variable selects the target database, not the catalog file. It shall share the `dbsetup` advisory-lock key `0x0B1AD0001` to prevent concurrent database mutation.
 
@@ -22,7 +22,7 @@ This document is the source of truth for the active product requirements of the 
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Catalog validation: Version `1` and a one-Food-Object catalog with no Food Families succeed; other versions, empty Food Object arrays, and provenance fields fail. Integration check: Dummy setup loads only the application-owned dummy catalog without an initialized production-data submodule. Production startup loads a validated production Meal catalog. |
+| Verification | Catalog validation: Version `1` and a one-Food-Object catalog with no Food Families succeed; other versions, empty Food Object arrays, and provenance fields fail. Launcher integration: Default startup loads only the application-owned dummy catalog without an initialized production-data submodule; `scripts/start.py --catalog PATH` loads the selected valid catalog before Fiber starts and rejects a missing or invalid file before Fiber starts. CI and integration stacks continue to load dummy data. |
 
 ## REQ-003 — Single-page interface
 

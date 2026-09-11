@@ -1175,7 +1175,7 @@ Phase 28.
 - Keep product and raw-food targets out of the Meal catalog.
 - Preserve task 117 as historical evidence of the interim batch with Pierogi ruskie Meal 1 accepted and 12 rejections.
 - In task 118, replace the 12 rejections with accepted Meals backed by source-derived Ingredient and Meal records, calculated nutrition, and the private demonstration composition decisions in ISSUE-029.
-- Defer production use until a future batch has at least five accepted Meals and reviewed source-use and retention evidence. The Phase 30 and Phase 31 ten-Meal production-startup requirement remains unchanged.
+- Defer production use until a future plan establishes reviewed source-use and retention evidence. This private, non-production demonstration batch does not waive a future production catalog requirement.
 - Do not change application code.
 
 **Requirements that become testable**
@@ -1188,80 +1188,31 @@ Run all `obiad-data` adapter, record-validation, calculation, and export checks 
 
 **Review stop**
 
-Read the Phase 29 diff. Record owner review of all 13 accepted Meals and every new Ingredient, estimate, density, conversion, and operation sequence for private, non-production use before Phase 30 tasks are generated. Keep `production_use.approved` false. Future production review must establish source-use and retention evidence and satisfy the Phase 30 and Phase 31 ten-Meal production-startup requirement; this review does not waive that requirement.
+Read the Phase 29 diff. Record owner review of all 13 accepted Meals and every new Ingredient, estimate, density, conversion, and operation sequence for private, non-production use before private catalog preview tasks are generated. Keep `production_use.approved` false. Future production review must establish source-use and retention evidence; this review does not waive that requirement.
 
-## Phase 30 — Initial production catalog completion
-
-**Goal**
-
-Attempt every remaining prepared-dish target and publish an initial catalog with at least ten accepted Meals.
-
-**Depends on**
-
-Phase 29.
-
-**Implement**
-
-- Attempt Fried chicken wings, Pancakes, Omelette, Oatmeal, Paella, Pho, Beetroot borscht, Coleslaw, Mondongo, Bandeja paisa, Pastel de nata, Cheesecake, and Goulash.
-- Apply the same adapter, Ingredient, normalization, step, calculation, and rejection rules as Phase 29.
-- Verify that all 26 prepared-dish targets from the historical dummy seed have been attempted across Phases 29 and 30.
-- Reach at least ten accepted production Meals.
-- Add an excluding Pizza Food Family for accepted pizza variants.
-- Add an excluding Dumplings Food Family containing Pierogi ruskie and Gyoza when both are accepted.
-- Do not add a descriptive category system.
-- Keep rejected targets out of the generated catalog.
-- Keep Open Food Facts ODbL and USDA credit for the Phase 31 Data Sources footer. Do not add data-source or license notices to catalog metadata.
-- Publish the generated machine-readable catalog as a versioned `obiad-data` release artifact.
-- Offer the artifact free of charge and link it from the release metadata.
-- Keep application code and its license separate from the data license.
-
-**Requirements that become testable**
-
-- [REQ-004](../requirements/requirements.md#req-004--generic-food-objects)
-- [REQ-005](../requirements/requirements.md#req-005--stable-food-object-identity)
-- [REQ-006](../requirements/requirements.md#req-006--required-localized-names)
-- [REQ-007](../requirements/requirements.md#req-007--nutrition-basis)
-- [REQ-008](../requirements/requirements.md#req-008--one-optional-serving)
-- [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
-- [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
-
-Collect production-catalog evidence for the revised REQ-071. Runtime verification becomes available in Phase 31.
-
-**Phase gate**
-
-Run all `obiad-data` checks from a clean checkout. Verify one accepted or rejected record for every designated target and at least ten accepted Meals. Recalculate every accepted Meal. Verify stable IDs, ordered agent-authored steps, explicit yield methods, Serving derivation, Food Family membership and exclusions, source references, and deterministic byte-identical export. Download the published release artifact and compare it byte for byte with a local export from the tagged data commit.
-
-**Review stop**
-
-Read the Phase 30 diff. Approve the initial production catalog and release artifact before Phase 31 tasks are generated.
-
-## Phase 31 — Production catalog startup
+## Phase 31 — Private Meal catalog preview
 
 **Goal**
 
-Start Obiad with the pinned production Meal catalog and expose its data attribution and download.
+Start Obiad with the current private, non-production Meal catalog and inspect its behavior through the real application.
 
 **Depends on**
 
-Phases 23, 28, and 30.
+Phases 23, 28, and 29.
 
 **Implement**
 
-- Add `scripts/prod.py`.
-- Reuse the PostgreSQL, backend, frontend, readiness, signal, and cleanup orchestration from `scripts/start.py`.
-- Do not duplicate the stack lifecycle implementation.
-- Require the `data/` submodule to be initialized at its pinned commit.
-- Run the pinned `obiad-data` validator and exporter into a temporary file.
-- Require at least ten accepted Meals before database mutation.
-- Run application schema migrations.
-- Load the generated production catalog in one offline transaction.
-- Discard the temporary generated file after loading.
-- Start Fiber only after catalog loading succeeds.
-- Keep `scripts/start.py`, CI, and integration checks on application-owned dummy data.
-- Add one persistent localized Data Sources footer link.
-- Link to Open Food Facts attribution, the ODbL, USDA attribution, the full `obiad-data` commit ID, and the free catalog download.
-- Keep Ingredients out of runtime suggestions, substitutions, and PostgreSQL.
-- Return only recipe-derived Meals from the production catalog.
+- Add one optional `--catalog PATH` interface to `scripts/start.py`.
+- Keep the application-owned dummy catalog as the default.
+- Resolve the selected regular file before starting Docker or another owned resource.
+- Keep `scripts/setup_local_database.sh`, CI, browser integration, and backend fixtures on dummy data.
+- Reuse the existing PostgreSQL, backend, frontend, readiness, signal, and cleanup lifecycle.
+- After normal setup, replace the dummy catalog through `catalogload` when `--catalog` is present.
+- Complete the selected catalog load before Fiber starts.
+- Read no Ingredient or Meal authoring file from the launcher.
+- Use the current aggregate export with 13 accepted Phase 29 Meals for the preview.
+- Keep Ingredients out of PostgreSQL, suggestions, and substitutions.
+- Add no production launcher, release, attribution footer, production approval, or minimum-Meal rule.
 
 **Requirements that become testable**
 
@@ -1274,14 +1225,11 @@ Phases 23, 28, and 30.
 - [REQ-009](../requirements/requirements.md#req-009--one-optional-food-family)
 - [REQ-010](../requirements/requirements.md#req-010--valid-macro-profile)
 - [REQ-070](../requirements/requirements.md#req-070--deterministic-database-setup)
-- [REQ-071](../requirements/requirements.md#req-071--catalog-coverage)
-
-Verify the production catalog and attribution requirements introduced in Phase 24.
 
 **Phase gate**
 
-Run `python3 scripts/prod.py` from a checkout with the pinned submodule initialized. Verify that migrations and catalog loading finish before Fiber starts. Search for every accepted Meal in English and Polish. Verify that suggestions and substitutions contain only production Meals and no Ingredient or historical product record. Verify at least ten Meals, stable IDs, explicit basis units, optional Servings, source URLs, and Food Family exclusions through PostgreSQL and HTTP. Open the Data Sources link and verify Open Food Facts, ODbL, USDA, the full `obiad-data` commit ID, and the matching free download. Stop the launcher and verify that every owned process, container, credential file, and generated temporary catalog is removed.
+Run `python3 scripts/start.py --catalog PATH` with a fresh aggregate export of the 13 accepted Phase 29 Meals. Verify that normal migrations and dummy setup finish, the selected catalog replaces the dummy rows, and Fiber starts only after replacement succeeds. Search for each imported Meal in English and Polish. Verify that suggestions and substitutions contain only imported Meals and no Ingredient or dummy-only Food Object. Stop the launcher and verify that every owned process, container, credential file, and generated preview catalog is removed.
 
 **Review stop**
 
-Read the Phase 31 diff. Record the revised catalog requirements and the production catalog and attribution requirements as verified. The implementation plan is complete.
+Read the Phase 31 diff and browser evidence. Approve only the private local preview behavior. Record that it publishes no data, grants no production approval, and does not satisfy production source-use or retention review.

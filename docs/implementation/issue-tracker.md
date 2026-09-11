@@ -549,3 +549,21 @@ Status: ready-for-agent
 - Resolved with the project owner on 2026-09-10. For the private, non-production Gyros demonstration Meal, use the whole listed tzatziki batch as input across the assembled pitas. Ignore frying-medium retention under the demonstration composition rule.
 - Resolved with the project owner on 2026-09-10. For the private, non-production Polish chicken soup demonstration Meal, ignore cooking retention, skimming, trimming, and discarded solids. Use all listed source inputs at sourced mass, summed input mass as batch yield, and a `100 g` Nutrition Basis.
 - Resolved with the project owner on 2026-09-10. The private, non-production demonstration batch must contain accepted Meals for all 12 targets that task 117 recorded as rejected. Acceptance requires source-backed Ingredient and Meal records and calculated data; changing only terminal statuses is not sufficient. Do not deploy the website or catalog, publish the recipe corpus or catalog, create a production release, or grant production approval.
+
+## ISSUE-030: Phase 30 production source, retention, and release decisions
+
+Type: Product and architecture decision
+Status: ready-for-agent
+
+### Clarifications
+
+- Resolved with the project owner on 2026-09-11. Drop Phase 30. Do not complete the remaining 13 target Meals and do not publish a data release.
+- Resolved with the project owner on 2026-09-11. Convert Phase 31 to a private local preview of the current 13 accepted Phase 29 Meals. This preview does not authorize production use or public distribution.
+- Resolved with the project owner on 2026-09-11. Add one optional `--catalog PATH` interface to `scripts/start.py`. Omission keeps the application-owned dummy catalog. The option selects a validated source-agnostic aggregate, not Ingredient or Meal authoring records.
+- Resolved with the project owner on 2026-09-11. Keep `scripts/setup_local_database.sh`, CI, browser integration, and backend fixtures on dummy data. For an explicit preview, normal setup loads dummy data first, then `scripts/start.py` replaces it through `catalogload` before Fiber starts.
+- Resolved with the project owner on 2026-09-11. Add no production launcher, release, Data Sources footer, production approval record, or minimum-Meal gate. Keep production requirements active but unimplemented.
+- Resolved with the project owner on 2026-09-11. If production catalog work resumes, use declared yield or cited retention factors, expand `attempts.json` instead of adding a second outcome format, and keep approval evidence in the issue tracker. Ask the project owner again before source selection or publication because this resolution approves every currently available source only for private preview.
+
+### Testing coverage deviations
+
+- Do not add a second automated browser stack for private data. Run the real local launcher with the exported 13-Meal catalog and inspect English and Polish Search and Substitute behavior. Existing CI and browser integration checks keep deterministic dummy data.

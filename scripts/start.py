@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import shlex
@@ -28,6 +29,31 @@ POSTGRES_START_TIMEOUT_SECONDS = 60
 APPLICATION_START_TIMEOUT_SECONDS = 60
 BACKEND_ADDRESS = ("127.0.0.1", 8080)
 FRONTEND_ADDRESS = ("127.0.0.1", 5173)
+
+def parse_args() -> argparse.Namespace:
+    """Parse the local launcher interface."""
+    parser = argparse.ArgumentParser(
+        description="Start the disposable local Obiad stack."
+    )
+    parser.add_argument(
+        "--catalog",
+        type=Path,
+        help="validated application catalog for a private local preview",
+    )
+    return parser.parse_args()
+
+
+def resolve_catalog_path(catalog_path: Path | None) -> Path | None:
+    """Resolve one selected catalog before any owned resource starts."""
+    if catalog_path is None:
+        return None
+    try:
+        resolved = catalog_path.expanduser().resolve(strict=True)
+    except OSError as error:
+        raise RuntimeError(f"selected catalog is unavailable: {catalog_path}") from error
+    if not resolved.is_file():
+        raise RuntimeError(f"selected catalog is not a regular file: {catalog_path}")
+    return resolved
 
 
 def run_checked(
@@ -213,9 +239,10 @@ def prepare_sources() -> None:
     run_checked(["bun", "run", "generate:api"], cwd=FRONTEND_ROOT)
 
 
-def run_stack() -> None:
+def run_stack(catalog_path: Path | None = None) -> None:
     """Own the disposable database and both application processes until interrupted."""
 
+    selected_catalog = resolve_catalog_path(catalog_path)
     require_tools()
     require_free_application_ports()
     prepare_sources()
@@ -249,10 +276,15 @@ def run_stack() -> None:
         wait_for_postgres(container_name)
         postgres_port = published_postgres_port(container_name)
         encoded_postgres_password = quote(postgres_password, safe="")
+        encoded_owner_password = quote(owner_password, safe="")
         encoded_runtime_password = quote(runtime_password, safe="")
         admin_url = (
             f"postgres://postgres:{encoded_postgres_password}"
             f"@127.0.0.1:{postgres_port}/postgres?sslmode=disable"
+        )
+        owner_url = (
+            f"postgres://obiad_owner:{encoded_owner_password}"
+            f"@127.0.0.1:{postgres_port}/obiad?sslmode=disable"
         )
         runtime_url = (
             f"postgres://obiad_runtime:{encoded_runtime_password}"
@@ -271,7 +303,17 @@ def run_stack() -> None:
             )
             run_checked(["bash", str(DATABASE_SETUP)], env=setup_env)
 
-            print("Migrations applied and application-owned dummy catalog loaded.")
+            if selected_catalog is None:
+                print("Migrations applied and application-owned dummy catalog loaded.")
+            else:
+                catalog_env = os.environ.copy()
+                catalog_env["OBIAD_SCHEMA_OWNER_DATABASE_URL"] = owner_url
+                run_checked(
+                    ["go", "run", "./cmd/catalogload", str(selected_catalog)],
+                    cwd=BACKEND_ROOT,
+                    env=catalog_env,
+                )
+                print(f"Migrations applied and selected catalog loaded: {selected_catalog}")
             backend_env = os.environ.copy()
             backend_env["OBIAD_RUNTIME_DATABASE_URL"] = runtime_url
             backend = spawn(
@@ -328,9 +370,9 @@ def run_stack() -> None:
 
 def main() -> int:
     """Start the local stack and return a shell-compatible status code."""
-
+    arguments = parse_args()
     try:
-        run_stack()
+        run_stack(arguments.catalog)
     except KeyboardInterrupt:
         print("\nStopped.", flush=True)
         return 130
