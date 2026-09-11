@@ -528,14 +528,14 @@ Status: ready-for-agent
 - Define the path and closed record shape for a versioned rejection. Define how validation proves that each of the 13 targets has exactly one terminal result without treating a rejection as a Meal.
 - Confirm whether Phase 29 can reject a target because no recipe is available through a currently supported website, or whether source discovery must continue and add website-adapter tasks until every target with a suitable public recipe is attempted through an adapter.
 - Resolved with the project owner on 2026-09-09. Store one closed `attempts.json` file with exactly 13 discriminated entries. An accepted entry references one `meal_id`; a rejected entry contains one exact reason. Git versions the file. Validation enforces exactly one terminal outcome per target, and aggregate export ignores the complete file.
-- Resolved with the project owner on 2026-09-09. Adopt the smallest verified portfolio from the [Phase 29 source survey](../../data/docs/recipe-adapters/phase-29-source-survey.md): retain Kuchnia Domowa and add GialloZafferano plus Good Food. Add a separate Phase 25-format handoff task and a separate second-agent adapter task for each new hostname. RecipeTin Eats remains a technical contingency; Kwestia Smaku and Ania Gotuje remain fallbacks; do not support Allrecipes under its observed policy and HTTP 403 response.
+- Resolved with the project owner on 2026-09-09. Adopt the smallest verified portfolio: retain Kuchnia Domowa and add GialloZafferano plus Good Food. Add a separate Phase 25-format handoff task and a separate second-agent adapter task for each new hostname. RecipeTin Eats remains a technical contingency; Kwestia Smaku and Ania Gotuje remain fallbacks; do not support Allrecipes under its observed policy and HTTP 403 response.
 - Resolved with the project owner on 2026-09-09. The existing Pierogi ruskie Meal counts as one attempted and accepted target only after Phase 29 reconfirms its source, composition, calculation, and stable identity. Do not duplicate it.
 
 ### Actions needed
 
 - Tasks 99 and 100 must create the GialloZafferano handoff and adapter before any GialloZafferano-backed Meal task starts.
 - Tasks 101 and 102 must create the Good Food handoff and adapter before the Protein shake task starts.
-- Task 103 must freeze the 13 exact approved URLs from the [Phase 29 source survey](../../data/docs/recipe-adapters/phase-29-source-survey.md), reconfirm the four Kuchnia Domowa pages against the existing adapter, and verify that all 13 targets remain technically extractable before Meal work starts.
+- Task 103 must freeze the 13 exact approved URLs, reconfirm the four Kuchnia Domowa pages against the existing adapter, and verify that all 13 targets remain technically extractable before Meal work starts.
 
 ### Testing coverage deviations
 
