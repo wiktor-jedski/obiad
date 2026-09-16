@@ -5,4 +5,4 @@ ID: Use growing unique integers
 
 | ID  | Architecture Component | Status | Depends On (ID) |
 | --- | --- | --- | --- |
-| 1 | ARCH-013 | PREPARED | - |
+| 1 | ARCH-013 | PASSED | - |
