@@ -7,4 +7,4 @@ ID: Use growing unique integers
 | --- | ---------------------- | ------ | --------------- |
 | 1   | ARCH-013               | PASSED | -               |
 | 2   | ARCH-013               | PASSED | 1               |
-| 3   | ARCH-013               | OPEN   | -               |
+| 3   | ARCH-013               | PREPARED | -               |
