@@ -15,8 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 APPLICATION_HTML = "frontend/index.html"
 APPROVED_RECIPE_FIXTURES = frozenset({
     "tests/fixtures/kuchnia_domowa/pierogi_ruskie.html",
-    "tests/fixtures/good_food/protein_shake.html",
-    "tests/fixtures/giallozafferano/recipe.html",
+    "tests/fixtures/wikibooks/synthetic_bake.html",
 })
 
 
