@@ -2,7 +2,7 @@
 
 Whatever ideas that are not right now in the plan, but might be implemented later.
 
-## IDEA-001
+## IDEA-001 - implemented
 
 Currently the weight/portion updates are done in the backend.
 
@@ -39,3 +39,7 @@ When user clicks on a card, they can be taken to a separate page with a recipe f
 ## IDEA-006
 
 Sometimes, someone wants to simply have an idea for a meal, not to search for replacement. When page-per-meal is implemented, we can add a 'feeling lucky' type of button a'la Google that takes the user to the meal page immediately. there we can add an option to allow to search for replacement for that meal.
+
+## IDEA-007
+
+generate pics for foods
