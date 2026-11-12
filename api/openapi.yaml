@@ -9,6 +9,40 @@ info:
     (ISSUE-004). Generated transport values never enter the operation Modules;
     the Fiber Adapter maps them only at the HTTP boundary.
 paths:
+  /api/v1/food-objects/random:
+    get:
+      operationId: getRandomFood
+      summary: Select a random Food Object ID
+      description: >
+        Select one Food Object uniformly from the full catalog in PostgreSQL.
+        Return only its ID. Selection is independent of names, language, and
+        previous requests. Consecutive requests can return the same ID.
+        Responses use Cache-Control no-store.
+      responses:
+        "200":
+          description: One existing Food Object ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RandomFoodResponse"
+        "503":
+          description: The catalog is unavailable; code CATALOG_UNAVAILABLE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "504":
+          description: The request deadline expired; code SEARCH_TIMEOUT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: A catalog invariant or server failure; code INTERNAL_ERROR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/food-suggestions:
     get:
       operationId: getFoodSuggestions
@@ -224,6 +258,18 @@ paths:
                 $ref: "#/components/schemas/Error"
 components:
   schemas:
+    RandomFoodResponse:
+      description: A randomly selected catalog Food Object.
+      type: object
+      additionalProperties: false
+      required:
+        - foodObjectId
+      properties:
+        foodObjectId:
+          description: The stable positive Food Object ID.
+          type: integer
+          format: int32
+          minimum: 1
     FoodSuggestionsResponse:
       description: >
         The successful suggestion response: an envelope with exactly five
@@ -426,8 +472,8 @@ components:
     SelectedFood:
       description: >
         The calculation basis of the selected Food Object: its stable ID, both
-        localized names, canonical Macro Profile, base unit, and optional
-        Serving base quantity. The object has no unknown fields.
+        localized names, canonical Macro Profile, base unit, optional image key,
+        and optional Serving base quantity. The object has no unknown fields.
       type: object
       required:
         - foodObjectId
@@ -443,6 +489,10 @@ components:
           minimum: 1
         names:
           $ref: "#/components/schemas/LocalizedNames"
+        imageKey:
+          description: The opaque frontend image key; omitted when unavailable.
+          type: string
+          minLength: 1
         macroProfile:
           $ref: "#/components/schemas/MacroProfile"
         baseUnit:

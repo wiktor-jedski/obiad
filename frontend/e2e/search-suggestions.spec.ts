@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
@@ -187,14 +188,20 @@ interface RequestTracker {
 }
 
 function trackRequests(page: Page, urls: string[]): RequestTracker {
-  page.on("request", (request) => urls.push(request.url()));
+  const userUrls: string[] = [];
+  page.on("request", (request) => {
+    urls.push(request.url());
+    if (!isLandingDialogueRequest(request)) {
+      userUrls.push(request.url());
+    }
+  });
   return {
-    foodDataRequests: () => urls.filter((url) => url.includes("/api/")),
+    foodDataRequests: () => userUrls.filter((url) => url.includes("/api/")),
   };
 }
 
 test.describe("live Food Object suggestions", () => {
-  test("a fresh unauthenticated context starts with no request and shows five seeded English suggestions for a normal query and zzzzzz", async ({
+  test("a fresh unauthenticated context starts with no user request and shows five seeded English suggestions for a normal query and zzzzzz", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -204,7 +211,9 @@ test.describe("live Food Object suggestions", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
 
-    expect(foodDataRequests(), "no startup application request").toEqual([]);
+    expect(foodDataRequests(), "no startup user application request").toEqual(
+      [],
+    );
     expect(await page.evaluate(() => document.cookie)).toBe("");
 
     const search = page.getByRole("combobox", { name: COPY.en.search });
@@ -224,8 +233,8 @@ test.describe("live Food Object suggestions", () => {
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
 
-    const foodData = foodDataRequests();
-    expect(foodData.length).toBeGreaterThanOrEqual(2);
+    expect(foodDataRequests().length).toBeGreaterThanOrEqual(2);
+    const foodData = requestUrls.filter((url) => url.includes("/api/"));
     for (const url of foodData) {
       expect(new URL(url).origin, `unexpected food-data origin ${url}`).toBe(
         PREVIEW_ORIGIN,
@@ -260,6 +269,9 @@ test.describe("live Food Object suggestions", () => {
     await useBrowserLanguages(page, ["en-US"]);
     const suggestionRequestUrls: string[] = [];
     page.on("request", (request) => {
+      if (isLandingDialogueRequest(request)) {
+        return;
+      }
       if (request.url().includes("/api/v1/food-suggestions")) {
         suggestionRequestUrls.push(request.url());
       }
@@ -316,12 +328,14 @@ test.describe("live Food Object suggestions", () => {
     const requestUrls: string[] = [];
     const failedRequests: { url: string; error: string }[] = [];
     trackRequests(page, requestUrls);
-    page.on("requestfailed", (request) =>
-      failedRequests.push({
-        url: request.url(),
-        error: request.failure()?.errorText ?? "unknown failure",
-      }),
-    );
+    page.on("requestfailed", (request) => {
+      if (!isLandingDialogueRequest(request)) {
+        failedRequests.push({
+          url: request.url(),
+          error: request.failure()?.errorText ?? "unknown failure",
+        });
+      }
+    });
 
     let sawFirst = false;
     let releaseFirst: () => void = () => {};

@@ -42,3 +42,8 @@ var InsertFamily string
 //
 //go:embed catalog/insert_food_object.sql
 var InsertFoodObject string
+
+// RandomFood selects one existing food ID from the entire catalog.
+//
+//go:embed catalog/random_food.sql
+var RandomFood string

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const COPY = {
   en: {
@@ -171,6 +172,10 @@ test.describe("Result focus and accessibility", () => {
       releaseMoreGate = resolve;
     });
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 1) {
         await newSearchGate;
@@ -277,6 +282,10 @@ test.describe("Result focus and accessibility", () => {
       releaseMoreGate = resolve;
     });
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 1) {
         await newSearchGate;

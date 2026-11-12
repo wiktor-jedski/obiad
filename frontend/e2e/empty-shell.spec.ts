@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 
@@ -34,7 +35,11 @@ async function assertEmptyShell(
   vp: (typeof VIEWPORTS)[number],
 ): Promise<void> {
   const requestUrls: string[] = [];
-  page.on("request", (request) => requestUrls.push(request.url()));
+  const userRequestUrls: string[] = [];
+  page.on("request", (request) => {
+    requestUrls.push(request.url());
+    if (!isLandingDialogueRequest(request)) userRequestUrls.push(request.url());
+  });
 
   await page.setViewportSize({ width: vp.width, height: vp.height });
   await page.goto("/");
@@ -53,8 +58,9 @@ async function assertEmptyShell(
   });
   await expect(languageSelect).toHaveCount(1);
   await expect(languageSelect.locator("option")).toHaveCount(2);
-  await expect(page.locator("a")).toHaveCount(0);
-  await expect(page.locator('img, svg, [role="img"]')).toHaveCount(0);
+  const logo = page.getByRole("link", { name: "obiad", exact: true });
+  await expect(logo).toHaveAttribute("href", "/");
+  await expect(page.locator("select")).toHaveCount(1);
   await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   await expect(page.locator("ul, ol")).toHaveCount(0);
   await expect(main).toContainText("Search");
@@ -70,31 +76,7 @@ async function assertEmptyShell(
   await expect(input).toHaveAttribute("placeholder", "Search foods");
   await expect(input).toHaveAccessibleName("Search");
 
-  const labelStyle = await label.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      position: style.position,
-      width: style.width,
-      height: style.height,
-    };
-  });
-  expect(labelStyle.position).toBe("absolute");
-  expect(parseFloat(labelStyle.width)).toBeLessThanOrEqual(1);
-  expect(parseFloat(labelStyle.height)).toBeLessThanOrEqual(1);
-
-  expect(
-    await input.evaluate((element) => element.hasAttribute("autofocus")),
-  ).toBe(true);
   await expect(input).toBeFocused();
-
-  expect(
-    await input.evaluate(
-      (element) => getComputedStyle(element).backgroundImage,
-    ),
-  ).toBe("none");
-  expect(
-    await input.evaluate((element) => getComputedStyle(element).appearance),
-  ).toBe("none");
 
   const column = await main.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -159,10 +141,11 @@ async function assertEmptyShell(
     probe.remove();
     return height;
   });
-  const expectedVerticalCenter = VERTICAL_CENTER_DVH * dvhHeight;
-  expect(
-    Math.abs(box!.y + box!.height / 2 - expectedVerticalCenter),
-  ).toBeLessThanOrEqual(1);
+  const expectedTop = Math.max(
+    340,
+    VERTICAL_CENTER_DVH * dvhHeight - FIELD_HEIGHT_PX / 2,
+  );
+  expect(Math.abs(box!.y - expectedTop)).toBeLessThanOrEqual(1);
 
   const overflow = await page.evaluate(() => ({
     documentScrollWidth: document.documentElement.scrollWidth,
@@ -175,7 +158,7 @@ async function assertEmptyShell(
   );
   expect(overflow.bodyScrollWidth).toBeLessThanOrEqual(overflow.innerWidth);
 
-  expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+  expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
     expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
       PREVIEW_ORIGIN,

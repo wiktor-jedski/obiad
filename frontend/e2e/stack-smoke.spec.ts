@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type {
   FoodSuggestionsResponse,
   GetFoodSuggestionsErrors,
@@ -20,7 +21,12 @@ test.describe("real-stack smoke", () => {
     }
 
     const requestUrls: string[] = [];
-    page.on("request", (request) => requestUrls.push(request.url()));
+    const userRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      requestUrls.push(request.url());
+      if (!isLandingDialogueRequest(request))
+        userRequestUrls.push(request.url());
+    });
 
     await page.goto("/");
     await page.addScriptTag({ path: bundlePath });
@@ -65,7 +71,7 @@ test.describe("real-stack smoke", () => {
     });
 
     expect(
-      requestUrls.some((url) => url.includes("/api/v1/food-suggestions")),
+      userRequestUrls.some((url) => url.includes("/api/v1/food-suggestions")),
     ).toBe(true);
     for (const url of requestUrls) {
       expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
@@ -75,17 +81,22 @@ test.describe("real-stack smoke", () => {
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
 
-  test("the empty shell makes no startup API request and only contacts its own origin", async ({
+  test("the landing shell makes no user search request and only contacts its own origin", async ({
     page,
   }) => {
     const requestUrls: string[] = [];
-    page.on("request", (request) => requestUrls.push(request.url()));
+    const userRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      requestUrls.push(request.url());
+      if (!isLandingDialogueRequest(request))
+        userRequestUrls.push(request.url());
+    });
 
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
 
     expect(requestUrls.length).toBeGreaterThan(0);
-    expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+    expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
     for (const url of requestUrls) {
       expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
         PREVIEW_ORIGIN,

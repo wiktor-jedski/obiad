@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type {
   FoodQuantity,
   SubstituteSearchResponse,
@@ -53,6 +54,9 @@ function captureSubstituteItems(
 ): Map<number, ProjectedSubstituteItem> {
   const items = new Map<number, ProjectedSubstituteItem>();
   page.on("response", async (response) => {
+    if (isLandingDialogueRequest(response.request())) {
+      return;
+    }
     if (response.url().includes("/api/v1/substitutes/search")) {
       // SAFETY: The endpoint response matches the generated API contract.
       const body = (await response.json()) as SubstituteSearchResponse;

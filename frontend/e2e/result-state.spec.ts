@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
@@ -59,9 +60,10 @@ async function expectEmptyStateGeometry(page: Page): Promise<void> {
     probe.remove();
     return height;
   });
+  expect(box.height).toBe(56);
   expect(
-    Math.abs(box.y + box.height / 2 - VERTICAL_CENTER_DVH * dvhHeight),
-    "the empty-state Search center stays at 45% of 100dvh",
+    Math.abs(box.y - Math.max(340, VERTICAL_CENTER_DVH * dvhHeight - 28)),
+    "the landing Search top reserves room for the dialogue",
   ).toBeLessThanOrEqual(1);
 }
 
@@ -151,12 +153,17 @@ async function expectResultStateComposition(page: Page): Promise<void> {
 }
 
 test.describe("result state", () => {
-  test("the complete anonymous pointer flow composes one primary column with distinct Search, selected-input, and result regions in order; Search sits 96px from the viewport top; the regions use the approved gaps; the three cards use equal desktop columns below Search; and every food-data request uses /api against the seeded catalog", async ({
+  test("the complete anonymous pointer flow composes one primary column with distinct Search, selected-input, and result regions in order; Search sits 64px from the viewport top; the regions use the approved gaps; the three cards use equal desktop columns below Search; and every food-data request uses /api against the seeded catalog", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     const requestUrls: string[] = [];
-    page.on("request", (request) => requestUrls.push(request.url()));
+    const userRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      requestUrls.push(request.url());
+      if (!isLandingDialogueRequest(request))
+        userRequestUrls.push(request.url());
+    });
     await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.goto("/");
@@ -171,13 +178,18 @@ test.describe("result state", () => {
 
     await expectResultStateComposition(page);
 
-    const foodData = requestUrls.filter((url) => url.includes("/api/"));
+    const foodData = userRequestUrls.filter((url) => url.includes("/api/"));
     expect(foodData.length).toBeGreaterThanOrEqual(1);
     for (const url of foodData) {
       expect(new URL(url).origin, `unexpected food-data origin ${url}`).toBe(
         PREVIEW_ORIGIN,
       );
       expect(new URL(url).pathname).toMatch(/^\/api\//);
+    }
+    for (const url of requestUrls) {
+      expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
+        PREVIEW_ORIGIN,
+      );
     }
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
@@ -191,6 +203,10 @@ test.describe("result state", () => {
     const { promise: firstGate, resolve: releaseFirst } =
       Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 1) {
         await firstGate;

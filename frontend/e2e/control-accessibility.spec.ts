@@ -1,4 +1,5 @@
 import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 import { execFileSync } from "node:child_process";
 import { dirname } from "node:path";
@@ -106,6 +107,7 @@ function trackSubstitutePosts(page: Page): SubstituteSearchRequest[] {
   const posts: SubstituteSearchRequest[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -169,6 +171,10 @@ function gateSubstitutePosts(page: Page): SubstitutePostGate {
   const gates: Array<{ release: () => void; promise: Promise<void> }> = [];
   let postCount = 0;
   page.route("**/api/v1/substitutes/search", async (route) => {
+    if (isLandingDialogueRequest(route.request())) {
+      await route.continue();
+      return;
+    }
     postCount += 1;
     const gate = { release: () => {}, promise: Promise.resolve() };
     gate.promise = new Promise<void>((resolve) => {

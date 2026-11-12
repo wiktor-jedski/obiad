@@ -39,3 +39,17 @@
     background-color: var(--color-dark-background);
   }
 }
+
+@layer components {
+  .landing-bubble::before {
+    @apply absolute top-1/2 size-[10px] -translate-y-1/2 rotate-45 border border-inherit bg-dark-surface content-[''];
+  }
+
+  .landing-bubble-left::before {
+    @apply -left-[6px] border-t-0 border-r-0;
+  }
+
+  .landing-bubble-right::before {
+    @apply -right-[6px] border-b-0 border-l-0;
+  }
+}

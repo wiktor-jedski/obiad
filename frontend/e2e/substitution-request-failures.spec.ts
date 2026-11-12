@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { isLandingDialogueRequest } from "./request-purpose";
 import { expect, test, type Page } from "@playwright/test";
 import type {
   Error as ApiError,
@@ -61,6 +62,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -75,6 +77,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   page.on("response", (response) => {
     const request = response.request();
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -423,7 +426,11 @@ test.describe("Substitution request failures", () => {
     const polishPosts = trackSubstitutePosts(polishPage);
 
     const englishLedger: string[] = [];
-    englishPage.on("request", (request) => englishLedger.push(request.url()));
+    englishPage.on("request", (request) => {
+      if (!isLandingDialogueRequest(request)) {
+        englishLedger.push(request.url());
+      }
+    });
 
     const englishMorePage = await englishContext.newPage();
     const polishMorePage = await polishContext.newPage();
@@ -432,9 +439,11 @@ test.describe("Substitution request failures", () => {
     const englishMorePosts = trackSubstitutePosts(englishMorePage);
     const polishMorePosts = trackSubstitutePosts(polishMorePage);
     const englishMoreLedger: string[] = [];
-    englishMorePage.on("request", (request) =>
-      englishMoreLedger.push(request.url()),
-    );
+    englishMorePage.on("request", (request) => {
+      if (!isLandingDialogueRequest(request)) {
+        englishMoreLedger.push(request.url());
+      }
+    });
 
     await englishPage.goto("/");
     await polishPage.goto("/");

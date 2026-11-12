@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type {
   SubstituteSearchRequest,
   SubstituteSearchResponse,
@@ -43,6 +44,7 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
   const posts: SubstitutePostRecord[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -58,6 +60,7 @@ function trackSubstitutePosts(page: Page): SubstitutePostRecord[] {
   page.on("response", async (response) => {
     const request = response.request();
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {

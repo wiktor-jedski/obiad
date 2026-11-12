@@ -28,6 +28,8 @@ type SelectedFood struct {
 	FoodObjectID int32
 	// Names contains both localized names.
 	Names LocalizedNames
+	// ImageKey identifies the optional image.
+	ImageKey *string
 	// MacroProfile stores the canonical profile.
 	MacroProfile MacroProfile
 	// BaseUnit is the base quantity unit.
@@ -232,6 +234,7 @@ func (f *FindSubstitutePage) Run(ctx context.Context, foodObjectID int32, pageIn
 		SelectedFood: SelectedFood{
 			FoodObjectID: inputObject.id,
 			Names:        inputObject.names,
+			ImageKey:     inputObject.imageKey,
 			MacroProfile: MacroProfile{
 				Protein:      inputObject.protein,
 				Carbohydrate: inputObject.carbohydrate,

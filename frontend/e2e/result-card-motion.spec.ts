@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const COPY = {
   en: {
@@ -404,6 +405,7 @@ test.describe("Result Card motion", () => {
     let postCount = 0;
     page.on("request", (request) => {
       if (
+        !isLandingDialogueRequest(request) &&
         request.method() === "POST" &&
         request.url().includes("/api/v1/substitutes/search")
       ) {

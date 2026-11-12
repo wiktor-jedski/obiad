@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -99,8 +100,15 @@ async function useBrowserLanguages(
   }, languages);
 }
 
-function trackRequests(page: Page, ledger: string[]): void {
-  page.on("request", (request) => ledger.push(request.url()));
+function trackRequests(page: Page, ledger: string[]): string[] {
+  const allUrls: string[] = [];
+  page.on("request", (request) => {
+    allUrls.push(request.url());
+    if (!isLandingDialogueRequest(request)) {
+      ledger.push(request.url());
+    }
+  });
+  return allUrls;
 }
 
 function suggestionGets(ledger: readonly string[]): string[] {
@@ -192,6 +200,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -205,6 +214,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   page.on("response", (response) => {
     const request = response.request();
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -319,7 +329,7 @@ test.describe("Active Interface Language change", () => {
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     const ledger: string[] = [];
-    trackRequests(page, ledger);
+    const allUrls = trackRequests(page, ledger);
 
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
@@ -330,7 +340,7 @@ test.describe("Active Interface Language change", () => {
       page.getByRole("combobox", { name: COPY.en.control }),
     ).toHaveValue("en");
     expect(ledger.some((url) => url.includes("/api/"))).toBe(false);
-    for (const url of ledger) {
+    for (const url of allUrls) {
       expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
     }
 
@@ -420,7 +430,7 @@ test.describe("Active Interface Language change", () => {
     await expectStored(page, "en");
     expect(
       ledger.slice(ledgerBeforeReload).some((url) => url.includes("/api/")),
-      "the reload performs no application API request",
+      "the reload performs no user application API request",
     ).toBe(false);
 
     expect(suggestionGets(ledger)).toHaveLength(3);
@@ -438,6 +448,10 @@ test.describe("Active Interface Language change", () => {
     let postCount = 0;
     const release: Record<number, () => void> = {};
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 4) {
         const { promise, resolve } = Promise.withResolvers<void>();
