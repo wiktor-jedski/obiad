@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const STORAGE_KEY = "obiad.interfaceLanguage";
@@ -57,7 +58,12 @@ test.describe("Interface Language selection", () => {
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
     const requestUrls: string[] = [];
-    page.on("request", (request) => requestUrls.push(request.url()));
+    const userRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      requestUrls.push(request.url());
+      if (!isLandingDialogueRequest(request))
+        userRequestUrls.push(request.url());
+    });
 
     await page.goto("/");
     const searchInput = page.locator('input[type="search"]');
@@ -106,7 +112,7 @@ test.describe("Interface Language selection", () => {
     ).toHaveValue("pl");
     await expectStored(page, "pl");
 
-    expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+    expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
     for (const url of requestUrls) {
       expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
     }
@@ -118,7 +124,12 @@ test.describe("Interface Language selection", () => {
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
     const requestUrls: string[] = [];
-    page.on("request", (request) => requestUrls.push(request.url()));
+    const userRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      requestUrls.push(request.url());
+      if (!isLandingDialogueRequest(request))
+        userRequestUrls.push(request.url());
+    });
 
     await page.goto("/");
     const searchInput = page.locator('input[type="search"]');
@@ -128,7 +139,7 @@ test.describe("Interface Language selection", () => {
 
     await searchInput.fill("abc");
     await expect(page.getByRole("listbox")).toBeVisible();
-    const requestsAfterTyping = requestUrls.length;
+    const requestsAfterTyping = userRequestUrls.length;
 
     await languageSelect.focus();
     await expect(page.getByRole("listbox")).toHaveCount(0);
@@ -143,10 +154,13 @@ test.describe("Interface Language selection", () => {
       0,
     );
     expect(
-      requestUrls
+      userRequestUrls
         .slice(requestsAfterTyping)
         .some((url) => url.includes("/api/")),
     ).toBe(false);
+    for (const url of requestUrls) {
+      expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
+    }
   });
 });
 
@@ -167,7 +181,11 @@ async function assertControlAtViewport(
 ): Promise<void> {
   await useBrowserLanguages(page, ["en-US"]);
   const requestUrls: string[] = [];
-  page.on("request", (request) => requestUrls.push(request.url()));
+  const userRequestUrls: string[] = [];
+  page.on("request", (request) => {
+    requestUrls.push(request.url());
+    if (!isLandingDialogueRequest(request)) userRequestUrls.push(request.url());
+  });
 
   await page.setViewportSize({
     width: viewport.width,
@@ -180,7 +198,6 @@ async function assertControlAtViewport(
     name: COPY.en.control,
   });
   const searchInput = page.locator('input[type="search"]');
-  const chevron = wrapper.locator('[aria-hidden="true"]');
 
   await expect(wrapper).toBeVisible();
   await expect(languageSelect).toBeVisible();
@@ -188,7 +205,6 @@ async function assertControlAtViewport(
   await expect(languageSelect.locator("option")).toHaveCount(2);
   await expect(languageSelect.locator("option").nth(0)).toHaveText("PL");
   await expect(languageSelect.locator("option").nth(1)).toHaveText("EN");
-  await expect(chevron).toHaveText("⌄");
   await expect(page.locator("button")).toHaveCount(0);
 
   const wrapperBox = await wrapper.boundingBox();
@@ -258,7 +274,8 @@ async function assertControlAtViewport(
   });
   expect(
     Math.abs(
-      searchBox.y + searchBox.height / 2 - VERTICAL_CENTER_DVH * dvhHeight,
+      searchBox.y -
+        Math.max(340, VERTICAL_CENTER_DVH * dvhHeight - FIELD_HEIGHT_PX / 2),
     ),
   ).toBeLessThanOrEqual(1);
 
@@ -275,7 +292,7 @@ async function assertControlAtViewport(
   expect(wrapperBox.x).toBeGreaterThanOrEqual(0);
   expect(wrapperBox.x + wrapperBox.width).toBeLessThanOrEqual(viewport.width);
 
-  expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+  expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
     expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
   }

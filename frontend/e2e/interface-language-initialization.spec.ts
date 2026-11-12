@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 
@@ -44,7 +45,11 @@ async function assertInitialCopy(
 ): Promise<void> {
   const expected = COPY[language];
   const requestUrls: string[] = [];
-  page.on("request", (request) => requestUrls.push(request.url()));
+  const userRequestUrls: string[] = [];
+  page.on("request", (request) => {
+    requestUrls.push(request.url());
+    if (!isLandingDialogueRequest(request)) userRequestUrls.push(request.url());
+  });
 
   await page.goto("/");
   await expect(page).toHaveTitle("Obiad");
@@ -67,7 +72,7 @@ async function assertInitialCopy(
   await expect(options.nth(1)).toHaveText("EN");
   await expect(options.nth(1)).toHaveAttribute("value", "en");
 
-  expect(requestUrls.some((url) => url.includes("/api/"))).toBe(false);
+  expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
     expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
       PREVIEW_ORIGIN,

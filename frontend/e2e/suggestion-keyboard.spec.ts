@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const OPTION_COUNT = 5;
@@ -52,6 +53,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -65,6 +67,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   page.on("response", (response) => {
     const request = response.request();
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -82,6 +85,9 @@ function trackSuggestionDefaults(
 ): Map<number, { value: number; unit: string }> {
   const defaults = new Map<number, { value: number; unit: string }>();
   page.on("response", (response) => {
+    if (isLandingDialogueRequest(response.request())) {
+      return;
+    }
     if (response.url().includes("/api/v1/food-suggestions")) {
       void response.json().then(
         (body: {

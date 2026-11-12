@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { isLandingDialogueRequest } from "./request-purpose";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
@@ -159,6 +160,10 @@ async function gateSubstitutePosts(page: Page): Promise<{
   ];
   let postCount = 0;
   await page.route("**/api/v1/substitutes/search", async (route) => {
+    if (isLandingDialogueRequest(route.request())) {
+      await route.continue();
+      return;
+    }
     postCount += 1;
     const gate = gates.at(postCount - 1);
     if (gate !== undefined) {

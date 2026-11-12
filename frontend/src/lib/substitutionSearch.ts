@@ -131,6 +131,7 @@ export function searchSubstitutes(options: {
   foodObjectId: number;
   pageIndex: number;
   signal?: AbortSignal;
+  headers?: HeadersInit;
 }): Promise<SubstituteSearchResponse> {
   const data: SearchSubstitutesData = {
     url: "/api/v1/substitutes/search",
@@ -147,6 +148,7 @@ export function searchSubstitutes(options: {
   >({
     ...data,
     signal: options.signal,
+    headers: options.headers,
     throwOnError: true,
     responseStyle: "data",
   });

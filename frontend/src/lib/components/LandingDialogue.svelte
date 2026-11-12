@@ -86,6 +86,7 @@
 
   function playDialogue(): () => void {
     const controller = new AbortController();
+    const headers = { "X-Obiad-Request-Purpose": "landing-dialogue" };
     let timer: ReturnType<typeof setTimeout>;
     let cancelWait: (() => void) | undefined;
     reducedMotion = window.matchMedia(
@@ -104,6 +105,7 @@
           query: queries[Math.floor(Math.random() * queries.length)],
           language: "en",
           signal: controller.signal,
+          headers,
         });
         const selected =
           suggestions.items[
@@ -113,6 +115,7 @@
           foodObjectId: selected.foodObjectId,
           pageIndex: 0,
           signal: controller.signal,
+          headers,
         });
         if (controller.signal.aborted) return;
         const projected = projectSubstitutePage(

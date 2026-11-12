@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type {
   SubstituteSearchRequest,
   SubstituteSearchResponse,
@@ -46,6 +47,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   const posts: SubstitutePost[] = [];
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -60,6 +62,7 @@ function trackSubstitutePosts(page: Page): SubstitutePost[] {
   page.on("response", async (response) => {
     const request = response.request();
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -185,6 +188,10 @@ test.describe("food quantity editing", () => {
     const { promise: firstGate, resolve: releaseFirst } =
       Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 1) {
         await firstGate;
@@ -601,6 +608,7 @@ test.describe("food quantity editing", () => {
     let failedSubstitutePosts = 0;
     page.on("requestfailed", (request) => {
       if (
+        !isLandingDialogueRequest(request) &&
         request.method() === "POST" &&
         request.url().includes("/api/v1/substitutes/search")
       ) {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const ITERATIONS = 20;
@@ -52,29 +53,27 @@ async function useBrowserLanguages(page: Page): Promise<void> {
 }
 
 async function installPerformanceHarness(page: Page): Promise<void> {
+  page.on("requestfinished", async (request) => {
+    if (
+      !isLandingDialogueRequest(request) &&
+      request.method() === "POST" &&
+      request.url().includes("/api/v1/substitutes/search")
+    ) {
+      // Request timing keeps the browser clock while exposing request purpose.
+      await page.evaluate((timing) => {
+        const startTime = timing.startTime - performance.timeOrigin;
+        window.__perf?.posts.push({
+          startTime,
+          responseEnd: startTime + timing.responseEnd,
+        });
+      }, request.timing());
+    }
+  });
   await page.addInitScript(() => {
     const posts: PerfPost[] = [];
     const firstCards: PerfFirstCard[] = [];
 
     const FIRST_CARD_DEADLINE_MS = 3000;
-
-    const observer = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (!(entry instanceof PerformanceResourceTiming)) {
-          continue;
-        }
-        if (
-          entry.name.includes("/api/v1/substitutes/search") &&
-          entry.initiatorType === "fetch"
-        ) {
-          posts.push({
-            startTime: entry.startTime,
-            responseEnd: entry.responseEnd,
-          });
-        }
-      }
-    });
-    observer.observe({ type: "resource" });
 
     document.addEventListener(
       "click",
@@ -156,6 +155,7 @@ function trackSubstitutePosts(page: Page): PostLedger {
   let maxActive = 0;
   page.on("request", (request) => {
     if (
+      !isLandingDialogueRequest(request) &&
       request.method() === "POST" &&
       request.url().includes("/api/v1/substitutes/search")
     ) {
@@ -170,6 +170,7 @@ function trackSubstitutePosts(page: Page): PostLedger {
   });
   page.on("response", (response) => {
     if (
+      !isLandingDialogueRequest(response.request()) &&
       response.request().method() === "POST" &&
       response.url().includes("/api/v1/substitutes/search")
     ) {
@@ -273,6 +274,9 @@ test.describe("Search performance", () => {
     await expect
       .poll(() => renderedCardIDs(page), { timeout: 30_000 })
       .toEqual([...PIZZA_PAGE_1_IDS]);
+    await expect
+      .poll(() => page.evaluate(() => window.__perf?.posts.length ?? 0))
+      .toBe(2);
 
     await page.evaluate(() => {
       window.__perf?.reset();

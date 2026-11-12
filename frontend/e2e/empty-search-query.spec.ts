@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const COPY = {
   en: {
@@ -44,6 +45,9 @@ test.describe("normalized-empty Search Query no-op", () => {
     const suggestionGets: string[] = [];
     const substitutePosts: string[] = [];
     page.on("request", (request) => {
+      if (isLandingDialogueRequest(request)) {
+        return;
+      }
       const url = request.url();
       if (url.includes("/api/v1/food-suggestions")) {
         suggestionGets.push(url);

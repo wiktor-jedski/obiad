@@ -44,3 +44,13 @@ The prototype source is preserved on branch `prototype/landing-candidates`,
 commit `8ca4b723b43d2eb4ac13dc1a3c054fea47a47f85`.
 
 The wordmark links to `/`. It returns from search results to the empty landing page.
+
+E2E coverage distinguishes the two automatic landing requests from user Search
+requests by the `X-Obiad-Request-Purpose: landing-dialogue` header. Both use the
+real API. Search request counts and response gates do not include the example.
+Landing coverage checks the five-step sequence, localized food names, image
+fallback, centered cards, fixed Search position, and return through the wordmark.
+
+Verification: frontend checks passed. The full E2E run passed all 126 cases,
+including motion and database-outage cases. The separate Search performance
+check also passed.

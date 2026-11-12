@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isLandingDialogueRequest } from "./request-purpose";
 
 const COPY = {
   searchPlaceholder: "Search foods",
@@ -29,6 +30,10 @@ test.describe("Substitution request lock", () => {
     const initialGate = Promise.withResolvers<void>();
     const moreGate = Promise.withResolvers<void>();
     await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) {
+        await route.continue();
+        return;
+      }
       postCount += 1;
       if (postCount === 1) {
         await initialGate.promise;
