@@ -66,3 +66,6 @@ Random-ID selection verification: frontend checks, backend checks with the
 declared Go 1.26.6 toolchain, and all 126 E2E cases passed. Landing coverage checks
 the random-ID request, the following substitution request, localized cards,
 default quantities, and the original food image fallback.
+
+Bubble-tail styles use Tailwind `@apply` rules in `frontend/src/app.css`.
+`LandingDialogue.svelte` has no component-local stylesheet.

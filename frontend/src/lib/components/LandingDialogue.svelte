@@ -251,10 +251,10 @@
             <RageFaceAvatar expression={line.face} />
           </div>
           <div
-            class="bubble relative max-w-[480px] rounded-2xl border bg-dark-surface px-4 py-3 {line.side ===
+            class="landing-bubble relative max-w-[480px] rounded-2xl border border-dark-primary/60 bg-dark-surface px-4 py-3 {line.side ===
             'right'
-              ? 'bubble-right border-dark-primary/60'
-              : 'bubble-left border-dark-secondary/30'}"
+              ? 'landing-bubble-right'
+              : 'landing-bubble-left'}"
           >
             <p
               aria-hidden="true"
@@ -283,10 +283,7 @@
         {:else}
           <article
             data-dialogue-meal
-            class="mx-auto flex w-[calc(100%-4.25rem)] max-w-[480px] items-center gap-3 rounded-xl border bg-dark-surface px-3 py-3 sm:w-[calc(100%-5.75rem)] {line.side ===
-            'right'
-              ? 'border-dark-primary/50'
-              : 'border-dark-secondary/20'}"
+            class="mx-auto flex w-[calc(100%-4.25rem)] max-w-[480px] items-center gap-3 rounded-xl border border-dark-primary/60 bg-dark-surface px-3 py-3 sm:w-[calc(100%-5.75rem)]"
           >
             <img
               src={resolveFoodImage(line.meal.imageKey)}
@@ -350,26 +347,3 @@
     {/each}
   </div>
 </section>
-
-<style>
-  .bubble::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: 10px;
-    height: 10px;
-    background: var(--color-dark-surface);
-    border: inherit;
-    transform: translateY(-50%) rotate(45deg);
-  }
-  .bubble-left::before {
-    left: -6px;
-    border-top: 0;
-    border-right: 0;
-  }
-  .bubble-right::before {
-    right: -6px;
-    border-bottom: 0;
-    border-left: 0;
-  }
-</style>
