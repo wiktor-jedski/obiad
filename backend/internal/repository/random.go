@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -15,9 +14,6 @@ func RandomFoodID(ctx context.Context, conn *pgx.Conn) (int32, error) {
 	var id int32
 	if err := conn.QueryRow(ctx, sqlfiles.RandomFood).Scan(&id); err != nil {
 		return 0, &Error{Code: CodeCatalogUnavailable, cause: err}
-	}
-	if id <= 0 {
-		return 0, &Error{Code: CodeInternalError, cause: fmt.Errorf("food object %d: ID must be positive", id)}
 	}
 	return id, nil
 }
