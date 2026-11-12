@@ -55,7 +55,6 @@ export function fetchSuggestions(options: {
   query: string;
   language: InterfaceLanguage;
   signal?: AbortSignal;
-  headers?: HeadersInit;
 }): Promise<FoodSuggestionsResponse> {
   const data: GetFoodSuggestionsData = {
     url: "/api/v1/food-suggestions",
@@ -69,7 +68,6 @@ export function fetchSuggestions(options: {
   >({
     ...data,
     signal: options.signal,
-    headers: options.headers,
     throwOnError: true,
     responseStyle: "data",
   });

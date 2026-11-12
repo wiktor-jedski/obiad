@@ -44,6 +44,7 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 	app.Use(requestLogger(logger))
 	app.Get("/health", healthHandler(pool))
 	app.Get("/api/v1/food-suggestions", suggestionsHandler(pool))
+	app.Get("/api/v1/food-objects/random", randomFoodHandler(pool))
 	app.Post("/api/v1/substitutes/search", substitutesHandler(pool))
 
 	// HeaderReceived limits substitute request bodies before buffering.

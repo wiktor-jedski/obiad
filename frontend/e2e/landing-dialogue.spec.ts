@@ -1,5 +1,11 @@
 import { expect, test, type Request } from "@playwright/test";
-import type { SubstituteSearchResponse } from "../src/client/types.gen";
+import type {
+  FoodQuantity,
+  RandomFoodResponse,
+  SubstituteSearchResponse,
+} from "../src/client/types.gen";
+import { formatFoodQuantityValue } from "../src/lib/i18n";
+import { projectSubstitutePage } from "../src/lib/substituteProjection";
 import { isLandingDialogueRequest } from "./request-purpose";
 
 const presentations = [
@@ -21,16 +27,44 @@ for (const presentation of presentations) {
       if (new URL(request.url()).pathname.startsWith("/api/"))
         requests.push(request);
     });
+    const randomResponse = page.waitForResponse(
+      (response) =>
+        isLandingDialogueRequest(response.request()) &&
+        response.request().method() === "GET" &&
+        new URL(response.url()).pathname === "/api/v1/food-objects/random",
+    );
     const exampleResponse = page.waitForResponse(
       (response) =>
         isLandingDialogueRequest(response.request()) &&
-        response.request().method() === "POST",
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/substitutes/search",
     );
     try {
       await page.goto("/");
+      const random = await randomResponse;
+      expect(random.status()).toBe(200);
+      expect(random.headers()["cache-control"]).toBe("no-store");
+      const selected: RandomFoodResponse = await random.json();
+      expect(Object.keys(selected)).toEqual(["foodObjectId"]);
+      expect(Number.isInteger(selected.foodObjectId)).toBe(true);
+      expect(selected.foodObjectId).toBeGreaterThan(0);
       const response = await exampleResponse;
       expect(response.status()).toBe(200);
+      expect(response.request().postDataJSON()).toEqual({
+        foodObjectId: selected.foodObjectId,
+        pageIndex: 0,
+      });
       const example: SubstituteSearchResponse = await response.json();
+      expect(example.selectedFood.foodObjectId).toBe(selected.foodObjectId);
+      const quantity: FoodQuantity =
+        example.selectedFood.serving !== undefined
+          ? { value: 1, unit: "serving" }
+          : { value: 100, unit: example.selectedFood.baseUnit };
+      const projected = projectSubstitutePage(
+        example.selectedFood,
+        example.items,
+        quantity,
+      );
       const language = presentation.language;
       const firstAlternative = example.items[0];
       expect(firstAlternative).toBeDefined();
@@ -46,6 +80,28 @@ for (const presentation of presentations) {
       await expect(page.locator("[data-dialogue-meal] h2")).toHaveText(
         example.selectedFood.names[language],
       );
+      const originalCard = page.locator('[data-dialogue-line="1"] article');
+      await expect(originalCard.locator("p")).toHaveText(
+        `${formatFoodQuantityValue(quantity, language)} · ${projected.inputCalories} kcal`,
+      );
+      const originalImage = originalCard.locator("img");
+      await expect
+        .poll(() =>
+          originalImage.evaluate(
+            (image) =>
+              image instanceof HTMLImageElement &&
+              image.complete &&
+              image.naturalWidth > 0,
+          ),
+        )
+        .toBe(true);
+      if (example.selectedFood.imageKey === undefined) {
+        const placeholderUrl = await page
+          .locator("main")
+          .getAttribute("data-placeholder-url");
+        expect(placeholderUrl).toBeTruthy();
+        await expect(originalImage).toHaveAttribute("src", placeholderUrl!);
+      }
       await expect(page.locator("[data-dialogue-avatar] img")).toBeVisible();
 
       await expect(dialogue).toHaveAttribute("data-dialogue-step", "3");
@@ -55,6 +111,9 @@ for (const presentation of presentations) {
       ).toContainText(firstAlternative.names[language]);
       await expect(page.locator("[data-dialogue-meal] h2")).toHaveText(
         firstAlternative.names[language],
+      );
+      await expect(page.locator("[data-dialogue-meal] p")).toHaveText(
+        `${formatFoodQuantityValue(projected.items[0].matchedQuantity, language)} · ${projected.items[0].calories} kcal`,
       );
       await expect
         .poll(() =>
@@ -80,7 +139,15 @@ for (const presentation of presentations) {
         page.locator('[data-dialogue-line="4"] p[aria-hidden="true"]'),
       ).toHaveText("ME GUSTA");
       expect(await search.boundingBox()).toEqual(searchBox);
-      expect(requests.filter(isLandingDialogueRequest)).toHaveLength(2);
+      expect(
+        requests.filter(isLandingDialogueRequest).map((request) => ({
+          method: request.method(),
+          path: new URL(request.url()).pathname,
+        })),
+      ).toEqual([
+        { method: "GET", path: "/api/v1/food-objects/random" },
+        { method: "POST", path: "/api/v1/substitutes/search" },
+      ]);
       expect(
         requests.filter((request) => !isLandingDialogueRequest(request)),
       ).toHaveLength(0);

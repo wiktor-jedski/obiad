@@ -283,10 +283,6 @@ test.describe("live Food Object suggestions", () => {
       releaseSecond = resolve;
     });
     await page.route("**/api/v1/food-suggestions*", async (route) => {
-      if (isLandingDialogueRequest(route.request())) {
-        await route.continue();
-        return;
-      }
       const queryParam = new URL(route.request().url()).searchParams.get(
         "query",
       );
@@ -351,10 +347,6 @@ test.describe("live Food Object suggestions", () => {
       markFirstSeen = resolve;
     });
     await page.route("**/api/v1/food-suggestions*", async (route) => {
-      if (isLandingDialogueRequest(route.request())) {
-        await route.continue();
-        return;
-      }
       const queryParam = new URL(route.request().url()).searchParams.get(
         "query",
       );

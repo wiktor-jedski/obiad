@@ -59,6 +59,9 @@ func assertSubstituteSuccessEnvelope(t *testing.T, status int, body string, cont
 	if _, ok := selected["serving"]; ok {
 		wantSelectedFields = append(wantSelectedFields, "serving")
 	}
+	if _, ok := selected["imageKey"]; ok {
+		wantSelectedFields = append(wantSelectedFields, "imageKey")
+	}
 	assertExactFieldSet(t, selected, "selectedFood", wantSelectedFields...)
 	var selectedNames map[string]json.RawMessage
 	if err := json.Unmarshal(selected["names"], &selectedNames); err != nil {

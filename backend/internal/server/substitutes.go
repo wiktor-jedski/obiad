@@ -291,6 +291,7 @@ func substituteResponse(page *repository.Page) transport.SubstituteSearchRespons
 				En: page.SelectedFood.Names.En,
 				Pl: page.SelectedFood.Names.Pl,
 			},
+			ImageKey: page.SelectedFood.ImageKey,
 			MacroProfile: transport.MacroProfile{
 				Protein:      page.SelectedFood.MacroProfile.Protein,
 				Carbohydrate: page.SelectedFood.MacroProfile.Carbohydrate,

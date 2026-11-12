@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { flip } from "svelte/animate";
   import { fly } from "svelte/transition";
-  import { fetchSuggestions } from "../suggestions";
+  import { client } from "../../client/client.gen";
   import { searchSubstitutes } from "../substitutionSearch";
   import {
     projectSubstitutePage,
@@ -10,7 +10,13 @@
   } from "../substituteProjection";
   import RageFaceAvatar from "./RageFaceAvatar.svelte";
   import { foodPlaceholderUrl, resolveFoodImage } from "../assets";
-  import type { FoodQuantity, LocalizedNames } from "../../client/types.gen";
+  import type {
+    FoodQuantity,
+    GetRandomFoodData,
+    GetRandomFoodErrors,
+    GetRandomFoodResponses,
+    LocalizedNames,
+  } from "../../client/types.gen";
   import { interfaceLanguage } from "../interfaceLanguage";
   import {
     formatFoodQuantityValue,
@@ -22,7 +28,6 @@
     en: {
       conversation: "Meal swap conversation",
       loading: "Finding a meal and its swap…",
-      empty: "No swap found for this example. Search for a meal below.",
       error: "The live example is unavailable. You can still search below.",
       complaint: (name: string) => `${name} AGAIN!? I ate that all week long!`,
       suggestion: (name: string) => `Try this: ${name}.`,
@@ -33,7 +38,6 @@
     pl: {
       conversation: "Rozmowa o zamianie posiłku",
       loading: "Szukamy posiłku i zamiennika…",
-      empty: "Brak zamiennika dla tego przykładu. Wyszukaj posiłek poniżej.",
       error:
         "Przykład jest niedostępny. Nadal możesz wyszukać posiłek poniżej.",
       complaint: (name: string) => `ZNOWU ${name}!? Ile można jeść to samo?!`,
@@ -63,7 +67,7 @@
   let lines = $state.raw<DialogueLine[]>([]);
   let typedCount = $state(0);
   let complete = $state(false);
-  let status = $state<"loading" | "empty" | "error" | undefined>("loading");
+  let status = $state<"loading" | "error" | undefined>("loading");
   let reducedMotion = $state(false);
   const visible = $derived(lines.slice(-2));
   const currentLine = $derived(lines.at(-1));
@@ -100,17 +104,21 @@
 
     async function run(): Promise<void> {
       try {
-        const queries = ["chicken", "pasta", "rice", "beef", "curry", "potato"];
-        const suggestions = await fetchSuggestions({
-          query: queries[Math.floor(Math.random() * queries.length)],
-          language: "en",
+        const data: GetRandomFoodData = {
+          url: "/api/v1/food-objects/random",
+        };
+        const selected = await client.get<
+          GetRandomFoodResponses,
+          GetRandomFoodErrors,
+          true,
+          "data"
+        >({
+          ...data,
           signal: controller.signal,
           headers,
+          throwOnError: true,
+          responseStyle: "data",
         });
-        const selected =
-          suggestions.items[
-            Math.floor(Math.random() * suggestions.items.length)
-          ];
         const response = await searchSubstitutes({
           foodObjectId: selected.foodObjectId,
           pageIndex: 0,
@@ -118,21 +126,22 @@
           headers,
         });
         if (controller.signal.aborted) return;
+        const quantity: FoodQuantity =
+          response.selectedFood.serving !== undefined
+            ? { value: 1, unit: "serving" }
+            : { value: 100, unit: response.selectedFood.baseUnit };
         const projected = projectSubstitutePage(
           response.selectedFood,
           response.items,
-          selected.defaultQuantity,
+          quantity,
         );
         const alternative = projected.items[0];
-        if (!alternative) {
-          status = "empty";
-          return;
-        }
         const original: MealCard = {
-          names: selected.names,
-          quantity: selected.defaultQuantity,
+          names: response.selectedFood.names,
+          quantity,
           calories: projected.inputCalories,
           macros: projected.inputMacronutrients,
+          imageKey: response.selectedFood.imageKey,
         };
         const swap: MealCard = {
           names: alternative.names,
