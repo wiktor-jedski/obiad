@@ -1,3 +1,4 @@
+import "../../tools/prepare-meal-images";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { plugin } from "bun";
 import { existsSync, readFileSync } from "node:fs";
