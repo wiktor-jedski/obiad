@@ -59,10 +59,6 @@ Setup:
 
 - `scripts/start.py` runs the app using demo database
 
-Doc checks:
-
-- `scripts/validate_phase_plan.py` phase planning validation
-
 Aggregate checks:
 
 - `scripts/ci_check.py` runs CI check (both frontend and backend)
