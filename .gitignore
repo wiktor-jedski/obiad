@@ -1,5 +1,6 @@
 # Generated API code
 frontend/src/client/
+frontend/src/lib/assets/generated-meal-images.ts
 
 # Local dependencies
 frontend/node_modules/

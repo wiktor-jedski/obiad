@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "bun ./tools/prepare-meal-images.ts && svelte-check --tsconfig ./tsconfig.json",
     "lint": "oxlint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

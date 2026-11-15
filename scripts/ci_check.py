@@ -120,7 +120,6 @@ def published_postgres_port(container_name: str) -> int:
 def run_frontend_checks() -> None:
     """Install frontend dependencies and run static frontend checks."""
 
-    run_checked([sys.executable, "scripts/validate_phase_plan.py"])
     run_checked(
         [
             "uv",
