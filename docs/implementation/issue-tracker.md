@@ -154,7 +154,8 @@ Enter or blur applies a valid edit; Escape cancels. Invalid Enter retains focus
 and shows an error. Invalid blur restores the last value and shows an error below
 the selected card. Accept decimal dots or commas. Reject zero, negatives, excess
 precision, invalid notation, and portions above the advertised quantity limits.
-Use the strictest limit across the food's units so switching cannot exceed one.
+Quantity entries use the current unit's limit; calorie and macro targets use the
+base-unit limit. Unit switching preserves the amount, without applying a new cap.
 Do not clamp targets. Editing stays available during pagination; arriving cards
 use the latest committed portion.
 

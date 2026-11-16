@@ -39,8 +39,8 @@
   const quantity = $derived(variant === "C"
     ? { value: displayUnit === "serving" ? baseQuantity / (selectedFood?.serving ?? 1) : baseQuantity, unit: displayUnit }
     : { value: interaction.committedValue, unit: interaction.committedUnit });
-  const maximumBaseQuantity = $derived(Math.min(...interaction.selected.allowedQuantities.map((allowed) =>
-    allowed.maximumValue * (allowed.unit === "serving" ? (selectedFood?.serving ?? 1) : 1))));
+  const maximumBaseQuantity = $derived(interaction.selected.allowedQuantities.find((allowed) =>
+    allowed.unit !== "serving")!.maximumValue);
   const projection = $derived(selectedFood ? projectSubstitutePage(
     selectedFood,
     pages.flatMap((page) => page.items),
@@ -100,9 +100,14 @@
   }
 
   function commitField(field: EditableField, value: number): string | undefined {
-    const nextBaseQuantity = value * 100 / fieldBasis(field);
-    if (!Number.isFinite(nextBaseQuantity) || nextBaseQuantity <= 0 || nextBaseQuantity > maximumBaseQuantity) {
-      const maximum = (maximumBaseQuantity * fieldBasis(field) / 100).toLocaleString($interfaceLanguage, { maximumFractionDigits: 2 });
+    const maximumValue = field === "quantity"
+      ? interaction.selected.allowedQuantities.find((allowed) => allowed.unit === displayUnit)!.maximumValue
+      : maximumBaseQuantity * fieldBasis(field) / 100;
+    const nextBaseQuantity = field === "quantity"
+      ? value * (displayUnit === "serving" ? selectedFood!.serving! : 1)
+      : value * 100 / fieldBasis(field);
+    if (!Number.isFinite(nextBaseQuantity) || nextBaseQuantity <= 0 || value > maximumValue) {
+      const maximum = maximumValue.toLocaleString($interfaceLanguage, { maximumFractionDigits: 2 });
       return $interfaceLanguage === "pl"
         ? `Wartość przekracza limit porcji. Maksimum dla tego pola: ${maximum}.`
         : `The value exceeds the portion limit. Maximum for this field: ${maximum}.`;
