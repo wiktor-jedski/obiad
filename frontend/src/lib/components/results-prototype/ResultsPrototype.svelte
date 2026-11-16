@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Throwaway: compare unit controls C–F on /?variant=; A/B remain available by URL.
-  import { untrack } from "svelte";
+  // Throwaway: compare F-based reveals F–I; earlier layouts remain available by URL.
+  import { onDestroy, untrack } from "svelte";
   import type { SubstituteSearchResponse } from "../../../client/types.gen";
   import { interactionState, type InteractionState, type EmptyInteractionState, type QuantityUnit } from "../../interactionState";
   import { interfaceLanguage } from "../../interfaceLanguage";
@@ -12,6 +12,7 @@
   import VariantB from "./VariantB.svelte";
   import VariantC from "./VariantC.svelte";
   import PrototypeNumberEditor from "./PrototypeNumberEditor.svelte";
+  import PrototypeCardReveal from "./PrototypeCardReveal.svelte";
 
   type EditableField = "quantity" | "calories" | "protein" | "carbohydrate" | "fat";
 
@@ -23,7 +24,8 @@
   } = $props();
 
   const initialVariant = new URLSearchParams(window.location.search).get("variant");
-  let variant = $state(initialVariant && ["A", "B", "C", "D", "E", "F"].includes(initialVariant) ? initialVariant : "C");
+  let variant = $state(initialVariant && ["A", "B", "C", "D", "E", "F", "G", "H", "I"].includes(initialVariant) ? initialVariant : "F");
+  const reveal = $derived(variant === "F" ? "instant" : variant === "G" ? "flip" : variant === "H" ? "shutter" : variant === "I" ? "rise" : undefined);
   const cardVariant = $derived(variant === "A" || variant === "B" ? variant : "C");
   let pages = $state.raw<SubstituteSearchResponse[]>([]);
   let sentinel: HTMLDivElement | undefined = $state();
@@ -31,6 +33,10 @@
   let chosenUnit: QuantityUnit | undefined = $state();
   let editorError = $state("");
   let lastEditedField = $state<EditableField>("quantity");
+  let pageSpinner = $state(false);
+  let spinnerMinimumDone = $state(false);
+  let spinnerFrame = 0;
+  let spinnerTimer = 0;
   const dictionary = $derived(getDictionary($interfaceLanguage));
   const selectedFood = $derived(pages[0]?.selectedFood);
   const latest = $derived(pages.at(-1));
@@ -61,15 +67,39 @@
     if (response && response.selectedFood.foodObjectId === interaction.selected.foodObjectId) {
       const previous = untrack(() => pages);
       if (previous[response.pageIndex] !== response) {
+        if (response.pageIndex > 0 && pageSpinner && !spinnerMinimumDone) return;
         pages = [...previous.slice(0, response.pageIndex), response];
+        pageSpinner = false;
       }
     }
   });
 
   $effect(() => {
-    if (!sentinel || !latest?.hasMore || locked || interaction.name !== "results") return;
+    if (pageSpinner && spinnerMinimumDone && interaction.name === "moreFailure") pageSpinner = false;
+  });
+
+  function requestMore(): void {
+    if (pageSpinner || locked || (interaction.name !== "results" && interaction.name !== "moreFailure")) return;
+    pageSpinner = true;
+    spinnerMinimumDone = false;
+    // Start the one-second minimum after the spinner has painted.
+    spinnerFrame = requestAnimationFrame(() => {
+      spinnerFrame = requestAnimationFrame(() => {
+        spinnerTimer = window.setTimeout(() => spinnerMinimumDone = true, 1000);
+      });
+    });
+    onmore();
+  }
+
+  onDestroy(() => {
+    cancelAnimationFrame(spinnerFrame);
+    clearTimeout(spinnerTimer);
+  });
+
+  $effect(() => {
+    if (!sentinel || !latest?.hasMore || locked || pageSpinner || interaction.name !== "results") return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) onmore();
+      if (entries.some((entry) => entry.isIntersecting)) requestMore();
     });
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -247,7 +277,7 @@
       {@render unitToggle()}
     {/if}
     {@render numberEditor("quantity", quantity.value)}
-    {#if variant === "F" || interaction.selected.allowedQuantities.length === 1}
+    {#if reveal || interaction.selected.allowedQuantities.length === 1}
       <span>{displayUnit === "serving" ? "ea" : displayUnit}</span>
     {:else if variant !== "E"}
       {@render unitToggle()}
@@ -263,22 +293,25 @@
       variant={cardVariant}
       editor={cardVariant === "C" ? portionEditor : quantityEditor}
       nutritionEditor={cardVariant === "C" ? numberEditor : undefined}
-      titleControl={variant === "F" && interaction.selected.allowedQuantities.length > 1 ? wholeUnitToggle : undefined}
+      titleControl={reveal && interaction.selected.allowedQuantities.length > 1 ? wholeUnitToggle : undefined}
+      {reveal}
     />
     {#if cardVariant === "C" && editorError}
       <p id="prototype-edit-error" role="status" class="mt-3 text-sm text-dark-error">{editorError}</p>
     {/if}
+  {:else if reveal && interaction.name !== "newSearchFailure"}
+    <PrototypeCardReveal mode={reveal} ready={false} label={dictionary.loadingNutritionValues()} />
   {/if}
 {/snippet}
 
 {#snippet results()}
   {#each projection?.items ?? [] as item, index (item.foodObjectId)}
-    <PrototypeFoodCard food={{ ...item, quantity: item.matchedQuantity }} language={$interfaceLanguage} variant={cardVariant} rank={index + 1} />
+    <PrototypeFoodCard food={{ ...item, quantity: item.matchedQuantity }} language={$interfaceLanguage} variant={cardVariant} rank={index + 1} {reveal} />
   {/each}
 {/snippet}
 
 <section data-results-prototype data-variant={variant} data-layout={cardVariant} class="prototype-results mt-10 pb-36 text-dark-text-primary">
-  {#if selectedCard}
+  {#if selectedCard || reveal}
     {#if variant === "A"}
       <VariantA {selected} {results} {title} {subtitle} />
     {:else if variant === "B"}
@@ -291,13 +324,13 @@
   {/if}
 
   <div bind:this={sentinel} data-prototype-sentinel class="mt-8 flex min-h-16 items-center justify-center" aria-live="polite">
-    {#if interaction.name === "loadingMore"}
+    {#if pageSpinner || interaction.name === "loadingMore"}
       <span role="status" class="flex justify-center">
         <span data-prototype-spinner class="size-6 rounded-full border-2 border-dark-secondary/25 border-t-dark-primary motion-safe:animate-spin"></span>
         <span class="sr-only">{dictionary.loadingNutritionValues()}</span>
       </span>
     {:else if interaction.name === "moreFailure"}
-      <button onclick={onmore} class="min-h-11 rounded border border-dark-secondary px-4 text-sm">{dictionary.retryMessage()}</button>
+      <button onclick={requestMore} class="min-h-11 rounded border border-dark-secondary px-4 text-sm">{dictionary.retryMessage()}</button>
     {:else if interaction.name === "newSearchFailure"}
       <p>{dictionary.retryMessage()}</p>
     {:else if latest && !latest.hasMore}
@@ -306,7 +339,7 @@
   </div>
 </section>
 
-<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${cardVariant === "C" ? `${baseQuantity} ${selectedFood?.baseUnit ?? ""} · ${displayUnit === "serving" ? "ea" : displayUnit} · ${lastEditedField}` : `${quantity.value} ${quantity.unit}`} · ${$interfaceLanguage}`} />
+<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${pageSpinner ? "page spinner · " : ""}${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${cardVariant === "C" ? `${baseQuantity} ${selectedFood?.baseUnit ?? ""} · ${displayUnit === "serving" ? "ea" : displayUnit} · ${lastEditedField}` : `${quantity.value} ${quantity.unit}`} · ${$interfaceLanguage} · ${reveal ?? "legacy"}`} />
 
 <style>
   .prototype-results { --prototype-font: "Lato", sans-serif; }

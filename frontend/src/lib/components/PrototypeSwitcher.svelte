@@ -7,14 +7,17 @@
     state: string;
   } = $props();
 
-  const variants = ["C", "D", "E", "F"];
+  const variants = ["F", "G", "H", "I"];
   const names: Record<string, string> = {
     A: "Gallery · Lato",
     B: "Comparison · Barlow",
     C: "Original unit placement",
     D: "Fixed quantity width",
     E: "Toggle before quantity",
-    F: "Toggle beside name",
+    F: "Ready · no animation",
+    G: "Horizontal-axis flip",
+    H: "Opening shutters",
+    I: "Slide up",
   };
 
   function cycle(direction: number): void {

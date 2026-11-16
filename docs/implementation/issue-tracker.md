@@ -230,3 +230,31 @@ Type checks passed. Browser checks at 1440 px and 320 px confirmed equal unit ga
 for `2`, `2.5`, and `2.55`, including Polish decimal commas. All five editors were
 checked while focused and after commit, plus empty drafts, Escape, D's fixed
 position, and page overflow. Desktop and mobile visual checks passed.
+
+The next comparison keeps F's layout and editors and varies the reveal:
+F reveals without motion after readiness; G flips around the horizontal axis;
+H opens two shutters; I slides the card upward from behind its reverse.
+The active switcher contains F–I. Earlier variants remain available by URL.
+The motion choice is still open; these remain throwaway prototypes.
+
+Cards start covered and wait for their actual image element to decode. Cached
+images also get a painted reverse before motion starts. A failed image uses the
+decoded bundled placeholder; if that also fails, the card shows an explicit
+image-unavailable state instead of the browser's broken-image display. Hidden
+editors cannot receive focus. Reduced-motion mode reveals ready cards directly.
+Quantity edits do not replay the animation.
+
+Pagination fetches immediately but holds the centered spinner for at least one
+second after it paints. Fast responses stay buffered until that interval ends;
+slow requests keep the spinner until the response arrives. Earlier cards remain
+in place. A failed request exposes retry after the same minimum interval.
+New searches cancel the old presentation timer and discard stale image callbacks.
+
+Type checks passed with no errors or warnings. Browser checks at 1440 px and
+320 px covered all four variants, cached consecutive searches, separately delayed
+image requests and decoding, retained editors, variant switching, and motion
+without horizontal overflow. Visual checks covered card reverses and each motion.
+The fast pagination check measured 1034 ms before both spinner removal and page
+append. Slow responses, simulated request failure and retry, image/fallback
+failure, reduced motion, and search changes during pending work also passed.
+Captured on `prototype/results-candidates`; no backend or production change.
