@@ -30,18 +30,16 @@
     class="aspect-square w-full object-cover"
   />
   <div data-prototype-details class="flex min-w-0 flex-col justify-center p-5">
-    {#if variant !== "C" || food.similarityPercent !== undefined}
-      <div class="mb-3 flex flex-wrap items-center gap-2 text-xs {variant === 'C' ? 'justify-end' : 'justify-between'}">
-        {#if variant !== "C"}
-          <span class="font-semibold text-dark-secondary">{editor ? dictionary.selectedFoodLabel() : `${String(rank).padStart(2, "0")} / ${language === "pl" ? "Zamiennik" : "Substitute"}`}</span>
-        {/if}
+    {#if variant !== "C"}
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span class="font-semibold text-dark-secondary">{editor ? dictionary.selectedFoodLabel() : `${String(rank).padStart(2, "0")} / ${language === "pl" ? "Zamiennik" : "Substitute"}`}</span>
         {#if food.similarityPercent !== undefined}
           <span class="text-dark-text-muted">{food.similarityPercent}% {dictionary.similarityLabel()}</span>
         {/if}
       </div>
     {/if}
     <h3 class="mb-3 text-lg leading-snug font-semibold tracking-tight">{food.names[language]}</h3>
-    <div data-prototype-summary class="prototype-numbers mb-4 flex min-h-11 items-center {variant === 'C' ? 'gap-2 whitespace-nowrap text-base font-normal' : 'text-lg'}">
+    <div data-prototype-summary class="prototype-numbers mb-4 flex min-h-11 items-center text-lg {variant === 'C' ? 'gap-1 whitespace-nowrap font-normal' : ''}">
       {#if editor}
         {@render editor()}
       {:else}
@@ -50,6 +48,9 @@
       {#if variant === "C"}
         <span aria-hidden="true" class="text-dark-text-muted">|</span>
         <span data-prototype-calories>{food.calories} kcal</span>
+        {#if food.similarityPercent !== undefined}
+          <span data-prototype-similarity aria-label={`${dictionary.similarityLabel()}: ${food.similarityPercent}%`} class="ml-auto pl-2 text-right">{food.similarityPercent}%</span>
+        {/if}
       {/if}
     </div>
     {#if variant !== "C"}

@@ -125,3 +125,10 @@ Revision verification: Svelte type checks passed with no errors or warnings.
 Browser checks covered desktop and 390 px and 320 px mobile widths. All cards had
 rounded corners and single-line, 16 px, regular-weight quantity and calorie rows.
 Polish section headings were centered. Serving edits updated the calorie value.
+
+The next C revision moves similarity to the right end of the quantity and calorie
+row. Show only the percentage, such as `100%`; keep the localized similarity
+label for assistive technology. All row values use the same font, color, regular
+weight, and larger 18 px size. The selected-food editor uses this size too.
+Type checks passed. Desktop and 320 px browser checks confirmed one-line rows,
+matching number styles, right-aligned percentages, and no page overflow.

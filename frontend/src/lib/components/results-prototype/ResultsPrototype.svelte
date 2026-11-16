@@ -80,7 +80,7 @@
       aria-describedby={interaction.quantityInvalid ? "prototype-quantity-error" : undefined}
       oninput={(event) => interactionState.setQuantityText(event.currentTarget.value)}
       onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); interactionState.commitQuantity(); } }}
-      class="h-11 rounded border border-dark-secondary/50 bg-dark-background text-base focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'w-[7ch] px-1' : 'w-20 px-3'}"
+      class="h-11 rounded border border-dark-secondary/50 bg-dark-background focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'w-[6ch] px-1 text-lg' : 'w-20 px-3 text-base'}"
     />
     <label class="sr-only" for="prototype-unit">{dictionary.unitLabel()}</label>
     <select
@@ -91,7 +91,7 @@
         const allowed = interaction.selected.allowedQuantities.find((item) => item.unit === event.currentTarget.value);
         if (allowed) interactionState.selectUnit(allowed.unit);
       }}
-      class="h-11 min-w-0 rounded border border-dark-secondary/50 bg-dark-background text-base focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'px-1' : 'px-2'}"
+      class="h-11 min-w-0 rounded border border-dark-secondary/50 bg-dark-background focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'px-1 text-lg' : 'px-2 text-base'}"
     >
       {#each interaction.selected.allowedQuantities as allowed (allowed.unit)}
         <option value={allowed.unit}>{allowed.unit === "serving" ? dictionary.servingsLabel() : allowed.unit}</option>
