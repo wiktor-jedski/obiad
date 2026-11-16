@@ -1,13 +1,14 @@
 <script lang="ts">
   import type { InterfaceLanguage } from "../../i18n";
 
-  let { field, label, value, precision, language, readonly = false, oncommit, onerror }: {
+  let { field, label, value, precision, language, readonly = false, fixedSlot = false, oncommit, onerror }: {
     field: string;
     label: string;
     value: number;
     precision: number;
     language: InterfaceLanguage;
     readonly?: boolean;
+    fixedSlot?: boolean;
     oncommit: (value: number) => string | undefined;
     onerror: (message: string) => void;
   } = $props();
@@ -53,7 +54,7 @@
     autocomplete="off"
     spellcheck="false"
     value={draft ?? formatted}
-    style:width={`${Math.max(1, (draft ?? formatted).length) + 0.25}ch`}
+    style:width={fixedSlot ? "100%" : `${Math.max(1, (draft ?? formatted).length) + 0.25}ch`}
     onfocus={(event) => {
       originalText = formatted;
       draft = formatted;
@@ -82,6 +83,6 @@
         }
       }
     }}
-    class="min-h-11 min-w-0 max-w-full appearance-none rounded-none border-0 bg-transparent p-0 text-inherit underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none aria-invalid:decoration-dark-error"
+    class="min-h-11 min-w-0 max-w-full appearance-none rounded-none border-0 bg-transparent p-0 text-inherit underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none aria-invalid:decoration-dark-error {fixedSlot ? 'text-right' : ''}"
   />
 {/if}

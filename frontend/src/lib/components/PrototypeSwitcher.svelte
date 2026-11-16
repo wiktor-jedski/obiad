@@ -7,15 +7,19 @@
     state: string;
   } = $props();
 
-  const variants = ["A", "B", "C"];
+  const variants = ["C", "D", "E", "F"];
   const names: Record<string, string> = {
     A: "Gallery · Lato",
     B: "Comparison · Barlow",
-    C: "Editorial · Source Serif",
+    C: "Original unit placement",
+    D: "Fixed quantity width",
+    E: "Toggle before quantity",
+    F: "Toggle beside name",
   };
 
   function cycle(direction: number): void {
-    const next = variants[(variants.indexOf(variant) + direction + variants.length) % variants.length];
+    const current = Math.max(0, variants.indexOf(variant));
+    const next = variants[(current + direction + variants.length) % variants.length];
     const url = new SvelteURL(window.location.href);
     url.searchParams.set("variant", next);
     window.history.replaceState(null, "", url);

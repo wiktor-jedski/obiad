@@ -188,3 +188,19 @@ End. Its arrow keys do not change the prototype variant. Type checks passed.
 Browser checks covered the active circle, visible unit labels, preserved calories,
 English and Polish, and desktop and 320 px layouts without page overflow.
 A real single-unit food had no toggle; a simulated liquid profile verified ml/ea.
+
+Unit-placement comparison: can the control stay fixed when `1 ea` becomes `702 g`?
+The active comparison bar now contains C–F. C keeps its original placement.
+D reserves a fixed-width, right-aligned quantity slot. E puts the toggle before
+the quantity. F puts it beside the food name and shows the current unit in the
+quantity row. All four use C's cards, fonts, editors, and equal-calorie projection.
+Hovering the track, either label, or the circle highlights the whole toggle.
+Earlier A/B designs remain available through their direct URLs.
+
+Svelte type checks passed with no errors or warnings. Browser checks and visual
+inspection covered all four designs at 1440 px and 320 px. D/E/F had no horizontal
+toggle movement after unit changes, quantity focus, or quantity edits. Checks also
+covered whole-control hover, equal-calorie substitutes after a protein edit,
+single-unit foods, keyboard and bar navigation, preserved state, and no row or
+page overflow. The placement choice remains open. This comparison is captured on
+`prototype/results-candidates`; no production or backend behavior changed.

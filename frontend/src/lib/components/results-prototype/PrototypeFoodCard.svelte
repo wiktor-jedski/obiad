@@ -5,13 +5,14 @@
   import { foodPlaceholderUrl, resolveFoodImage } from "../../assets";
   import { formatFoodQuantityValue, formatMacronutrientValue, getDictionary, type InterfaceLanguage } from "../../i18n";
 
-  let { food, language, variant, rank, editor, nutritionEditor }: {
+  let { food, language, variant, rank, editor, nutritionEditor, titleControl }: {
     food: Omit<ProjectedSubstituteItem, "matchedQuantity" | "similarityPercent"> & { quantity: FoodQuantity; similarityPercent?: number };
     language: InterfaceLanguage;
     variant: string;
     rank?: number;
     editor?: Snippet;
     nutritionEditor?: Snippet<["calories" | "protein" | "carbohydrate" | "fat", number]>;
+    titleControl?: Snippet;
   } = $props();
   const dictionary = $derived(getDictionary(language));
   const macros = $derived([
@@ -39,7 +40,12 @@
         {/if}
       </div>
     {/if}
-    <h3 class="mb-3 text-lg leading-snug font-semibold tracking-tight {variant === 'C' ? 'lg:text-3xl' : ''}">{food.names[language]}</h3>
+    <div class="mb-3 flex items-start justify-between gap-3">
+      <h3 class="min-w-0 text-lg leading-snug font-semibold tracking-tight {variant === 'C' ? 'lg:text-3xl' : ''}">{food.names[language]}</h3>
+      {#if titleControl}
+        <div data-prototype-title-control class="prototype-numbers shrink-0 text-lg lg:text-2xl">{@render titleControl()}</div>
+      {/if}
+    </div>
     <div data-prototype-summary class="prototype-numbers mb-4 flex min-h-11 items-center text-lg {variant === 'C' ? 'gap-1 whitespace-nowrap font-normal lg:text-2xl' : ''}">
       {#if editor}
         {@render editor()}

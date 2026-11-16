@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Throwaway: three results designs on /?variant=A|B|C; retain the real search API.
+  // Throwaway: compare unit controls C–F on /?variant=; A/B remain available by URL.
   import { untrack } from "svelte";
   import type { SubstituteSearchResponse } from "../../../client/types.gen";
   import { interactionState, type InteractionState, type EmptyInteractionState, type QuantityUnit } from "../../interactionState";
@@ -23,7 +23,8 @@
   } = $props();
 
   const initialVariant = new URLSearchParams(window.location.search).get("variant");
-  let variant = $state(initialVariant === "B" || initialVariant === "C" ? initialVariant : "A");
+  let variant = $state(initialVariant && ["A", "B", "C", "D", "E", "F"].includes(initialVariant) ? initialVariant : "C");
+  const cardVariant = $derived(variant === "A" || variant === "B" ? variant : "C");
   let pages = $state.raw<SubstituteSearchResponse[]>([]);
   let sentinel: HTMLDivElement | undefined = $state();
   let enteredBaseQuantity: number | undefined = $state();
@@ -36,7 +37,7 @@
   const baseQuantity = $derived(enteredBaseQuantity ?? interaction.committedValue *
     (interaction.committedUnit === "serving" ? (selectedFood?.serving ?? 1) : 1));
   const displayUnit = $derived(chosenUnit ?? interaction.committedUnit);
-  const quantity = $derived(variant === "C"
+  const quantity = $derived(cardVariant === "C"
     ? { value: displayUnit === "serving" ? baseQuantity / (selectedFood?.serving ?? 1) : baseQuantity, unit: displayUnit }
     : { value: interaction.committedValue, unit: interaction.committedUnit });
   const maximumBaseQuantity = $derived(interaction.selected.allowedQuantities.find((allowed) =>
@@ -44,7 +45,7 @@
   const projection = $derived(selectedFood ? projectSubstitutePage(
     selectedFood,
     pages.flatMap((page) => page.items),
-    variant === "C" ? { value: baseQuantity, unit: selectedFood.baseUnit } : quantity,
+    cardVariant === "C" ? { value: baseQuantity, unit: selectedFood.baseUnit } : quantity,
   ) : undefined);
   const selectedCard = $derived(selectedFood && projection ? {
     ...selectedFood,
@@ -175,48 +176,58 @@
 {/snippet}
 
 {#snippet numberEditor(field: EditableField, value: number)}
-  <PrototypeNumberEditor
-    {field}
-    label={fieldLabel(field)}
-    {value}
-    precision={field === "quantity" ? (displayUnit === "serving" ? 2 : 0) : field === "calories" ? 0 : 1}
-    language={$interfaceLanguage}
-    readonly={fieldBasis(field) === 0}
-    oncommit={(next) => commitField(field, next)}
-    onerror={(message) => editorError = message}
-  />
+  <span class={field === "quantity" && variant === "D" ? "inline-flex w-[7ch] shrink-0" : "contents"}>
+    <PrototypeNumberEditor
+      {field}
+      label={fieldLabel(field)}
+      {value}
+      precision={field === "quantity" ? (displayUnit === "serving" ? 2 : 0) : field === "calories" ? 0 : 1}
+      language={$interfaceLanguage}
+      readonly={fieldBasis(field) === 0}
+      fixedSlot={field === "quantity" && variant === "D"}
+      oncommit={(next) => commitField(field, next)}
+      onerror={(message) => editorError = message}
+    />
+  </span>
+{/snippet}
+
+{#snippet unitToggle()}
+  <div
+    role="radiogroup"
+    aria-label={dictionary.unitLabel()}
+    data-prototype-unit-toggle
+    class="group/unit relative inline-flex shrink-0 items-center rounded-full border border-dark-secondary/40 bg-dark-background p-0.5 hover:border-dark-primary hover:bg-dark-primary/10 focus-within:border-dark-primary"
+  >
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute top-0.5 left-0.5 size-8 rounded-full bg-dark-primary group-hover/unit:bg-dark-secondary motion-safe:transition-transform motion-safe:duration-200 lg:size-9 {displayUnit === 'serving' ? 'translate-x-8 lg:translate-x-9' : ''}"
+    ></span>
+    {#each interaction.selected.allowedQuantities.toSorted((a, b) => Number(a.unit === "serving") - Number(b.unit === "serving")) as allowed (allowed.unit)}
+      <button
+        type="button"
+        role="radio"
+        data-unit={allowed.unit}
+        aria-label={allowed.unit === "serving" ? `ea (${dictionary.servingsLabel()})` : allowed.unit}
+        aria-checked={displayUnit === allowed.unit}
+        tabindex={displayUnit === allowed.unit ? 0 : -1}
+        onclick={() => chooseUnit(allowed.unit)}
+        onkeydown={(event) => onUnitKeydown(event, allowed.unit)}
+        class="relative z-10 flex size-8 cursor-pointer items-center justify-center rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary lg:size-9 {displayUnit === allowed.unit ? 'text-dark-text-on-bright' : 'text-dark-text-muted group-hover/unit:text-dark-secondary'}"
+      >{allowed.unit === "serving" ? "ea" : allowed.unit}</button>
+    {/each}
+  </div>
 {/snippet}
 
 {#snippet portionEditor()}
   <div class="flex min-w-0 items-center gap-1">
+    {#if variant === "E" && interaction.selected.allowedQuantities.length > 1}
+      {@render unitToggle()}
+    {/if}
     {@render numberEditor("quantity", quantity.value)}
-    {#if interaction.selected.allowedQuantities.length > 1}
-      <div
-        role="radiogroup"
-        aria-label={dictionary.unitLabel()}
-        data-prototype-unit-toggle
-        class="relative inline-flex shrink-0 items-center rounded-full border border-dark-secondary/40 bg-dark-background p-0.5"
-      >
-        <span
-          aria-hidden="true"
-          class="pointer-events-none absolute top-0.5 left-0.5 size-8 rounded-full bg-dark-primary motion-safe:transition-transform motion-safe:duration-200 lg:size-9 {displayUnit === 'serving' ? 'translate-x-8 lg:translate-x-9' : ''}"
-        ></span>
-        {#each interaction.selected.allowedQuantities.toSorted((a, b) => Number(a.unit === "serving") - Number(b.unit === "serving")) as allowed (allowed.unit)}
-          <button
-            type="button"
-            role="radio"
-            data-unit={allowed.unit}
-            aria-label={allowed.unit === "serving" ? `ea (${dictionary.servingsLabel()})` : allowed.unit}
-            aria-checked={displayUnit === allowed.unit}
-            tabindex={displayUnit === allowed.unit ? 0 : -1}
-            onclick={() => chooseUnit(allowed.unit)}
-            onkeydown={(event) => onUnitKeydown(event, allowed.unit)}
-            class="relative z-10 flex size-8 items-center justify-center rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary lg:size-9 {displayUnit === allowed.unit ? 'text-dark-text-on-bright' : 'text-dark-text-muted hover:text-dark-text-primary'}"
-          >{allowed.unit === "serving" ? "ea" : allowed.unit}</button>
-        {/each}
-      </div>
-    {:else}
-      <span>{displayUnit}</span>
+    {#if variant === "F" || interaction.selected.allowedQuantities.length === 1}
+      <span>{displayUnit === "serving" ? "ea" : displayUnit}</span>
+    {:else if variant !== "E"}
+      {@render unitToggle()}
     {/if}
   </div>
 {/snippet}
@@ -226,11 +237,12 @@
     <PrototypeFoodCard
       food={selectedCard}
       language={$interfaceLanguage}
-      {variant}
-      editor={variant === "C" ? portionEditor : quantityEditor}
-      nutritionEditor={variant === "C" ? numberEditor : undefined}
+      variant={cardVariant}
+      editor={cardVariant === "C" ? portionEditor : quantityEditor}
+      nutritionEditor={cardVariant === "C" ? numberEditor : undefined}
+      titleControl={variant === "F" && interaction.selected.allowedQuantities.length > 1 ? unitToggle : undefined}
     />
-    {#if variant === "C" && editorError}
+    {#if cardVariant === "C" && editorError}
       <p id="prototype-edit-error" role="status" class="mt-3 text-sm text-dark-error">{editorError}</p>
     {/if}
   {/if}
@@ -238,11 +250,11 @@
 
 {#snippet results()}
   {#each projection?.items ?? [] as item, index (item.foodObjectId)}
-    <PrototypeFoodCard food={{ ...item, quantity: item.matchedQuantity }} language={$interfaceLanguage} {variant} rank={index + 1} />
+    <PrototypeFoodCard food={{ ...item, quantity: item.matchedQuantity }} language={$interfaceLanguage} variant={cardVariant} rank={index + 1} />
   {/each}
 {/snippet}
 
-<section data-results-prototype data-variant={variant} class="prototype-results mt-10 pb-36 text-dark-text-primary">
+<section data-results-prototype data-variant={variant} data-layout={cardVariant} class="prototype-results mt-10 pb-36 text-dark-text-primary">
   {#if selectedCard}
     {#if variant === "A"}
       <VariantA {selected} {results} {title} {subtitle} />
@@ -271,19 +283,19 @@
   </div>
 </section>
 
-<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${variant === "C" ? `${baseQuantity} ${selectedFood?.baseUnit ?? ""} · ${displayUnit === "serving" ? "ea" : displayUnit} · ${lastEditedField}` : `${quantity.value} ${quantity.unit}`} · ${$interfaceLanguage}`} />
+<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${cardVariant === "C" ? `${baseQuantity} ${selectedFood?.baseUnit ?? ""} · ${displayUnit === "serving" ? "ea" : displayUnit} · ${lastEditedField}` : `${quantity.value} ${quantity.unit}`} · ${$interfaceLanguage}`} />
 
 <style>
   .prototype-results { --prototype-font: "Lato", sans-serif; }
   .prototype-results[data-variant="B"] { --prototype-font: "Barlow Semi Condensed", sans-serif; }
-  .prototype-results[data-variant="C"] { --prototype-font: "Source Serif 4", serif; }
+  .prototype-results[data-layout="C"] { --prototype-font: "Source Serif 4", serif; }
   .prototype-results :global(.prototype-numbers) { font-family: var(--prototype-font); font-variant-numeric: lining-nums tabular-nums; }
   .prototype-results :global(.prototype-card) { display: grid; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 640px) {
     .prototype-results :global(.prototype-card) { grid-template-columns: 36% minmax(0, 1fr); align-items: center; }
     .prototype-results :global(.prototype-card img) { align-self: start; }
     .prototype-results[data-variant="B"] :global(.prototype-card) { grid-template-columns: 30% minmax(0, 1fr); border-radius: 6px; }
-    .prototype-results[data-variant="C"] :global(.prototype-card) { grid-template-columns: 38% minmax(0, 1fr); }
-    .prototype-results[data-variant="C"] :global([data-prototype-details]) { padding: 28px; }
+    .prototype-results[data-layout="C"] :global(.prototype-card) { grid-template-columns: 38% minmax(0, 1fr); }
+    .prototype-results[data-layout="C"] :global([data-prototype-details]) { padding: 28px; }
   }
 </style>
