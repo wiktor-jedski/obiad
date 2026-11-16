@@ -171,3 +171,13 @@ zero-nutrient and zero-calorie read-only behavior, and whole-ml validation.
 Underline refinement: browser checks confirmed solid text underlines with a 2 px
 offset and no bottom border, text and underline hover colors, and bold focus.
 The 320 px layout had no page overflow.
+
+Desktop-only C refinement: at 1024 px and wider, the details fill the card height.
+Food names use 30 px text near the top. The quantity, calorie, and similarity row
+uses 24 px text. Automatic space above the macro group places its divider and
+values near the bottom, with the existing 28 px padding. Macro values stay 18 px.
+The selected-food and substitute cards use the same desktop layout rules.
+
+Browser verification compared selected-food and substitute geometry at 320 px,
+390 px, and 768 px after font loading; these layouts were unchanged. The revised
+desktop layout was also checked visually at 1440 px.
