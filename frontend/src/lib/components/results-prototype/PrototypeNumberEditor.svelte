@@ -44,45 +44,48 @@
 {#if readonly}
   <span data-prototype-readonly={field}>{formatted}</span>
 {:else}
-  <input
-    data-prototype-editor={field}
-    aria-label={label}
-    aria-invalid={invalid || undefined}
-    aria-describedby={invalid ? "prototype-edit-error" : undefined}
-    type="text"
-    inputmode={precision === 0 ? "numeric" : "decimal"}
-    autocomplete="off"
-    spellcheck="false"
-    value={draft ?? formatted}
-    style:width={fixedSlot ? "100%" : `${Math.max(1, (draft ?? formatted).length) + 0.25}ch`}
-    onfocus={(event) => {
-      originalText = formatted;
-      draft = formatted;
-      invalid = false;
-      onerror("");
-      event.currentTarget.select();
-    }}
-    oninput={(event) => { draft = event.currentTarget.value; }}
-    onblur={() => {
-      commit();
-      draft = undefined;
-      invalid = false;
-    }}
-    onkeydown={(event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        draft = undefined;
+  <span class="group/editor relative inline-grid min-h-11 min-w-0 max-w-full items-center {fixedSlot ? 'w-full' : ''}">
+    <!-- Match the text width, including narrow decimal separators. -->
+    <span aria-hidden="true" class="invisible overflow-hidden whitespace-pre pr-[0.25ch] group-focus-within/editor:font-bold">{(draft ?? formatted) || "0"}</span>
+    <input
+      data-prototype-editor={field}
+      aria-label={label}
+      aria-invalid={invalid || undefined}
+      aria-describedby={invalid ? "prototype-edit-error" : undefined}
+      type="text"
+      inputmode={precision === 0 ? "numeric" : "decimal"}
+      autocomplete="off"
+      spellcheck="false"
+      value={draft ?? formatted}
+      onfocus={(event) => {
+        originalText = formatted;
+        draft = formatted;
         invalid = false;
         onerror("");
-        event.currentTarget.blur();
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        if (commit()) {
+        event.currentTarget.select();
+      }}
+      oninput={(event) => { draft = event.currentTarget.value; }}
+      onblur={() => {
+        commit();
+        draft = undefined;
+        invalid = false;
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
           draft = undefined;
+          invalid = false;
+          onerror("");
           event.currentTarget.blur();
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          if (commit()) {
+            draft = undefined;
+            event.currentTarget.blur();
+          }
         }
-      }
-    }}
-    class="min-h-11 min-w-0 max-w-full appearance-none rounded-none border-0 bg-transparent p-0 text-inherit underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none aria-invalid:decoration-dark-error {fixedSlot ? 'text-right' : ''}"
-  />
+      }}
+      class="absolute inset-0 size-full min-w-0 appearance-none rounded-none border-0 bg-transparent p-0 text-inherit underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none aria-invalid:decoration-dark-error {fixedSlot ? 'text-right' : ''}"
+    />
+  </span>
 {/if}

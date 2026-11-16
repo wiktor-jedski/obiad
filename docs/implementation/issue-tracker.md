@@ -219,3 +219,14 @@ unchanged calories, text-only hover, pointer focus without an outline, keyboard
 focus with an outline, and Tab/Space/Enter. Visual checks covered desktop hover,
 keyboard focus, and the settled mobile toggle. This revision remains on
 `prototype/results-candidates`; production behavior is unchanged.
+
+Numeric spacing correction: character-count sizing treated a decimal separator as
+a full digit, leaving excess space before the unit. All editable numbers now use
+an invisible text copy with the same font and focus weight to set their width.
+The small existing gap is preserved for whole numbers and decimals. D keeps its
+fixed-width, right-aligned quantity slot.
+
+Type checks passed. Browser checks at 1440 px and 320 px confirmed equal unit gaps
+for `2`, `2.5`, and `2.55`, including Polish decimal commas. All five editors were
+checked while focused and after commit, plus empty drafts, Escape, D's fixed
+position, and page overflow. Desktop and mobile visual checks passed.
