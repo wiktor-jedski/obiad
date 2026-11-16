@@ -116,9 +116,21 @@
     lastEditedField = field;
   }
 
-  function toggleUnit(): void {
-    chosenUnit = displayUnit === "serving" ? selectedFood!.baseUnit : "serving";
+  function chooseUnit(unit: QuantityUnit): void {
+    chosenUnit = unit;
     editorError = "";
+  }
+
+  function onUnitKeydown(event: KeyboardEvent, unit: QuantityUnit): void {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = event.key === "Home" ? selectedFood!.baseUnit
+      : event.key === "End" ? "serving"
+      : unit === "serving" ? selectedFood!.baseUnit : "serving";
+    chooseUnit(next);
+    (event.currentTarget as HTMLButtonElement).parentElement
+      ?.querySelector<HTMLButtonElement>(`[data-unit="${next}"]`)?.focus();
   }
 </script>
 
@@ -176,18 +188,33 @@
 {/snippet}
 
 {#snippet portionEditor()}
-  <div class="flex min-w-0 items-baseline gap-1">
+  <div class="flex min-w-0 items-center gap-1">
     {@render numberEditor("quantity", quantity.value)}
     {#if interaction.selected.allowedQuantities.length > 1}
-      <button
-        type="button"
+      <div
+        role="radiogroup"
+        aria-label={dictionary.unitLabel()}
         data-prototype-unit-toggle
-        aria-label={$interfaceLanguage === "pl"
-          ? `Zmień jednostkę na ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`
-          : `Switch unit to ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`}
-        onclick={toggleUnit}
-        class="min-h-11 shrink-0 border-0 bg-transparent p-0 underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none"
-      >{displayUnit === "serving" ? "ea" : displayUnit} <span aria-hidden="true">↔</span></button>
+        class="relative inline-flex shrink-0 items-center rounded-full border border-dark-secondary/40 bg-dark-background p-0.5"
+      >
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute top-0.5 left-0.5 size-8 rounded-full bg-dark-primary motion-safe:transition-transform motion-safe:duration-200 lg:size-9 {displayUnit === 'serving' ? 'translate-x-8 lg:translate-x-9' : ''}"
+        ></span>
+        {#each interaction.selected.allowedQuantities.toSorted((a, b) => Number(a.unit === "serving") - Number(b.unit === "serving")) as allowed (allowed.unit)}
+          <button
+            type="button"
+            role="radio"
+            data-unit={allowed.unit}
+            aria-label={allowed.unit === "serving" ? `ea (${dictionary.servingsLabel()})` : allowed.unit}
+            aria-checked={displayUnit === allowed.unit}
+            tabindex={displayUnit === allowed.unit ? 0 : -1}
+            onclick={() => chooseUnit(allowed.unit)}
+            onkeydown={(event) => onUnitKeydown(event, allowed.unit)}
+            class="relative z-10 flex size-8 items-center justify-center rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary lg:size-9 {displayUnit === allowed.unit ? 'text-dark-text-on-bright' : 'text-dark-text-muted hover:text-dark-text-primary'}"
+          >{allowed.unit === "serving" ? "ea" : allowed.unit}</button>
+        {/each}
+      </div>
     {:else}
       <span>{displayUnit}</span>
     {/if}

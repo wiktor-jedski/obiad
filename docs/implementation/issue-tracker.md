@@ -144,12 +144,13 @@ kcal, up to one decimal for macros, and up to two decimals for `ea`. Omit traili
 zeros. True zero-profile nutrients and zero-calorie values are read-only; small
 positive values can display as rounded zero and remain editable.
 
-The current unit is a text button with a swap symbol, not a dropdown. It switches
-between the supported base unit and `ea`, which is used in both languages.
-Switching preserves the amount. Focusing and leaving an unchanged value also
-preserves the unrounded amount. Editors and the unit button use a continuous text
-underline directly below the value. Hover changes both text and underline to sage;
-focus makes the value bold and mint-colored. No input boxes are shown.
+The unit control is a horizontal toggle with both labels visible: g/ml on the left
+and `ea` on the right. A mint circle moves behind the selected label. Foods without
+a serving definition show only their fixed unit. Switching preserves the amount.
+Focusing and leaving an unchanged value also preserves the unrounded amount.
+Numeric editors use a continuous text underline directly below the value. Hover
+changes text and underline to sage; focus makes the value bold and mint-colored.
+The numeric editors have no input boxes.
 
 Enter or blur applies a valid edit; Escape cancels. Invalid Enter retains focus
 and shows an error. Invalid blur restores the last value and shows an error below
@@ -181,3 +182,9 @@ The selected-food and substitute cards use the same desktop layout rules.
 Browser verification compared selected-food and substitute geometry at 320 px,
 390 px, and 768 px after font loading; these layouts were unchanged. The revised
 desktop layout was also checked visually at 1440 px.
+
+The circular unit toggle supports pointer selection, Left/Right arrows, Home, and
+End. Its arrow keys do not change the prototype variant. Type checks passed.
+Browser checks covered the active circle, visible unit labels, preserved calories,
+English and Polish, and desktop and 320 px layouts without page overflow.
+A real single-unit food had no toggle; a simulated liquid profile verified ml/ea.
