@@ -74,7 +74,7 @@ Bubble-tail styles use Tailwind `@apply` rules in `frontend/src/app.css`.
 
 Type: Improvement
 Status: ready-for-human
-Resolution: Prototype ready; design choice pending.
+Resolution: Variant C selected as the base; revised prototype ready for review.
 
 ### Question
 
@@ -103,8 +103,8 @@ The font samples load from Google Fonts and require network access.
 
 ### Comments
 
-No variant is approved. Keep production rendering unchanged. After selection,
-implement the approved design in production and retain this branch as the source.
+The user selected C as the base. Keep production rendering unchanged while the
+revised prototype is reviewed. Retain this branch as the primary source.
 The prototype is not a production implementation.
 
 Verification: Svelte type checks passed with no errors or warnings. Browser
@@ -113,3 +113,15 @@ square images, font loading, URL and keyboard switching, and editor arrow keys.
 A delayed real API request showed the centered spinner, fetched one page, and
 appended three results without removing earlier cards. A quantity change updated
 the selected card and all nine loaded substitutes.
+
+The revised C uses 28 px card corners on desktop and mobile. Centered section
+headers separate the selected food from its substitutes: `Wybrany produkt` and
+`Zamienniki` in Polish, `Selected food` and `Substitutes` in English. Remove the
+introductory text and per-card role labels. Keep food names and similarity values.
+Put quantity, unit, and calories on one row, such as `100 g | 173 kcal`, with
+Source Serif 4 at the same size and weight. Selected-food quantity stays editable.
+
+Revision verification: Svelte type checks passed with no errors or warnings.
+Browser checks covered desktop and 390 px and 320 px mobile widths. All cards had
+rounded corners and single-line, 16 px, regular-weight quantity and calorie rows.
+Polish section headings were centered. Serving edits updated the calorie value.

@@ -80,7 +80,7 @@
       aria-describedby={interaction.quantityInvalid ? "prototype-quantity-error" : undefined}
       oninput={(event) => interactionState.setQuantityText(event.currentTarget.value)}
       onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); interactionState.commitQuantity(); } }}
-      class="h-11 w-20 rounded border border-dark-secondary/50 bg-dark-background px-3 text-base focus-visible:outline-2 focus-visible:outline-dark-primary"
+      class="h-11 rounded border border-dark-secondary/50 bg-dark-background text-base focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'w-[7ch] px-1' : 'w-20 px-3'}"
     />
     <label class="sr-only" for="prototype-unit">{dictionary.unitLabel()}</label>
     <select
@@ -91,7 +91,7 @@
         const allowed = interaction.selected.allowedQuantities.find((item) => item.unit === event.currentTarget.value);
         if (allowed) interactionState.selectUnit(allowed.unit);
       }}
-      class="h-11 min-w-0 rounded border border-dark-secondary/50 bg-dark-background px-2 text-base focus-visible:outline-2 focus-visible:outline-dark-primary"
+      class="h-11 min-w-0 rounded border border-dark-secondary/50 bg-dark-background text-base focus-visible:outline-2 focus-visible:outline-dark-primary {variant === 'C' ? 'px-1' : 'px-2'}"
     >
       {#each interaction.selected.allowedQuantities as allowed (allowed.unit)}
         <option value={allowed.unit}>{allowed.unit === "serving" ? dictionary.servingsLabel() : allowed.unit}</option>
@@ -122,7 +122,7 @@
     {:else if variant === "B"}
       <VariantB {selected} {results} {title} {subtitle} />
     {:else}
-      <VariantC {selected} {results} {title} {subtitle} />
+      <VariantC {selected} {results} selectedHeading={dictionary.selectedFoodLabel()} substitutesHeading={$interfaceLanguage === "pl" ? "Zamienniki" : "Substitutes"} />
     {/if}
   {:else}
     <p role="status" class="text-center">{interaction.selected.names[$interfaceLanguage]} · {dictionary.loadingNutritionValues()}</p>
@@ -156,7 +156,7 @@
     .prototype-results :global(.prototype-card) { grid-template-columns: 36% minmax(0, 1fr); align-items: center; }
     .prototype-results :global(.prototype-card img) { align-self: start; }
     .prototype-results[data-variant="B"] :global(.prototype-card) { grid-template-columns: 30% minmax(0, 1fr); border-radius: 6px; }
-    .prototype-results[data-variant="C"] :global(.prototype-card) { grid-template-columns: 38% minmax(0, 1fr); border-radius: 0; }
+    .prototype-results[data-variant="C"] :global(.prototype-card) { grid-template-columns: 38% minmax(0, 1fr); }
     .prototype-results[data-variant="C"] :global([data-prototype-details]) { padding: 28px; }
   }
 </style>

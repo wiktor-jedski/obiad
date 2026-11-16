@@ -1,17 +1,19 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  let { selected, results, title, subtitle }: {
-    selected: Snippet; results: Snippet; title: string; subtitle: string;
+  let { selected, results, selectedHeading, substitutesHeading }: {
+    selected: Snippet; results: Snippet; selectedHeading: string; substitutesHeading: string;
   } = $props();
 </script>
 
 <div class="mx-auto max-w-[920px]">
-  <header class="mb-8 border-b border-dark-secondary/30 pb-6">
-    <p class="mb-2 text-sm text-dark-text-muted">{subtitle}</p>
-    <h2 class="font-['Source_Serif_4',serif] text-4xl leading-tight sm:text-5xl">{title}</h2>
-  </header>
-  <div class="grid gap-8">
+  <section aria-labelledby="prototype-selected-heading">
+    <h2 id="prototype-selected-heading" class="mb-5 text-center text-xl font-semibold">{selectedHeading}</h2>
     {@render selected()}
-    {@render results()}
-  </div>
+  </section>
+  <section aria-labelledby="prototype-substitutes-heading" class="mt-10">
+    <h2 id="prototype-substitutes-heading" class="mb-5 text-center text-xl font-semibold">{substitutesHeading}</h2>
+    <div class="grid gap-8">
+      {@render results()}
+    </div>
+  </section>
 </div>
