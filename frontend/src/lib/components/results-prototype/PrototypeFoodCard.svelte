@@ -5,18 +5,19 @@
   import { foodPlaceholderUrl, resolveFoodImage } from "../../assets";
   import { formatFoodQuantityValue, formatMacronutrientValue, getDictionary, type InterfaceLanguage } from "../../i18n";
 
-  let { food, language, variant, rank, editor }: {
+  let { food, language, variant, rank, editor, nutritionEditor }: {
     food: Omit<ProjectedSubstituteItem, "matchedQuantity" | "similarityPercent"> & { quantity: FoodQuantity; similarityPercent?: number };
     language: InterfaceLanguage;
     variant: string;
     rank?: number;
     editor?: Snippet;
+    nutritionEditor?: Snippet<["calories" | "protein" | "carbohydrate" | "fat", number]>;
   } = $props();
   const dictionary = $derived(getDictionary(language));
   const macros = $derived([
-    { label: dictionary.proteinLabel(), value: food.macronutrients.protein },
-    { label: dictionary.carbohydratesLabel(), value: food.macronutrients.carbohydrate },
-    { label: dictionary.fatLabel(), value: food.macronutrients.fat },
+    { field: "protein" as const, label: dictionary.proteinLabel(), value: food.macronutrients.protein },
+    { field: "carbohydrate" as const, label: dictionary.carbohydratesLabel(), value: food.macronutrients.carbohydrate },
+    { field: "fat" as const, label: dictionary.fatLabel(), value: food.macronutrients.fat },
   ]);
 </script>
 
@@ -47,7 +48,14 @@
       {/if}
       {#if variant === "C"}
         <span aria-hidden="true" class="text-dark-text-muted">|</span>
-        <span data-prototype-calories>{food.calories} kcal</span>
+        <span data-prototype-calories class="inline-flex items-baseline gap-1">
+          {#if nutritionEditor}
+            {@render nutritionEditor("calories", food.calories)}
+          {:else}
+            {food.calories}
+          {/if}
+          <span>kcal</span>
+        </span>
         {#if food.similarityPercent !== undefined}
           <span data-prototype-similarity aria-label={`${dictionary.similarityLabel()}: ${food.similarityPercent}%`} class="ml-auto pl-2 text-right">{food.similarityPercent}%</span>
         {/if}
@@ -60,7 +68,15 @@
       {#each macros as macro (macro.label)}
         <div class={variant === "B" ? "flex items-baseline justify-between gap-2" : "flex min-w-0 flex-col gap-1"}>
           <dt class="text-xs text-dark-text-muted">{macro.label}</dt>
-          <dd class={variant === "B" ? "text-xl leading-tight" : "text-lg leading-tight"}>{formatMacronutrientValue(macro.value, language)}</dd>
+          <dd class={variant === "B" ? "text-xl leading-tight" : "flex items-baseline gap-1 text-lg leading-tight"}>
+            {#if nutritionEditor}
+              {@render nutritionEditor(macro.field, macro.value)}<span>g</span>
+            {:else if variant === "C"}
+              {macro.value.toLocaleString(language, { useGrouping: false, maximumFractionDigits: 1 })} g
+            {:else}
+              {formatMacronutrientValue(macro.value, language)}
+            {/if}
+          </dd>
         </div>
       {/each}
     </dl>

@@ -2,7 +2,7 @@
   // Throwaway: three results designs on /?variant=A|B|C; retain the real search API.
   import { untrack } from "svelte";
   import type { SubstituteSearchResponse } from "../../../client/types.gen";
-  import { interactionState, type InteractionState, type EmptyInteractionState } from "../../interactionState";
+  import { interactionState, type InteractionState, type EmptyInteractionState, type QuantityUnit } from "../../interactionState";
   import { interfaceLanguage } from "../../interfaceLanguage";
   import { getDictionary } from "../../i18n";
   import { projectSubstitutePage } from "../../substituteProjection";
@@ -11,6 +11,9 @@
   import VariantA from "./VariantA.svelte";
   import VariantB from "./VariantB.svelte";
   import VariantC from "./VariantC.svelte";
+  import PrototypeNumberEditor from "./PrototypeNumberEditor.svelte";
+
+  type EditableField = "quantity" | "calories" | "protein" | "carbohydrate" | "fat";
 
   let { interaction, response, locked, onmore }: {
     interaction: Exclude<InteractionState, EmptyInteractionState>;
@@ -23,11 +26,26 @@
   let variant = $state(initialVariant === "B" || initialVariant === "C" ? initialVariant : "A");
   let pages = $state.raw<SubstituteSearchResponse[]>([]);
   let sentinel: HTMLDivElement | undefined = $state();
+  let enteredBaseQuantity: number | undefined = $state();
+  let chosenUnit: QuantityUnit | undefined = $state();
+  let editorError = $state("");
+  let lastEditedField = $state<EditableField>("quantity");
   const dictionary = $derived(getDictionary($interfaceLanguage));
   const selectedFood = $derived(pages[0]?.selectedFood);
   const latest = $derived(pages.at(-1));
-  const quantity = $derived({ value: interaction.committedValue, unit: interaction.committedUnit });
-  const projection = $derived(selectedFood ? projectSubstitutePage(selectedFood, pages.flatMap((page) => page.items), quantity) : undefined);
+  const baseQuantity = $derived(enteredBaseQuantity ?? interaction.committedValue *
+    (interaction.committedUnit === "serving" ? (selectedFood?.serving ?? 1) : 1));
+  const displayUnit = $derived(chosenUnit ?? interaction.committedUnit);
+  const quantity = $derived(variant === "C"
+    ? { value: displayUnit === "serving" ? baseQuantity / (selectedFood?.serving ?? 1) : baseQuantity, unit: displayUnit }
+    : { value: interaction.committedValue, unit: interaction.committedUnit });
+  const maximumBaseQuantity = $derived(Math.min(...interaction.selected.allowedQuantities.map((allowed) =>
+    allowed.maximumValue * (allowed.unit === "serving" ? (selectedFood?.serving ?? 1) : 1))));
+  const projection = $derived(selectedFood ? projectSubstitutePage(
+    selectedFood,
+    pages.flatMap((page) => page.items),
+    variant === "C" ? { value: baseQuantity, unit: selectedFood.baseUnit } : quantity,
+  ) : undefined);
   const selectedCard = $derived(selectedFood && projection ? {
     ...selectedFood,
     quantity,
@@ -60,6 +78,42 @@
     if (locked) return;
     const editor = event.currentTarget as HTMLElement;
     if (!(event.relatedTarget instanceof Node) || !editor.contains(event.relatedTarget)) interactionState.commitQuantity();
+  }
+
+  function fieldLabel(field: EditableField): string {
+    switch (field) {
+      case "quantity": return dictionary.quantityLabel();
+      case "calories": return dictionary.caloriesLabel();
+      case "protein": return dictionary.proteinLabel();
+      case "carbohydrate": return dictionary.carbohydratesLabel();
+      case "fat": return dictionary.fatLabel();
+    }
+  }
+
+  function fieldBasis(field: EditableField): number {
+    if (!selectedFood) return 0;
+    if (field === "quantity") return 100 / (displayUnit === "serving" ? selectedFood.serving! : 1);
+    const profile = selectedFood.macroProfile;
+    return field === "calories"
+      ? 4 * profile.protein + 4 * profile.carbohydrate + 9 * profile.fat
+      : profile[field];
+  }
+
+  function commitField(field: EditableField, value: number): string | undefined {
+    const nextBaseQuantity = value * 100 / fieldBasis(field);
+    if (!Number.isFinite(nextBaseQuantity) || nextBaseQuantity <= 0 || nextBaseQuantity > maximumBaseQuantity) {
+      const maximum = (maximumBaseQuantity * fieldBasis(field) / 100).toLocaleString($interfaceLanguage, { maximumFractionDigits: 2 });
+      return $interfaceLanguage === "pl"
+        ? `Wartość przekracza limit porcji. Maksimum dla tego pola: ${maximum}.`
+        : `The value exceeds the portion limit. Maximum for this field: ${maximum}.`;
+    }
+    enteredBaseQuantity = nextBaseQuantity;
+    lastEditedField = field;
+  }
+
+  function toggleUnit(): void {
+    chosenUnit = displayUnit === "serving" ? selectedFood!.baseUnit : "serving";
+    editorError = "";
   }
 </script>
 
@@ -103,9 +157,50 @@
   </div>
 {/snippet}
 
+{#snippet numberEditor(field: EditableField, value: number)}
+  <PrototypeNumberEditor
+    {field}
+    label={fieldLabel(field)}
+    {value}
+    precision={field === "quantity" ? (displayUnit === "serving" ? 2 : 0) : field === "calories" ? 0 : 1}
+    language={$interfaceLanguage}
+    readonly={fieldBasis(field) === 0}
+    oncommit={(next) => commitField(field, next)}
+    onerror={(message) => editorError = message}
+  />
+{/snippet}
+
+{#snippet portionEditor()}
+  <div class="flex min-w-0 items-baseline gap-1">
+    {@render numberEditor("quantity", quantity.value)}
+    {#if interaction.selected.allowedQuantities.length > 1}
+      <button
+        type="button"
+        data-prototype-unit-toggle
+        aria-label={$interfaceLanguage === "pl"
+          ? `Zmień jednostkę na ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`
+          : `Switch unit to ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`}
+        onclick={toggleUnit}
+        class="min-h-11 shrink-0 border-b border-dotted border-dark-text-muted bg-transparent p-0 hover:border-dark-secondary focus-visible:border-solid focus-visible:border-dark-primary focus-visible:outline-none"
+      >{displayUnit === "serving" ? "ea" : displayUnit} <span aria-hidden="true">↔</span></button>
+    {:else}
+      <span>{displayUnit}</span>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet selected()}
   {#if selectedCard}
-    <PrototypeFoodCard food={selectedCard} language={$interfaceLanguage} {variant} editor={quantityEditor} />
+    <PrototypeFoodCard
+      food={selectedCard}
+      language={$interfaceLanguage}
+      {variant}
+      editor={variant === "C" ? portionEditor : quantityEditor}
+      nutritionEditor={variant === "C" ? numberEditor : undefined}
+    />
+    {#if variant === "C" && editorError}
+      <p id="prototype-edit-error" role="status" class="mt-3 text-sm text-dark-error">{editorError}</p>
+    {/if}
   {/if}
 {/snippet}
 
@@ -144,7 +239,7 @@
   </div>
 </section>
 
-<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${quantity.value} ${quantity.unit} · ${$interfaceLanguage}`} />
+<PrototypeSwitcher {variant} onchange={(value) => variant = value} state={`${interaction.name} · ${projection?.items.length ?? 0}/${latest?.totalEligibleCount ?? "—"} results · page ${latest ? latest.pageIndex + 1 : 0} · ${variant === "C" ? `${baseQuantity} ${selectedFood?.baseUnit ?? ""} · ${displayUnit === "serving" ? "ea" : displayUnit} · ${lastEditedField}` : `${quantity.value} ${quantity.unit}`} · ${$interfaceLanguage}`} />
 
 <style>
   .prototype-results { --prototype-font: "Lato", sans-serif; }

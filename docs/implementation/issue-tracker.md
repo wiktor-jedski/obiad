@@ -132,3 +132,36 @@ label for assistive technology. All row values use the same font, color, regular
 weight, and larger 18 px size. The selected-food editor uses this size too.
 Type checks passed. Desktop and 320 px browser checks confirmed one-line rows,
 matching number styles, right-aligned percentages, and no page overflow.
+
+After the design interview, the user approved text-like editors in variant C.
+Only the selected food exposes editors for quantity, kcal, protein, carbohydrate,
+and fat. A target changes the portion, not the food profile. Substitutes remain
+equal-calorie matches with unchanged ranking and similarity percentages.
+
+The prototype stores the unrounded base quantity locally and reuses the existing
+nutrition projection. Display and manual-entry precision are whole g/ml, whole
+kcal, up to one decimal for macros, and up to two decimals for `ea`. Omit trailing
+zeros. True zero-profile nutrients and zero-calorie values are read-only; small
+positive values can display as rounded zero and remain editable.
+
+The current unit is a text button with a swap symbol, not a dropdown. It switches
+between the supported base unit and `ea`, which is used in both languages.
+Switching preserves the amount. Focusing and leaving an unchanged value also
+preserves the unrounded amount. Editors have a dotted underline at rest and a
+solid underline during editing, with no input boxes.
+
+Enter or blur applies a valid edit; Escape cancels. Invalid Enter retains focus
+and shows an error. Invalid blur restores the last value and shows an error below
+the selected card. Accept decimal dots or commas. Reject zero, negatives, excess
+precision, invalid notation, and portions above the advertised quantity limits.
+Use the strictest limit across the food's units so switching cannot exceed one.
+Do not clamp targets. Editing stays available during pagination; arriving cards
+use the latest committed portion.
+
+No backend or production behavior changed. Svelte type checks passed. Disposable
+browser scenarios covered all five editors, conversion, unchanged-focus precision,
+Enter/blur/Escape behavior, invalid values, both languages, and editing while a
+real next-page request was delayed. Desktop, 390 px, and 320 px checks confirmed
+Source Serif 4 at 18 px, text-like editors, and no page overflow. The preview
+catalog has no zero-profile or liquid entries; simulated API profiles verified
+zero-nutrient and zero-calorie read-only behavior, and whole-ml validation.
