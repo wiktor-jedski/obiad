@@ -147,8 +147,9 @@ positive values can display as rounded zero and remain editable.
 The current unit is a text button with a swap symbol, not a dropdown. It switches
 between the supported base unit and `ea`, which is used in both languages.
 Switching preserves the amount. Focusing and leaving an unchanged value also
-preserves the unrounded amount. Editors have a dotted underline at rest and a
-solid underline during editing, with no input boxes.
+preserves the unrounded amount. Editors and the unit button use a continuous text
+underline directly below the value. Hover changes both text and underline to sage;
+focus makes the value bold and mint-colored. No input boxes are shown.
 
 Enter or blur applies a valid edit; Escape cancels. Invalid Enter retains focus
 and shows an error. Invalid blur restores the last value and shows an error below
@@ -166,3 +167,7 @@ real next-page request was delayed. Desktop, 390 px, and 320 px checks confirmed
 Source Serif 4 at 18 px, text-like editors, and no page overflow. The preview
 catalog has no zero-profile or liquid entries; simulated API profiles verified
 zero-nutrient and zero-calorie read-only behavior, and whole-ml validation.
+
+Underline refinement: browser checks confirmed solid text underlines with a 2 px
+offset and no bottom border, text and underline hover colors, and bold focus.
+The 320 px layout had no page overflow.

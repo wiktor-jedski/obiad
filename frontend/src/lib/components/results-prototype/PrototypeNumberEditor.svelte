@@ -82,6 +82,6 @@
         }
       }
     }}
-    class="min-h-11 min-w-0 max-w-full appearance-none rounded-none border-0 border-b border-dotted border-dark-text-muted bg-transparent p-0 text-inherit hover:border-dark-secondary focus:border-solid focus:border-dark-primary focus:outline-none aria-invalid:border-dark-error"
+    class="min-h-11 min-w-0 max-w-full appearance-none rounded-none border-0 bg-transparent p-0 text-inherit underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none aria-invalid:decoration-dark-error"
   />
 {/if}

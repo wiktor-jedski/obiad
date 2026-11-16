@@ -186,7 +186,7 @@
           ? `Zmień jednostkę na ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`
           : `Switch unit to ${displayUnit === "serving" ? selectedFood!.baseUnit : "ea"}`}
         onclick={toggleUnit}
-        class="min-h-11 shrink-0 border-b border-dotted border-dark-text-muted bg-transparent p-0 hover:border-dark-secondary focus-visible:border-solid focus-visible:border-dark-primary focus-visible:outline-none"
+        class="min-h-11 shrink-0 border-0 bg-transparent p-0 underline decoration-solid decoration-dark-text-muted underline-offset-2 hover:text-dark-secondary hover:decoration-dark-secondary focus:font-bold focus:text-dark-primary focus:decoration-dark-primary focus:outline-none"
       >{displayUnit === "serving" ? "ea" : displayUnit} <span aria-hidden="true">↔</span></button>
     {:else}
       <span>{displayUnit}</span>
