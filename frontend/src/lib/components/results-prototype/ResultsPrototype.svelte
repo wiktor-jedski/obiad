@@ -218,6 +218,29 @@
   </div>
 {/snippet}
 
+{#snippet wholeUnitToggle()}
+  <button
+    type="button"
+    aria-label={dictionary.servingsLabel()}
+    aria-pressed={displayUnit === "serving"}
+    data-prototype-unit-toggle
+    onclick={() => chooseUnit(displayUnit === "serving" ? selectedFood!.baseUnit : "serving")}
+    class="group/unit relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-dark-secondary/40 bg-dark-background p-0.5 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-dark-primary"
+  >
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute top-0.5 left-0.5 size-8 rounded-full bg-dark-primary motion-safe:transition-transform motion-safe:duration-200 lg:size-9 {displayUnit === 'serving' ? 'translate-x-8 lg:translate-x-9' : ''}"
+    ></span>
+    {#each interaction.selected.allowedQuantities.toSorted((a, b) => Number(a.unit === "serving") - Number(b.unit === "serving")) as allowed (allowed.unit)}
+      <span
+        aria-hidden="true"
+        data-unit={allowed.unit}
+        class="relative z-10 flex size-8 items-center justify-center rounded-full lg:size-9 {displayUnit === allowed.unit ? 'text-dark-text-on-bright group-hover/unit:text-dark-surface' : 'text-dark-text-muted group-hover/unit:text-dark-secondary'}"
+      >{allowed.unit === "serving" ? "ea" : allowed.unit}</span>
+    {/each}
+  </button>
+{/snippet}
+
 {#snippet portionEditor()}
   <div class="flex min-w-0 items-center gap-1">
     {#if variant === "E" && interaction.selected.allowedQuantities.length > 1}
@@ -240,7 +263,7 @@
       variant={cardVariant}
       editor={cardVariant === "C" ? portionEditor : quantityEditor}
       nutritionEditor={cardVariant === "C" ? numberEditor : undefined}
-      titleControl={variant === "F" && interaction.selected.allowedQuantities.length > 1 ? unitToggle : undefined}
+      titleControl={variant === "F" && interaction.selected.allowedQuantities.length > 1 ? wholeUnitToggle : undefined}
     />
     {#if cardVariant === "C" && editorError}
       <p id="prototype-edit-error" role="status" class="mt-3 text-sm text-dark-error">{editorError}</p>

@@ -204,3 +204,18 @@ covered whole-control hover, equal-calorie substitutes after a protein edit,
 single-unit foods, keyboard and bar navigation, preserved state, and no row or
 page overflow. The placement choice remains open. This comparison is captured on
 `prototype/results-candidates`; no production or backend behavior changed.
+
+The user chose F's unit placement beside the food name. Its control is now one
+toggle button: clicking either label, the selected circle, or the pill padding
+switches units. Hover changes only the label text colors, not the track, circle,
+or border. Pointer activation retains focus without a visible focus indicator.
+Keyboard focus has a visible outline; Space and Enter switch units without
+removing focus. The button exposes serving mode through `aria-pressed`.
+C–E retain their earlier controls for comparison.
+
+Svelte type checks passed with no errors or warnings. Desktop mouse checks
+(1440 px) and emulated mobile touch checks (320 px) covered six activation points,
+unchanged calories, text-only hover, pointer focus without an outline, keyboard
+focus with an outline, and Tab/Space/Enter. Visual checks covered desktop hover,
+keyboard focus, and the settled mobile toggle. This revision remains on
+`prototype/results-candidates`; production behavior is unchanged.
