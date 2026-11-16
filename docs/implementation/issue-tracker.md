@@ -69,3 +69,47 @@ default quantities, and the original food image fallback.
 
 Bubble-tail styles use Tailwind `@apply` rules in `frontend/src/app.css`.
 `LandingDialogue.svelte` has no component-local stylesheet.
+
+## ISSUE-024: Choose the results-view design
+
+Type: Improvement
+Status: ready-for-human
+Resolution: Prototype ready; design choice pending.
+
+### Question
+
+Which layout and macro font should the results view use after a food search?
+Use the same card style for the selected food and substitutes. Put square images
+on the left on desktop and above the details on mobile. Replace MORE! with a
+centered loading spinner and append results when the user reaches the bottom.
+
+### Prototype
+
+Primary source branch: `prototype/results-candidates`.
+The prototype is under `frontend/src/lib/components/results-prototype/`.
+The existing `/` route uses it only in development with `?variant=A`, `B`, or `C`.
+The floating bar and left/right arrow keys change the variant. Arrow keys in
+editors keep their normal function. The bar shows the current search state,
+result count, page, quantity, and language.
+
+- A: two-column gallery with Lato nutrition values.
+- B: selected-food sidebar and ranked list with Barlow Semi Condensed.
+- C: full-width editorial cards with Source Serif 4.
+
+Run `python scripts/start.py --catalog data/catalogs/catalog.json`, then open
+`http://127.0.0.1:5173/?variant=A` and select a food from Search.
+The launcher uses a disposable database. Prototype pages stay in memory.
+The font samples load from Google Fonts and require network access.
+
+### Comments
+
+No variant is approved. Keep production rendering unchanged. After selection,
+implement the approved design in production and retain this branch as the source.
+The prototype is not a production implementation.
+
+Verification: Svelte type checks passed with no errors or warnings. Browser
+checks covered all three variants on desktop and mobile, including 320 px width,
+square images, font loading, URL and keyboard switching, and editor arrow keys.
+A delayed real API request showed the centered spinner, fetched one page, and
+appended three results without removing earlier cards. A quantity change updated
+the selected card and all nine loaded substitutes.

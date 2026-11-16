@@ -2,6 +2,8 @@
   import { tick } from "svelte";
   import ResultCard from "./ResultCard.svelte";
   import SelectedFoodSummary from "./SelectedFoodSummary.svelte";
+  import ResultsPrototype from "./results-prototype/ResultsPrototype.svelte";
+  const prototypeActive = import.meta.env.DEV && new URLSearchParams(window.location.search).has("variant");
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
   import { interactionState } from "../interactionState";
@@ -165,6 +167,18 @@
   }
 </script>
 
+{#if prototypeActive}
+  {#if interaction.name !== "empty"}
+    {#key interaction.selected}
+      <ResultsPrototype
+        {interaction}
+        response={substitutionSearch.isPlaceholderData ? undefined : substitutionSearch.data}
+        {locked}
+        onmore={onMoreClick}
+      />
+    {/key}
+  {/if}
+{:else}
 {#if interaction.name !== "empty"}
   <div data-selected-input-region class="mt-6 flex justify-center">
     <SelectedFoodSummary {interaction} {projection} />
@@ -247,4 +261,5 @@
       {dictionary.zeroResultsMessage()}
     </p>
   </div>
+{/if}
 {/if}
