@@ -804,10 +804,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Performance) |
-| Status | Deprecated |
+| Status | Active |
 | Verification | Browser performance check: Each of 20 searches meets the limit. |
 
-**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-100. The statement and verification above record the previous contract.
+**Notes:** Reconfirmed after the G cutover in ISSUE-024. Measure from search confirmation until the first substitute card is fully revealed, including image decode and the flip. Use 20 consecutive searches after warm-up with normal motion. The pagination spinner minimum interval does not change this first-page limit.
 
 ## REQ-076 — Autocomplete match order
 

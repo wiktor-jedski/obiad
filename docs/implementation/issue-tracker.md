@@ -325,3 +325,30 @@ paging. The pagination spinner stayed for 1036 ms before append. Narrow-screen
 macro labels fit in English and Polish. No visual spinner remains inside cards.
 The user requested pushing the branch and using automated CI for the full browser
 integration suite; that suite was not run locally for this cutover.
+
+### Performance-check correction
+
+The G cutover removed the first-card latency assertion and changed the test name
+without updating the dedicated runner's `Search performance` filter. This was not
+an approved removal of performance coverage.
+
+The user reconfirmed the one-second first-card target. REQ-075 is active again.
+Measure search confirmation to the first substitute card's completed reveal,
+including image decode and the 800 ms flip, with normal motion after warm-up.
+The performance test again matches the dedicated runner and logs each first-card,
+search HTTP, and next-page HTTP sample. All 20 samples of each kind must meet their
+limits: 1000 ms for first-card reveal and 500 ms for each HTTP request.
+
+The first restored performance run completed all 20 searches and 20 next-page
+requests. Four first-card samples exceeded the target (1090.5–1183.4 ms); all HTTP
+samples were below 49 ms. Readiness and maximum-frame-gap logs were added to
+separate image preparation from rendering delays. Neither limit nor the approved
+800 ms flip was changed.
+
+The instrumented `bun run test:performance` run passed: all 20 first-card samples
+were 858.3–882.4 ms, and all 40 HTTP samples were at most 16.5 ms. Card readiness
+was 55.1–76.2 ms; maximum frame gaps were at most 32.4 ms. Frontend validation
+also passed after corrections to the test's motion configuration and state type.
+The earlier overruns did not occur in this run; their cause remains unconfirmed.
+No production timing was changed, and the strict gate retains those failures as
+failures rather than retrying them or averaging samples.
