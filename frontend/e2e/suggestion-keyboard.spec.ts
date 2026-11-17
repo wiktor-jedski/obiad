@@ -232,8 +232,12 @@ test.describe("suggestion keyboard control", () => {
     );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
     await expect(page.locator("[data-selected-food-heading]")).toBeFocused();
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
 
     const committedSearchBox = await search.boundingBox();
+    const committedSelectedBox = await selectedInput(page).boundingBox();
     await search.fill("olive");
     const draftPanel = page.getByRole("listbox", {
       name: COPY.en.listbox,
@@ -253,6 +257,7 @@ test.describe("suggestion keyboard control", () => {
     const panelBox = await draftPanel.boundingBox();
     const selectedBox = await selectedInput(page).boundingBox();
     expect(draftSearchBox?.y).toBe(committedSearchBox?.y);
+    expect(selectedBox).toEqual(committedSelectedBox);
     expect(
       Math.abs(
         (panelBox?.y ?? 0) -

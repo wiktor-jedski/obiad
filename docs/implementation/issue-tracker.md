@@ -380,3 +380,17 @@ The outage-layout case retains all six language/viewport combinations; its
 120-second orchestration budget includes twelve page setups, required motion
 and spinner intervals, and infrastructure waits. Individual response and
 performance limits are unchanged.
+
+The next GitHub log archive showed one remaining E2E failure:
+`suggestion-keyboard.spec.ts` measured the selected card during its flip.
+The suggestion panel ended at 361 px, while the moving card started at
+363.45 px. The overlay check now waits for all four cards to finish their
+reveal before it measures layout. It also checks that opening suggestions
+does not move or resize the selected card. Existing overlap limits remain.
+The same CI archive showed that motion, outage, and performance checks passed;
+all 20 first-card performance samples were 843.2–896.4 ms against the unchanged
+1000 ms limit.
+
+Verification: frontend checks passed with no type errors or warnings.
+The affected keyboard-overlay scenario passed against a production build and
+the dummy database with `CI=1`, including the unchanged overlap assertion.
