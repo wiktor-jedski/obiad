@@ -75,6 +75,7 @@ async function expectResultStateComposition(page: Page): Promise<void> {
     "[data-selected-food-summary], [data-result-card]",
   );
   await expect(cards).toHaveCount(4);
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(4);
   const boxes = await cards.evaluateAll((elements) =>
     elements.map((element) => {
       const { x, y, width, height } = element.getBoundingClientRect();
@@ -191,6 +192,9 @@ test.describe("result state", () => {
     await selectPizzaMargherita(page);
 
     const selectedCard = page.locator("[data-selected-food-summary]");
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
     const selectedBox = (await selectedCard.boundingBox())!;
     const cardCenter = selectedBox.x + selectedBox.width / 2;
     expect(

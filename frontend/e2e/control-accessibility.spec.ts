@@ -273,17 +273,14 @@ async function selectPizzaAndWaitForResults(
   await waitForInteractionState(page, "results");
   await expect(page.locator("[data-result-card]")).toHaveCount(3);
 
-  await expect
-    .poll(async () =>
-      page
-        .locator("[data-result-card]")
-        .evaluateAll((elements) =>
-          elements.every(
-            (element) => getComputedStyle(element).opacity === "1",
-          ),
-        ),
-    )
-    .toBe(true);
+  await expect(
+    page
+      .locator("[data-selected-food-summary]")
+      .locator("xpath=ancestor::*[@data-card-reveal]"),
+  ).toHaveAttribute("data-card-reveal-state", "shown");
+  await expect(
+    page.locator('[data-card-reveal-state="shown"] [data-result-card]'),
+  ).toHaveCount(3);
 }
 
 interface SRGB {
@@ -757,64 +754,72 @@ async function stopOutagePostgresAndWait(): Promise<void> {
   );
 }
 
-test("after the outage, English and Polish search and page failures retain accessible retry controls", async ({
-  browser,
-}) => {
-  const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:4173",
-  });
-  const surfaces: { page: Page; language: "en" | "pl"; paging: boolean }[] = [];
-  try {
-    for (const language of ["en", "pl"] as const) {
-      for (const paging of [false, true]) {
-        const page = await context.newPage();
-        await useBrowserLanguages(page, [language]);
-        await page.goto("/");
-        const copy = COPY[language];
-        if (paging) await selectPizzaAndWaitForResults(page, copy);
-        else {
-          await page
-            .getByRole("combobox", { name: copy.search, exact: true })
-            .fill(copy.chickenQuery);
-          await expect(page.locator("#food-suggestion-option-5")).toBeVisible();
+test.describe("Control accessibility failure states", () => {
+  test("after the outage, English and Polish search and page failures retain accessible retry controls", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      baseURL: "http://127.0.0.1:4173",
+    });
+    const surfaces: { page: Page; language: "en" | "pl"; paging: boolean }[] =
+      [];
+    try {
+      for (const language of ["en", "pl"] as const) {
+        for (const paging of [false, true]) {
+          const page = await context.newPage();
+          await useBrowserLanguages(page, [language]);
+          await page.goto("/");
+          const copy = COPY[language];
+          if (paging) await selectPizzaAndWaitForResults(page, copy);
+          else {
+            await page
+              .getByRole("combobox", { name: copy.search, exact: true })
+              .fill(copy.chickenQuery);
+            await expect(
+              page.locator("#food-suggestion-option-5"),
+            ).toBeVisible();
+          }
+          surfaces.push({ page, language, paging });
         }
-        surfaces.push({ page, language, paging });
       }
+      await stopOutagePostgresAndWait();
+      for (const { page, language, paging } of surfaces) {
+        const copy = COPY[language];
+        if (paging)
+          await page
+            .locator("[data-pagination-sentinel]")
+            .scrollIntoViewIfNeeded();
+        else await page.locator("#food-suggestion-option-5").click();
+        await waitForInteractionState(
+          page,
+          paging ? "moreFailure" : "newSearchFailure",
+        );
+        const retry = page.getByRole("button", {
+          name: copy.retry,
+          exact: true,
+        });
+        await expect(retry).toBeEnabled();
+        await expect(page.locator("[data-result-card]")).toHaveCount(
+          paging ? 3 : 0,
+        );
+        await expectWcagAAndAaClean(page, `${language} failure`);
+        await expectContrastTargets(page, [
+          {
+            selector: "[data-retry-message]",
+            kind: "text",
+            minimum: 4.5,
+            where: "Retry message",
+          },
+        ]);
+        await focusWithTab(page, retry);
+        await expect(retry).toBeFocused();
+        if (paging)
+          await expect(
+            page.locator("[data-nutrition-editor=quantity]"),
+          ).toBeEnabled();
+      }
+    } finally {
+      await context.close();
     }
-    await stopOutagePostgresAndWait();
-    for (const { page, language, paging } of surfaces) {
-      const copy = COPY[language];
-      if (paging)
-        await page
-          .locator("[data-pagination-sentinel]")
-          .scrollIntoViewIfNeeded();
-      else await page.locator("#food-suggestion-option-5").click();
-      await waitForInteractionState(
-        page,
-        paging ? "moreFailure" : "newSearchFailure",
-      );
-      const retry = page.getByRole("button", { name: copy.retry, exact: true });
-      await expect(retry).toBeEnabled();
-      await expect(page.locator("[data-result-card]")).toHaveCount(
-        paging ? 3 : 0,
-      );
-      await expectWcagAAndAaClean(page, `${language} failure`);
-      await expectContrastTargets(page, [
-        {
-          selector: "[data-retry-message]",
-          kind: "text",
-          minimum: 4.5,
-          where: "Retry message",
-        },
-      ]);
-      await focusWithTab(page, retry);
-      await expect(retry).toBeFocused();
-      if (paging)
-        await expect(
-          page.locator("[data-nutrition-editor=quantity]"),
-        ).toBeEnabled();
-    }
-  } finally {
-    await context.close();
-  }
+  });
 });

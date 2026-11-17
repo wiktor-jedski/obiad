@@ -192,6 +192,7 @@ async function prepareSuccessfulIntermediatePage(
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
   await selectPizzaMargherita(page, copy);
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(4);
   const sentinel = page.locator("[data-pagination-sentinel]");
   await expect(sentinel).toBeAttached();
   await sentinel.scrollIntoViewIfNeeded();
@@ -200,6 +201,11 @@ async function prepareSuccessfulIntermediatePage(
     .toEqual([...PIZZA_PAGE_0_IDS, ...PIZZA_PAGE_1_IDS]);
   await expect(sentinel).toBeAttached();
   await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "results",
+  );
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(7);
 }
 
 async function prepareSecondSuggestion(
@@ -304,7 +310,6 @@ async function runPrimaryFlow(
     .poll(async () => renderedCardIDs(page))
     .toEqual([...PIZZA_PAGE_0_IDS, ...PIZZA_PAGE_1_IDS]);
 
-  await page.waitForTimeout(800);
   await expectCardColumns(page, vp);
   await expectNoHorizontalOverflow(page, `${vp.name} completed later-page`);
 
@@ -341,6 +346,9 @@ test.describe("Responsive presentation failure surfaces", () => {
   test("after the outage, each retained new-Search and pagination failure surface fits at 320x568, 768x1024, and 1280x720 without page-level horizontal overflow in English and Polish (P17-G4, REQ-063)", async ({
     browser,
   }) => {
+    // Twelve pages include mandated flips and spinner waits.
+    // Docker stop and outage health checks also have 30 s budgets.
+    test.setTimeout(120_000);
     const prepared: PreparedPage[] = [];
 
     for (const vp of VIEWPORTS) {

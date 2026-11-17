@@ -195,7 +195,8 @@ test.describe("Result focus and accessibility", () => {
       "loadingNew",
     );
     await expect(searchInput).toBeFocused();
-    await expect(heading).toHaveCount(0);
+    await expect(heading).toHaveText(COPY.en.selectedFood);
+    await expect(heading).not.toBeFocused();
 
     releaseNewSearchGate();
     await expect(page.locator("main")).toHaveAttribute(
@@ -309,7 +310,8 @@ test.describe("Result focus and accessibility", () => {
       "loadingNew",
     );
     await expect(searchInput).toBeFocused();
-    await expect(heading).toHaveCount(0);
+    await expect(heading).toHaveText(COPY.pl.selectedFood);
+    await expect(heading).not.toBeFocused();
 
     releaseNewSearchGate();
     await expect(page.locator("main")).toHaveAttribute(

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { isLandingDialogueRequest } from "./request-purpose";
+import { isActionRequest, isLandingDialogueRequest } from "./request-purpose";
 import { expect, test, type Page } from "@playwright/test";
 import type {
   Error as ApiError,
@@ -344,7 +344,7 @@ async function expectNewSearchFailureLanguageChange(
   await control.selectOption("pl");
   expect(
     ledger.slice(ledgerBeforeChange),
-    "the language action in newSearchFailure starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+    "the language action in newSearchFailure starts no suggestion GET, Substitute POST, retry, or other application request",
   ).toEqual([]);
   expect(posts).toHaveLength(2);
 
@@ -381,7 +381,7 @@ async function expectMoreFailureLanguageChange(
   await control.selectOption("pl");
   expect(
     ledger.slice(ledgerBeforeChange),
-    "the language action in moreFailure starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+    "the language action in moreFailure starts no suggestion GET, Substitute POST, retry, or other application request",
   ).toEqual([]);
   expect(posts).toHaveLength(4);
 
@@ -439,7 +439,7 @@ test.describe("Substitution request failures", () => {
 
     const englishLedger: string[] = [];
     englishPage.on("request", (request) => {
-      if (!isLandingDialogueRequest(request)) {
+      if (isActionRequest(request)) {
         englishLedger.push(request.url());
       }
     });
@@ -452,7 +452,7 @@ test.describe("Substitution request failures", () => {
     const polishMorePosts = trackSubstitutePosts(polishMorePage);
     const englishMoreLedger: string[] = [];
     englishMorePage.on("request", (request) => {
-      if (!isLandingDialogueRequest(request)) {
+      if (isActionRequest(request)) {
         englishMoreLedger.push(request.url());
       }
     });

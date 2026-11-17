@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { isLandingDialogueRequest } from "./request-purpose";
+import { isActionRequest, isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -102,7 +102,7 @@ function trackRequests(page: Page, ledger: string[]): string[] {
   const allUrls: string[] = [];
   page.on("request", (request) => {
     allUrls.push(request.url());
-    if (!isLandingDialogueRequest(request)) {
+    if (isActionRequest(request)) {
       ledger.push(request.url());
     }
   });
@@ -294,7 +294,7 @@ async function expectPage2Surface(
 }
 
 test.describe("Active Interface Language change", () => {
-  test("a real language selection closes the live suggestion list, removes Search focus and any Search text selection, retains the exact unfinished Search Query, starts no HTTP request, and the next Search focus starts exactly one fresh suggestion GET in the selected language (P14-G3, P14-G5, REQ-013, REQ-059)", async ({
+  test("a real language selection closes the live suggestion list, removes Search focus and any Search text selection, retains the exact unfinished Search Query, starts no application request, and the next Search focus starts exactly one fresh suggestion GET in the selected language (P14-G3, P14-G5, REQ-013, REQ-059)", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -332,7 +332,7 @@ test.describe("Active Interface Language change", () => {
     await englishControl.selectOption("pl");
     expect(
       ledger.slice(ledgerBeforeLanguageChange),
-      "the language action starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+      "the language action starts no suggestion GET, Substitute POST, retry, or other application request",
     ).toEqual([]);
 
     await expectSearchSideLanguageChange(
@@ -364,7 +364,7 @@ test.describe("Active Interface Language change", () => {
     await polishControl.selectOption("en");
     expect(
       ledger.slice(ledgerBeforeSecondChange),
-      "the repeated language action starts no HTTP request",
+      "the repeated language action starts no application request",
     ).toEqual([]);
     await expectSearchSideLanguageChange(
       page,
@@ -407,7 +407,7 @@ test.describe("Active Interface Language change", () => {
     expect(substitutePosts(ledger)).toEqual([]);
   });
 
-  test("a real language selection on displayed page 2 keeps the page index and exact ordered result IDs while every Food Object name, interface label, accessible name, localized value, and current non-result announcement source changes in place; the language action starts no HTTP request; and invalid then valid quantity text crosses the change with no request (P14-G2, P14-G4, P14-G5, REQ-026, REQ-055, REQ-058)", async ({
+  test("a real language selection on displayed page 2 keeps the page index and exact ordered result IDs while every Food Object name, interface label, accessible name, localized value, and current non-result announcement source changes in place; the language action starts no application request; and invalid then valid quantity text crosses the change with no request (P14-G2, P14-G4, P14-G5, REQ-026, REQ-055, REQ-058)", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -484,7 +484,7 @@ test.describe("Active Interface Language change", () => {
     await englishControl.selectOption("pl");
     expect(
       ledger.slice(ledgerBeforeLanguageChange),
-      "the language action starts no suggestion GET, Substitute POST, retry, or other HTTP request",
+      "the language action starts no suggestion GET, Substitute POST, retry, or other application request",
     ).toEqual([]);
     await expectStored(page, "pl");
 
@@ -561,7 +561,7 @@ test.describe("Active Interface Language change", () => {
     await polishControl.selectOption("en");
     expect(
       ledger.slice(ledgerBeforeSecondChange),
-      "the repeated language action starts no HTTP request",
+      "the repeated language action starts no application request",
     ).toEqual([]);
     await expectStored(page, "en");
 

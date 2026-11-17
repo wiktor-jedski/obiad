@@ -82,7 +82,6 @@
         edited = false;
         draft = formatted;
         invalid = false;
-        onerror(undefined);
         event.currentTarget.select();
       }}
       oninput={(event) => {

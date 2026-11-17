@@ -25,6 +25,11 @@ test("search requests lock selection, but pending pagination permits local edits
   await search.press("Enter");
   expect(requests).toHaveLength(1);
   initialGate.resolve();
+  await expect(
+    page
+      .locator("[data-selected-food-summary]")
+      .locator("xpath=ancestor::*[@data-card-reveal]"),
+  ).toHaveAttribute("data-card-reveal-state", "shown");
   const quantity = page.locator("[data-nutrition-editor=quantity]");
   await expect(quantity).toHaveValue("1");
   await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
@@ -32,7 +37,9 @@ test("search requests lock selection, but pending pagination permits local edits
   await expect(page.locator("[data-pagination-spinner]")).toBeVisible();
   await expect(page.locator("[data-result-card]")).toHaveCount(3);
   await quantity.fill("2");
+  await expect(quantity).toBeFocused();
   await quantity.press("Enter");
+  await expect(quantity).toHaveValue("2");
   await expect(page.locator("[data-nutrition-editor=calories]")).toHaveValue(
     "1750",
   );

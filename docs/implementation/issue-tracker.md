@@ -352,3 +352,31 @@ also passed after corrections to the test's motion configuration and state type.
 The earlier overruns did not occur in this run; their cause remains unconfirmed.
 No production timing was changed, and the strict gate retains those failures as
 failures rather than retrying them or averaging samples.
+
+### CI E2E correction
+
+CI run 44088814703 failed in the browser and performance jobs. The user authorized
+local E2E diagnosis when authenticated GitHub logs were unavailable.
+
+The local run found missing motion and accessibility-outage suite names, checks
+against unrevealed card fronts, loading-heading assumptions, geometry sampled
+during the flip, and font-subset downloads counted as application requests.
+Action request ledgers now distinguish browser font loads from application work;
+the checks still reject unexpected search requests and automatic retries.
+
+The numeric editor also had a production defect: focus on the next field cleared
+the previous field's blur-validation message. Focus no longer clears that error.
+The E2E cases cover retained messages across untouched fields.
+
+Playwright now emits GitHub annotations in CI in addition to the console report.
+The separate local performance run passed all 20 first-card samples at
+851.2–893.3 ms and all 40 HTTP samples at no more than 15.2 ms. This does not
+explain the remote performance failure; no budget or animation was changed.
+
+Final verification: `scripts/ci_check.py --frontend` passed with no type errors
+or warnings. `CI=1 bun run test:e2e` passed all 80 cases: 71 normal-flow cases,
+6 motion cases, and one case in each of the three isolated outage suites.
+The outage-layout case retains all six language/viewport combinations; its
+120-second orchestration budget includes twelve page setups, required motion
+and spinner intervals, and infrastructure waits. Individual response and
+performance limits are unchanged.

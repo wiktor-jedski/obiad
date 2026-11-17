@@ -26,6 +26,11 @@ for (const language of ["en", "pl"] as const) {
       .getByRole("combobox", { name: /^(Search|Szukaj)$/ })
       .fill("margherita");
     await page.locator("#food-suggestion-option-1").click();
+    await expect(
+      page
+        .locator("[data-selected-food-summary]")
+        .locator("xpath=ancestor::*[@data-card-reveal]"),
+    ).toHaveAttribute("data-card-reveal-state", "shown");
     const quantity = page.locator("[data-nutrition-editor=quantity]");
     const calories = page.locator("[data-nutrition-editor=calories]");
     const protein = page.locator("[data-nutrition-editor=protein]");
@@ -87,10 +92,26 @@ for (const language of ["en", "pl"] as const) {
       await quantity.press("Escape");
       await expect(quantity).toHaveValue("350");
     }
-    await quantity.fill("bad");
-    await quantity.press("Tab");
-    await expect(quantity).toHaveValue("350");
-    await expect(page.locator("#nutrition-edit-error")).not.toHaveText("");
+    for (const submitBeforeBlur of [false, true]) {
+      await quantity.fill("bad");
+      if (submitBeforeBlur) {
+        await quantity.press("Enter");
+        await expect(quantity).toBeFocused();
+        await expect(quantity).toHaveValue("bad");
+        await expect(quantity).toHaveAttribute("aria-invalid", "true");
+      }
+      await quantity.press("Tab");
+      await expect(quantity).toHaveValue("350");
+      await expect(calories).toBeFocused();
+      await expect(page.locator("#nutrition-edit-error")).toContainText(
+        language === "en" ? "Quantity" : "Ilość",
+      );
+      await calories.press("Tab");
+      await expect(protein).toBeFocused();
+      await expect(page.locator("#nutrition-edit-error")).toContainText(
+        language === "en" ? "Quantity" : "Ilość",
+      );
+    }
     await protein.fill("1.23");
     await protein.press("Enter");
     await expect(protein).toHaveAttribute("aria-invalid", "true");
@@ -142,6 +163,11 @@ test("single-unit foods expose fixed units and true zero nutrients are read-only
       .getByRole("combobox", { name: "Search", exact: true })
       .fill(query);
     await page.locator(`#food-suggestion-option-${id}`).click();
+    await expect(
+      page
+        .locator("[data-selected-food-summary]")
+        .locator("xpath=ancestor::*[@data-card-reveal]"),
+    ).toHaveAttribute("data-card-reveal-state", "shown");
     await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
       "100",
     );
