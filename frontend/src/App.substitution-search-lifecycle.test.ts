@@ -59,6 +59,21 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
+async function editQuantity(value: string): Promise<void> {
+  const input = document.querySelector<HTMLInputElement>(
+    "[data-nutrition-editor=quantity]",
+  );
+  if (!input) throw new Error("Quantity input is missing");
+  await fireEvent.input(input, { target: { value } });
+  await fireEvent.keyDown(input, { key: "Enter" });
+}
+
+function calories(): string | undefined {
+  return document.querySelector<HTMLInputElement>(
+    "[data-nutrition-editor=calories]",
+  )?.value;
+}
+
 describe("the Substitution Search lifecycle", () => {
   beforeEach(() => {
     interfaceLanguage.set("en");
@@ -182,8 +197,7 @@ describe("the Substitution Search lifecycle", () => {
         '[data-result-card][data-food-object-id="21"]',
       );
       expect(firstCard).not.toBeNull();
-      interactionState.setQuantityText("200");
-      interactionState.commitQuantity();
+      await editQuantity("200");
       await tick();
       expect(postUrls, "the local commit remains request-free").toHaveLength(1);
 
@@ -250,13 +264,13 @@ describe("the Substitution Search lifecycle", () => {
       const view = render(App);
       await settle();
 
-      const quantity = view.container.querySelector("[data-quantity-number]");
-      const unit = view.container.querySelector("[data-quantity-unit]");
-      const editor = view.container.querySelector("[data-quantity-editor]");
+      const quantity = view.container.querySelector(
+        "[data-nutrition-editor=quantity]",
+      );
+      const unit = view.container.querySelector("[data-unit-toggle]");
       if (
         !(quantity instanceof HTMLInputElement) ||
-        !(unit instanceof HTMLSelectElement) ||
-        !(editor instanceof HTMLElement)
+        !(unit instanceof HTMLButtonElement)
       ) {
         throw new TypeError("Quantity editor controls must be present");
       }
@@ -267,22 +281,16 @@ describe("the Substitution Search lifecycle", () => {
       await fireEvent.input(quantity, { target: { value: "200" } });
       await fireEvent.keyDown(quantity, { key: "Enter" });
       await tick();
-      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
-        "313 kcal",
-      );
+      expect(calories()).toBe("313");
 
-      await fireEvent.change(unit, { target: { value: "serving" } });
+      await fireEvent.click(unit);
       await tick();
-      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
-        "547 kcal",
-      );
+      expect(calories()).toBe("313");
 
       await fireEvent.input(quantity, { target: { value: "1.5" } });
-      await fireEvent.focusOut(editor, { relatedTarget: document.body });
+      await fireEvent.blur(quantity);
       await tick();
-      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
-        "821 kcal",
-      );
+      expect(calories()).toBe("821");
       expect(postUrls, "local commits start no additional POST").toHaveLength(
         1,
       );
@@ -380,11 +388,10 @@ describe("the Substitution Search lifecycle", () => {
       expect(pageOneCard).not.toBeNull();
       expect(
         pageRequestCount,
-        "MORE! starts a later-page request",
+        "Pagination starts a later-page request",
       ).toBeGreaterThan(1);
 
-      interactionState.setQuantityText("200");
-      interactionState.commitQuantity();
+      await editQuantity("200");
       await tick();
 
       expect(
@@ -403,9 +410,7 @@ describe("the Substitution Search lifecycle", () => {
           '[data-result-card][data-food-object-id="21"]',
         ),
       ).toBe(pageOneCard);
-      expect(document.querySelector("[data-input-calories]")?.textContent).toBe(
-        "313 kcal",
-      );
+      expect(calories()).toBe("313");
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
       ).toBe("results");
@@ -555,8 +560,8 @@ describe("the Substitution Search lifecycle", () => {
       ).toBe("results");
       expect(document.querySelectorAll("[data-result-card]")).toHaveLength(1);
       expect(
-        document.querySelector("[data-selected-input]")?.textContent,
-      ).toContain("Food 6 · 100 g");
+        document.querySelector("[data-selected-food-summary]")?.textContent,
+      ).toContain("Food 6");
       await fireEvent.keyDown(search, { key: "Enter" });
       await settle();
 

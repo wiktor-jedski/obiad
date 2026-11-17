@@ -93,59 +93,56 @@ async function expectCardColumns(
   page: Page,
   vp: (typeof VIEWPORTS)[number],
 ): Promise<void> {
-  const expectedColumns = vp.width >= 1024 ? 3 : 1;
-  const grid = page.locator("[data-result-grid]");
-  const tracks = await grid.evaluate((element) =>
-    getComputedStyle(element)
-      .gridTemplateColumns.split(" ")
-      .map((value) => parseFloat(value)),
+  const cards = page.locator(
+    "[data-selected-food-summary], [data-result-card]",
   );
-  expect(tracks, `${vp.name}: column count`).toHaveLength(expectedColumns);
-  if (expectedColumns === 3) {
-    expect(
-      Math.abs(tracks[0] - tracks[1]),
-      "equal column widths",
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(tracks[1] - tracks[2]),
-      "equal column widths",
-    ).toBeLessThanOrEqual(1);
-  }
-
-  const slots = await page
-    .locator("[data-result-card-slot]")
-    .evaluateAll((elements) =>
-      elements.map((element) => {
-        const box = element.getBoundingClientRect();
-        return { x: box.x, y: box.y, width: box.width };
-      }),
-    );
-  expect(slots, `${vp.name}: ranked card slots`).toHaveLength(3);
-  if (expectedColumns === 1) {
-    for (const slot of slots) {
+  await expect(page.locator('[data-card-reveal-state="waiting"]')).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator('[data-card-reveal-state="revealing"]'),
+  ).toHaveCount(0);
+  const boxes = await cards.evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      const image = element
+        .querySelector("[data-result-card-image]")
+        ?.getBoundingClientRect();
+      const content = element
+        .querySelector("[data-card-content]")
+        ?.getBoundingClientRect();
+      return {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        radius: getComputedStyle(element).borderRadius,
+        image: image && {
+          x: image.x,
+          y: image.y,
+          width: image.width,
+          height: image.height,
+        },
+        content: content && { x: content.x, y: content.y },
+      };
+    }),
+  );
+  expect(boxes.length).toBeGreaterThanOrEqual(4);
+  for (const [index, box] of boxes.entries()) {
+    expect(box.width).toBeLessThanOrEqual(920);
+    expect(Math.abs(box.x - boxes[0]!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.width - boxes[0]!.width)).toBeLessThanOrEqual(1);
+    expect(box.radius).toBe("28px");
+    if (index > 0) expect(box.y).toBeGreaterThan(boxes[index - 1]!.y);
+    expect(box.image).toBeDefined();
+    expect(box.content).toBeDefined();
+    if (vp.width < 640) {
       expect(
-        Math.abs(slot.x - slots[0].x),
-        `${vp.name}: one shared column`,
+        Math.abs(box.image!.width - box.image!.height),
       ).toBeLessThanOrEqual(1);
-    }
-    expect(slots[0].y, "rank 0 above rank 1").toBeLessThan(slots[1].y);
-    expect(slots[1].y, "rank 1 above rank 2").toBeLessThan(slots[2].y);
-  } else {
-    expect(
-      Math.abs(slots[0].y - slots[1].y),
-      `${vp.name}: shared row`,
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(slots[1].y - slots[2].y),
-      `${vp.name}: shared row`,
-    ).toBeLessThanOrEqual(1);
-    expect(slots[0].x, "rank 0 left of rank 1").toBeLessThan(slots[1].x);
-    expect(slots[1].x, "rank 1 left of rank 2").toBeLessThan(slots[2].x);
-    for (const slot of slots) {
-      expect(
-        Math.abs(slot.width - tracks[0]),
-        `${vp.name}: slot equals one column track`,
-      ).toBeLessThanOrEqual(1);
+      expect(box.content!.y).toBeGreaterThan(box.image!.y);
+    } else {
+      expect(box.content!.x).toBeGreaterThan(box.image!.x);
+      expect(Math.abs(box.image!.width / box.width - 0.38)).toBeLessThan(0.02);
     }
   }
 }
@@ -195,14 +192,20 @@ async function prepareSuccessfulIntermediatePage(
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
   await selectPizzaMargherita(page, copy);
-  const moreButton = page.locator("[data-more-button]");
-  await expect(moreButton).toBeVisible();
-  await moreButton.click();
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(4);
+  const sentinel = page.locator("[data-pagination-sentinel]");
+  await expect(sentinel).toBeAttached();
+  await sentinel.scrollIntoViewIfNeeded();
   await expect
     .poll(async () => renderedCardIDs(page))
-    .toEqual([...PIZZA_PAGE_1_IDS]);
-  await expect(moreButton).toBeVisible();
-  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+    .toEqual([...PIZZA_PAGE_0_IDS, ...PIZZA_PAGE_1_IDS]);
+  await expect(sentinel).toBeAttached();
+  await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-interaction-state",
+    "results",
+  );
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(7);
 }
 
 async function prepareSecondSuggestion(
@@ -281,10 +284,10 @@ async function runPrimaryFlow(
   await expectCardColumns(page, vp);
   await expectNoHorizontalOverflow(page, `${vp.name} completed result`);
 
-  const number = page.locator("[data-quantity-number]");
+  const number = page.locator("[data-nutrition-editor=quantity]");
   await number.fill("abc");
   await number.press("Enter");
-  await expect(page.locator("[data-quantity-error]")).toBeVisible();
+  await expect(number).toHaveAttribute("aria-invalid", "true");
   await expectNoHorizontalOverflow(page, `${vp.name} invalid-quantity`);
 
   await number.fill("200");
@@ -296,18 +299,17 @@ async function runPrimaryFlow(
     `${vp.name} local quantity projection`,
   );
 
-  const moreButton = page.locator("[data-more-button]");
-  await moreButton.click();
+  const sentinel = page.locator("[data-pagination-sentinel]");
+  await sentinel.scrollIntoViewIfNeeded();
   await expect(main).toHaveAttribute("data-interaction-state", "loadingMore");
-  await expect(moreButton).toHaveAttribute("aria-disabled", "true");
-  await expectNoHorizontalOverflow(page, `${vp.name} pending-MORE!`);
+  await expect(page.locator("[data-pagination-spinner]")).toBeVisible();
+  await expectNoHorizontalOverflow(page, `${vp.name} pending-pagination`);
   posts.release(2);
   await expect(main).toHaveAttribute("data-interaction-state", "results");
   await expect
     .poll(async () => renderedCardIDs(page))
-    .toEqual([...PIZZA_PAGE_1_IDS]);
+    .toEqual([...PIZZA_PAGE_0_IDS, ...PIZZA_PAGE_1_IDS]);
 
-  await page.waitForTimeout(800);
   await expectCardColumns(page, vp);
   await expectNoHorizontalOverflow(page, `${vp.name} completed later-page`);
 
@@ -331,7 +333,7 @@ async function runPrimaryFlow(
 
 test.describe("Responsive accessible presentation", () => {
   for (const vp of VIEWPORTS) {
-    test(`the primary flow fits at ${vp.name} with ${vp.width >= 1024 ? "three equal" : "one"} ranked card column and no page-level horizontal overflow across every surface (P17-G2, P17-G3, P17-G4, REQ-062, REQ-063, REQ-073)`, async ({
+    test(`the primary flow fits at ${vp.name} with one shared card column and no page-level horizontal overflow across every surface (P17-G2, P17-G3, P17-G4, REQ-062, REQ-063, REQ-073)`, async ({
       page,
     }, testInfo) => {
       await useBrowserLanguages(page, ["en-US"]);
@@ -341,9 +343,12 @@ test.describe("Responsive accessible presentation", () => {
 });
 
 test.describe("Responsive presentation failure surfaces", () => {
-  test("after the outage, each retained new-Search and MORE! failure surface fits at 320x568, 768x1024, and 1280x720 without page-level horizontal overflow in English and Polish (P17-G4, REQ-063)", async ({
+  test("after the outage, each retained new-Search and pagination failure surface fits at 320x568, 768x1024, and 1280x720 without page-level horizontal overflow in English and Polish (P17-G4, REQ-063)", async ({
     browser,
   }) => {
+    // Twelve pages include mandated flips and spinner waits.
+    // Docker stop and outage health checks also have 30 s budgets.
+    test.setTimeout(120_000);
     const prepared: PreparedPage[] = [];
 
     for (const vp of VIEWPORTS) {
@@ -387,7 +392,9 @@ test.describe("Responsive presentation failure surfaces", () => {
         `${entry.label} newSearchFailure`,
       );
 
-      await entry.moreFailurePage.locator("[data-more-button]").click();
+      await entry.moreFailurePage
+        .locator("[data-pagination-sentinel]")
+        .scrollIntoViewIfNeeded();
       await expect(entry.moreFailurePage.locator("main")).toHaveAttribute(
         "data-interaction-state",
         "moreFailure",
@@ -397,7 +404,7 @@ test.describe("Responsive presentation failure surfaces", () => {
       ).toBeVisible();
       await expect(
         entry.moreFailurePage.locator("[data-result-card]"),
-      ).toHaveCount(3);
+      ).toHaveCount(6);
       await expectNoHorizontalOverflow(
         entry.moreFailurePage,
         `${entry.label} moreFailure`,

@@ -19,6 +19,7 @@
 | **Headings**    | Inter / Sans-Serif | Bold (700)    |
 | **Body**        | Inter / Sans-Serif | Regular (400) |
 | **Data/Labels** | Roboto Mono        | Medium (500)  |
+| **Results nutrition** | Locally bundled Source Serif 4 / Serif | Regular (400); focused editor bold |
 
 #### 3. Tech Stack Integration
 
@@ -53,9 +54,11 @@ theme: {
 
 The page uses one centered primary content column with a maximum width of `1280px`.
 
-- **Mobile:** `320–639px`, one card column.
-- **Tablet:** `640–1023px`, one card column.
-- **Desktop:** `≥1024px`, three equal card columns.
+- **Mobile:** `320–639px`, one results card column; square image above details.
+- **Tablet:** `640–1023px`, one results card column; image left at 38% width.
+- **Desktop:** `≥1024px`, one results card column; image left at 38% width.
+- **Results list:** Centered, maximum `920px`; selected food and substitutes share `28px` rounded cards. Center section headings. Use no per-card rank labels or decorative slogans.
+- **Results type:** Inter names and Source Serif 4 nutrition. Names and summaries use `18px` below desktop. Desktop names use `30px`, summaries `24px`, and bottom-aligned macros `18px`. Show quantity/unit, a separator, and kcal; place the substitute similarity percentage at the right with a localized accessible name.
 - **Empty state:** the search control uses the prominent center position.
 - **Result state:** the search control is near the top, with result cards below it.
 
@@ -68,7 +71,9 @@ The page uses one centered primary content column with a maximum width of `1280p
 - **Buttons:** Use a 4px border radius and property-specific `200ms` transitions. Reduced-motion mode uses immediate state changes.
 - **Pill controls:** Fully rounded controls are accepted for chip-like filters, badges, segmented choices, compact icon actions, and selected-state tokens where the pill shape communicates grouping or status. Pill controls must still use visible focus states, accessible names, and stable hit targets.
 - **Inputs:** Use the Surface background, a 1px Secondary border, and Text-Primary text. Focus uses a Primary border without an outer highlight.
-- **Loading States:** Do not show a spinner below Search or in selected-food or result cards. A new Search keeps the selected-food content visible without a replacement spinner. A valid local quantity commit reprojects visible selected-food and result-card values synchronously without hiding content or showing a spinner. While a MORE! request is pending, keep its localized label and show the focused non-operable control with a gray background and gray text. ISSUE-022 deprecated REQ-081's card-spinner behavior.
+- **Selected-food editors:** Native text inputs look like normal underlined numbers, with no boxes. Size them to rendered text width. Hover text and underline use sage; focus uses bold mint. The whole header unit pill is one native button with stable position, visible labels, localized Servings/Porcje name, and `aria-pressed` for servings. Pointer use keeps logical focus without a persistent outline; keyboard focus has an outline.
+- **Loading States:** Do not show a spinner below Search or inside selected-food or substitute cards. Card reverses contain reverse art and localized loading text only. The centered pagination spinner is the only results spinner. It remains until the response settles and at least one second passes after paint, including explicit retries. Append cards at the viewport bottom; no MORE control remains. Existing cards stay visible during pagination and failure. Local edits synchronously reproject every loaded card without hiding content or replaying motion.
+- **Reveal:** Wait for actual image decode, paint the reverse even for cached images, then flip for `800ms`: X axis at `640px` and wider, Y axis below. Reduced motion reveals after readiness without movement. Decode the bundled placeholder on image failure; if both fail, show localized image-unavailable text. Keep the hidden front inert. Do not use a fade.
 
 #### 6. Compliance & Accessibility
 

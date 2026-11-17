@@ -1,7 +1,9 @@
 import type { FoodQuantity, GetFoodSuggestionsData } from "../client/types.gen";
 
+/** Supported interface languages from the API contract. */
 export type InterfaceLanguage = GetFoodSuggestionsData["query"]["language"];
 
+/** Localized application labels and validation messages. */
 export interface Messages {
   searchLabel: () => string;
 
@@ -21,8 +23,6 @@ export interface Messages {
 
   servingsLabel: () => string;
 
-  invalidQuantityMessage: () => string;
-
   loadingNutritionValues: () => string;
 
   proteinLabel: () => string;
@@ -39,7 +39,17 @@ export interface Messages {
 
   zeroResultsMessage: () => string;
 
-  moreButtonLabel: () => string;
+  retryButtonLabel: () => string;
+
+  endOfResultsMessage: () => string;
+
+  imageUnavailableMessage: () => string;
+
+  positiveNumberMessage: () => string;
+
+  precisionMessage: (places: number) => string;
+
+  portionLimitMessage: (maximum: string) => string;
 
   retryMessage: () => string;
 }
@@ -54,16 +64,21 @@ const en = {
   quantityLabel: () => "Quantity",
   unitLabel: () => "Unit",
   servingsLabel: () => "servings",
-  invalidQuantityMessage: () => "Enter a valid quantity.",
   loadingNutritionValues: () => "Loading nutrition values",
   proteinLabel: () => "Protein",
   carbohydratesLabel: () => "Carbohydrates",
   fatLabel: () => "Fat",
   caloriesLabel: () => "Calories",
   similarityLabel: () => "Similarity",
-  foundSubstitutionsHeading: () => "Found substitutions",
+  foundSubstitutionsHeading: () => "Substitutes",
   zeroResultsMessage: () => "No substitutes found",
-  moreButtonLabel: () => "MORE!",
+  retryButtonLabel: () => "Try again",
+  endOfResultsMessage: () => "You have seen all substitutes.",
+  imageUnavailableMessage: () => "Image unavailable",
+  positiveNumberMessage: () => "Enter a positive number without a unit.",
+  precisionMessage: (places: number) => `Allowed decimal places: ${places}.`,
+  portionLimitMessage: (maximum: string) =>
+    `The value exceeds the portion limit. Maximum for this field: ${maximum}.`,
   retryMessage: () => "Could not load substitutions. Try again.",
 } satisfies Messages;
 
@@ -77,34 +92,44 @@ const pl = {
   quantityLabel: () => "Ilość",
   unitLabel: () => "Jednostka",
   servingsLabel: () => "porcje",
-  invalidQuantityMessage: () => "Wpisz prawidłową ilość.",
   loadingNutritionValues: () => "Ładowanie wartości odżywczych",
   proteinLabel: () => "Białko",
   carbohydratesLabel: () => "Węglowodany",
   fatLabel: () => "Tłuszcz",
   caloriesLabel: () => "Kalorie",
   similarityLabel: () => "Podobieństwo",
-  foundSubstitutionsHeading: () => "Znalezione zamienniki",
+  foundSubstitutionsHeading: () => "Zamienniki",
   zeroResultsMessage: () => "Nie znaleziono zamienników",
-  moreButtonLabel: () => "WIĘCEJ!",
+  retryButtonLabel: () => "Spróbuj ponownie",
+  endOfResultsMessage: () => "To wszystkie zamienniki.",
+  imageUnavailableMessage: () => "Obraz niedostępny",
+  positiveNumberMessage: () => "Wpisz liczbę większą od zera, bez jednostki.",
+  precisionMessage: (places: number) =>
+    `Dozwolona liczba miejsc po przecinku: ${places}.`,
+  portionLimitMessage: (maximum: string) =>
+    `Wartość przekracza limit porcji. Maksimum dla tego pola: ${maximum}.`,
   retryMessage: () => "Nie udało się wczytać zamienników. Spróbuj ponownie.",
 } satisfies Messages;
 
 const dictionaries = { pl, en } satisfies Record<InterfaceLanguage, Messages>;
 
+/** Languages offered by the interface selector. */
 export const interfaceLanguages = Object.freeze([
   "pl",
   "en",
 ] satisfies readonly InterfaceLanguage[]);
 
+/** Checks whether a value names a supported interface language. */
 export function isInterfaceLanguage(value: string): value is InterfaceLanguage {
   return Object.hasOwn(dictionaries, value);
 }
 
+/** Returns labels for one supported language. */
 export function getDictionary(language: InterfaceLanguage): Messages {
   return dictionaries[language];
 }
 
+/** Formats a quantity and its localized unit. */
 export function formatFoodQuantityValue(
   quantity: FoodQuantity,
   language: InterfaceLanguage,
@@ -116,6 +141,7 @@ export function formatFoodQuantityValue(
   return `${quantity.value} ${unit}`;
 }
 
+/** Formats landing-dialogue macros with one decimal place. */
 export function formatMacronutrientValue(
   value: number,
   language: InterfaceLanguage,
@@ -125,8 +151,4 @@ export function formatMacronutrientValue(
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} g`;
-}
-
-export function formatCaloriesValue(value: number): string {
-  return `${value} kcal`;
 }

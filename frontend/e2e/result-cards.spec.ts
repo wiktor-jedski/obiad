@@ -22,7 +22,7 @@ const COPY = {
     fat: "Fat",
     calories: "Calories",
     similarity: "Similarity",
-    foundSubstitutions: "Found substitutions",
+    foundSubstitutions: "Substitutes",
   },
   pl: {
     search: "Szukaj",
@@ -33,7 +33,7 @@ const COPY = {
     fat: "Tłuszcz",
     calories: "Kalorie",
     similarity: "Podobieństwo",
-    foundSubstitutions: "Znalezione zamienniki",
+    foundSubstitutions: "Zamienniki",
   },
 } as const;
 
@@ -97,7 +97,7 @@ async function selectFoodObject(
 
 function formatMacronutrient(value: number, locale: "en" | "pl"): string {
   return `${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 1,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   }).format(value)} g`;
 }
@@ -134,11 +134,12 @@ async function expectCard(
   await expect(card.locator("[data-result-card-calories]")).toHaveText(
     `${item.calories} kcal`,
   );
-  await expect(card).toContainText(copy.similarity);
-  await expect(card).toContainText(`${item.similarityPercent}%`);
+  const similarity = card.locator("[data-result-card-similarity]");
+  await expect(similarity).toHaveText(`${item.similarityPercent}%`);
+  await expect(similarity).toHaveAccessibleName(new RegExp(copy.similarity));
 
   const image = card.locator("[data-result-card-image]");
-  await expect(image).toHaveAttribute("alt", "");
+  await expect(image).toHaveAttribute("alt", item.names[locale]);
   await expect
     .poll(() =>
       image.evaluate((element) => {
@@ -148,31 +149,20 @@ async function expectCard(
         return element.src;
       }),
     )
-    .toBe(new URL(placeholderUrl, PREVIEW_ORIGIN).href);
-}
-
-async function expectCardFieldOrder(
-  card: Locator,
-  item: ProjectedSubstituteItem,
-  copy: (typeof COPY)[keyof typeof COPY],
-): Promise<void> {
-  const sequence = await card.evaluate((element) =>
-    Array.from(
-      element.querySelectorAll(
-        "img, h3, [data-result-card-matched-quantity], [data-result-card-calories], dt",
+    .toMatch(new RegExp(`^${PREVIEW_ORIGIN}/`));
+  if (item.imageKey === undefined) {
+    await expect(image).toHaveAttribute("src", placeholderUrl);
+  }
+  await expect
+    .poll(() =>
+      image.evaluate(
+        (element) =>
+          element instanceof HTMLImageElement &&
+          element.complete &&
+          element.naturalWidth > 0,
       ),
-    ).map((node) => `${node.tagName}|${node.textContent ?? ""}`),
-  );
-  expect(sequence).toEqual([
-    "IMG|",
-    `H3|${item.names[copy === COPY.en ? "en" : "pl"]}`,
-    `P|${item.matchedQuantity.value} ${item.matchedQuantity.unit}`,
-    `P|${item.calories} kcal`,
-    `DT|${copy.protein}`,
-    `DT|${copy.carbohydrates}`,
-    `DT|${copy.fat}`,
-    `DT|${copy.similarity}`,
-  ]);
+    )
+    .toBe(true);
 }
 
 async function expectRankedCards(
@@ -194,7 +184,6 @@ async function expectRankedCards(
       throw new Error(`Substitute item ${foodObjectId} was not captured`);
     }
     await expectCard(cards.nth(index), item, copy, locale, placeholderUrl);
-    await expectCardFieldOrder(cards.nth(index), item, copy);
   }
 
   expect(
@@ -209,7 +198,7 @@ async function expectRankedCards(
 }
 
 test.describe("result cards", () => {
-  test("Pizza Margherita ranks [13, 29, 26] and renders three English cards in the approved order with the API-provided values; the seeded-key Gyoza card shows the bundled placeholder", async ({
+  test("Pizza Margherita ranks [13, 29, 26] and renders English cards with projected API values and decoded same-origin images", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -289,7 +278,7 @@ test.describe("result cards", () => {
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
 
-  test("Chicken breast ranks [23, 11, 6] and the image-less page shows only valid bundled-placeholder cards", async ({
+  test("Chicken breast ranks [23, 11, 6] and all cards show decoded images with placeholder fallback for absent keys", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -326,17 +315,6 @@ test.describe("result cards", () => {
           }),
         )
         .toBe(true);
-    }
-    const absolutePlaceholder = new URL(placeholderUrl, PREVIEW_ORIGIN).href;
-    for (let index = 0; index < 3; index += 1) {
-      expect(
-        await images.nth(index).evaluate((element) => {
-          if (!(element instanceof HTMLImageElement)) {
-            throw new TypeError("Result card image must be an image element");
-          }
-          return element.src;
-        }),
-      ).toBe(absolutePlaceholder);
     }
   });
 
@@ -379,12 +357,12 @@ test.describe("result cards", () => {
     await expect(proteinRow).toHaveText(
       formatMacronutrient(mondongo.macronutrients.protein, "pl"),
     );
-    await expect(proteinRow).toHaveText(/^[0-9]+,[0-9] g$/);
+    await expect(proteinRow).toHaveText(/^[0-9]+(?:,[0-9])? g$/);
     await expect(page.locator("[data-result-card]").first()).toContainText(
       "Białko",
     );
-    await expect(page.locator("[data-result-card]").first()).toContainText(
-      "Podobieństwo",
-    );
+    await expect(
+      page.locator("[data-result-card-similarity]").first(),
+    ).toHaveAccessibleName(/Podobieństwo/);
   });
 });

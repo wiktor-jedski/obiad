@@ -167,7 +167,7 @@ async function expectSuggestionPanel(
 }
 
 function selectedInput(page: Page) {
-  return page.locator("[data-selected-input]");
+  return page.locator("[data-selected-food-summary]");
 }
 
 async function expectSelectedInput(
@@ -175,8 +175,14 @@ async function expectSelectedInput(
   copy: (typeof COPY)[keyof typeof COPY],
   value: string,
 ): Promise<void> {
-  await expect(selectedInput(page)).toContainText(copy.selectedFood);
-  await expect(selectedInput(page)).toContainText(value);
+  const [name, portion] = value.split(" · ");
+  await expect(page.locator("[data-selected-food-heading]")).toHaveText(
+    copy.selectedFood.replace(/:$/, ""),
+  );
+  await expect(selectedInput(page).locator("h3")).toHaveText(name);
+  await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
+    portion.split(" ")[0],
+  );
 }
 
 async function expectSubstitutePost(
@@ -289,17 +295,15 @@ test.describe("pointer substitution search", () => {
 
     await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
 
-    await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
+    await expect(search).toHaveValue("Polish chicken soup");
 
     releaseFirst();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
     );
-    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
-    await expect(page.locator("[data-selected-input]")).toContainText(
-      "Polish chicken soup · 1 serving",
-    );
+    await expect(page.locator("[data-selected-food-heading]")).toBeFocused();
+    await expectSelectedInput(page, COPY.en, "Polish chicken soup · 1 serving");
     expect(posts).toHaveLength(1);
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
   });
@@ -340,7 +344,7 @@ test.describe("pointer substitution search", () => {
       "results",
     );
 
-    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
+    await expect(page.locator("[data-selected-food-heading]")).toBeFocused();
   });
 
   test("the Pizza Margherita flow sends 1 serving and updates its visible selected value when the language changes", async ({
@@ -367,8 +371,8 @@ test.describe("pointer substitution search", () => {
       .getByRole("combobox", { name: COPY.en.languageControl })
       .selectOption("pl");
     await expectSelectedInput(page, COPY.pl, "Pizza margherita · 1 porcja");
-    await expect(selectedInput(page)).not.toContainText(
-      "Pizza Margherita · 1 serving",
+    await expect(selectedInput(page).locator("h3")).not.toHaveText(
+      "Pizza Margherita",
     );
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
@@ -433,7 +437,7 @@ test.describe("pointer substitution search", () => {
       .getByRole("combobox", { name: COPY.pl.languageControl })
       .selectOption("en");
     await expectSelectedInput(page, COPY.en, "Milk · 100 ml");
-    await expect(selectedInput(page)).not.toContainText("Mleko · 100 ml");
+    await expect(selectedInput(page).locator("h3")).not.toHaveText("Mleko");
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",

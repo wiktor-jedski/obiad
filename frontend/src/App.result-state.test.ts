@@ -40,10 +40,12 @@ const SUGGESTION_ITEMS = Array.from({ length: 5 }, (_, index) => ({
 class HappyDomRequest {
   readonly url: string;
   readonly method: string;
+  readonly headers: Headers;
 
   constructor(url: string | URL, init?: RequestInit) {
     this.url = String(url);
     this.method = init?.method ?? "GET";
+    this.headers = new Headers(init?.headers);
   }
 }
 
@@ -78,53 +80,37 @@ function elementText(selector: string): string | null {
   return document.querySelector(selector)?.textContent ?? null;
 }
 
-function expectOnlyEmptyEditorLiveRegion(): void {
-  const liveRegions = document.querySelectorAll(
-    '[aria-live], [role="status"], [role="alert"]',
-  );
-  expect(liveRegions).toHaveLength(1);
-  const liveRegion = liveRegions.item(0);
-  expect(liveRegion.getAttribute("data-editor-status")).not.toBeNull();
-  expect(liveRegion.textContent).toBe("");
-}
-
 function expectEnglishZeroResultSurface(zeroMessage: Element): void {
   expect(
     document.querySelector("main")?.getAttribute("data-interaction-state"),
   ).toBe("zeroResults");
-  expect(document.querySelector("[data-selected-input-region]")).not.toBeNull();
+  expect(document.querySelector("[data-selected-food-summary]")).not.toBeNull();
   expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
-  expect(document.querySelectorAll("[data-result-region]")).toHaveLength(0);
   expect(zeroMessage.textContent).toBe("No substitutes found");
   expect(document.activeElement).toBe(zeroMessage);
   expect(zeroMessage.hasAttribute("aria-live")).toBe(false);
   expect(zeroMessage.hasAttribute("role")).toBe(false);
-  expectOnlyEmptyEditorLiveRegion();
-  expect(elementText("[data-selected-name]")).toBe("Butter");
-  const srOnly = Array.from(
-    document.querySelectorAll("[data-selected-food-summary] .sr-only"),
-  ).map((element) => element.textContent);
-  expect(srOnly).toContain("Selected food: Butter · 100 g");
-  expect(srOnly).toContain("Quantity");
-  expect(srOnly).toContain("Unit");
+  expect(elementText("[data-selected-food-summary] h3")).toBe("Butter");
   expect(
-    Array.from(document.querySelectorAll("[data-input-macronutrients] dt")).map(
-      (element) => element.textContent,
-    ),
-  ).toEqual(["Protein", "Carbohydrates", "Fat"]);
-  expect(elementText("[data-input-macro-protein]")).toBe("35.0 g");
+    document.querySelector<HTMLInputElement>("[data-nutrition-editor=protein]")
+      ?.value,
+  ).toBe("35");
   expect(
-    document.querySelector("[data-input-calories]")?.getAttribute("aria-label"),
-  ).toBe("Calories");
-  expect(elementText("[data-input-calories]")).toBe("875 kcal");
-  expect(elementText("[data-quantity-static-unit]")).toBe("g");
+    document.querySelector<HTMLInputElement>("[data-nutrition-editor=calories]")
+      ?.value,
+  ).toBe("875");
+  expect(
+    document
+      .querySelector("[data-nutrition-editor=quantity]")
+      ?.getAttribute("aria-label"),
+  ).toBe("Quantity");
 }
 
 function expectPolishZeroResultSurface(
   zeroMessage: Element,
   postUrls: readonly string[],
 ): void {
-  expect(elementText("[data-zero-result-region]")).toBe(
+  expect(elementText("[data-zero-result-message]")).toBe(
     "Nie znaleziono zamienników",
   );
   expect(document.querySelectorAll("[data-result-card]")).toHaveLength(0);
@@ -133,24 +119,17 @@ function expectPolishZeroResultSurface(
   ).toBe("zeroResults");
   expect(document.activeElement).toBe(zeroMessage);
   expect(zeroMessage.textContent).toBe("Nie znaleziono zamienników");
-  expectOnlyEmptyEditorLiveRegion();
-  expect(elementText("[data-selected-name]")).toBe("Masło");
-  const srOnly = Array.from(
-    document.querySelectorAll("[data-selected-food-summary] .sr-only"),
-  ).map((element) => element.textContent);
-  expect(srOnly).toContain("Wybrany produkt: Masło · 100 g");
-  expect(srOnly).toContain("Ilość");
-  expect(srOnly).toContain("Jednostka");
+  expect(elementText("[data-selected-food-summary] h3")).toBe("Masło");
   expect(
-    Array.from(document.querySelectorAll("[data-input-macronutrients] dt")).map(
-      (element) => element.textContent,
-    ),
-  ).toEqual(["Białko", "Węglowodany", "Tłuszcz"]);
-  expect(elementText("[data-input-macro-protein]")).toBe("35,0 g");
+    document
+      .querySelector("[data-nutrition-editor=quantity]")
+      ?.getAttribute("aria-label"),
+  ).toBe("Ilość");
   expect(
-    document.querySelector("[data-input-calories]")?.getAttribute("aria-label"),
+    document
+      .querySelector("[data-nutrition-editor=calories]")
+      ?.getAttribute("aria-label"),
   ).toBe("Kalorie");
-  expect(elementText("[data-quantity-static-unit]")).toBe("g");
   expect(
     postUrls,
     "the language change in zeroResults performs no additional fetch",
@@ -230,8 +209,16 @@ describe("the root result-state composition", () => {
         const url =
           input instanceof globalThis.Request ? input.url : input.toString();
         if (url.includes("/api/v1/substitutes/search")) {
-          postUrls.push(url);
-          return new Response(EMPTY_RESPONSE_BODY, {
+          if (
+            !(input instanceof globalThis.Request) ||
+            input.headers.get("X-Obiad-Request-Purpose") !== "landing-dialogue"
+          ) {
+            postUrls.push(url);
+          }
+          const response = JSON.parse(EMPTY_RESPONSE_BODY);
+          response.selectedFood.foodObjectId = 7;
+          response.selectedFood.names = SUGGESTION_ITEMS[1].names;
+          return new Response(JSON.stringify(response), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
