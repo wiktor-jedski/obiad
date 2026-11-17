@@ -1,9 +1,12 @@
 @import "tailwindcss";
+@import "@fontsource-variable/source-serif-4";
 
 @theme static {
   --font-ui: "Inter", system-ui, sans-serif;
 
   --font-data: "Roboto Mono", ui-monospace, monospace;
+
+  --font-nutrition: "Source Serif 4 Variable", "Source Serif 4", serif;
 
   --color-dark-background: #0a0f0a;
   --color-dark-surface: #161d16;

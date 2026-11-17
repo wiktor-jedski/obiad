@@ -61,7 +61,7 @@ function parsePng(buffer: Buffer): ParsedPng {
 }
 
 test.describe("presentation assets", () => {
-  test("the computed palette and Inter/Roboto Mono chains are exact, with no runtime font request", async ({
+  test("the palette and existing UI fonts remain stable while cards use bundled Source Serif 4", async ({
     page,
   }) => {
     const requests: { url: string; resourceType: string }[] = [];
@@ -75,8 +75,22 @@ test.describe("presentation assets", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("Obiad");
 
+    await page
+      .getByRole("combobox", { name: /^(Search|Szukaj)$/ })
+      .fill("margherita");
+    await page.locator("#food-suggestion-option-1").click();
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(300);
+    await expect(page.locator("[data-card-summary]").first()).toHaveCSS(
+      "font-family",
+      /Source Serif 4/,
+    );
+    await expect(page.locator("[data-result-card] h3").first()).toHaveCSS(
+      "font-family",
+      /Inter/,
+    );
 
     const observed = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
@@ -138,30 +152,36 @@ test.describe("presentation assets", () => {
     expect(observed.bodyFontFamily).toBe(UI_FONT_COMPUTED);
     expect(observed.dataProbeFamily).toBe(DATA_FONT_COMPUTED);
 
-    expect(observed.faces).toEqual([
-      {
-        family: "Inter",
-        weight: "100 900",
-        style: "normal",
-        src: 'local("Inter")',
-        display: "swap",
-      },
-      {
-        family: '"Roboto Mono"',
-        weight: "100 700",
-        style: "normal",
-        src: 'local("Roboto Mono")',
-        display: "swap",
-      },
-    ]);
-
+    expect(observed.faces).toEqual(
+      expect.arrayContaining([
+        {
+          family: "Inter",
+          weight: "100 900",
+          style: "normal",
+          src: 'local("Inter")',
+          display: "swap",
+        },
+        {
+          family: '"Roboto Mono"',
+          weight: "100 700",
+          style: "normal",
+          src: 'local("Roboto Mono")',
+          display: "swap",
+        },
+      ]),
+    );
+    expect(observed.faces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          family: expect.stringContaining("Source Serif 4"),
+          src: expect.stringContaining("url("),
+        }),
+      ]),
+    );
     expect(requests.some((request) => request.resourceType === "font")).toBe(
-      false,
+      true,
     );
     for (const request of requests) {
-      expect(request.url, `unexpected request ${request.url}`).not.toMatch(
-        /\.(woff2?|ttf|otf|eot)(\?|#|$)/i,
-      );
       expect(
         new URL(request.url).origin,
         `unexpected request origin ${request.url}`,

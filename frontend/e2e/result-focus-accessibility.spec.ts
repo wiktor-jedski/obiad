@@ -4,13 +4,11 @@ import { isLandingDialogueRequest } from "./request-purpose";
 const COPY = {
   en: {
     searchPlaceholder: "Search foods",
-    moreButton: "MORE!",
-    foundSubstitutions: "Found substitutions",
+    selectedFood: "Selected food",
   },
   pl: {
     searchPlaceholder: "Szukaj potraw",
-    moreButton: "WIĘCEJ!",
-    foundSubstitutions: "Znalezione zamienniki",
+    selectedFood: "Wybrany produkt",
   },
 } as const;
 
@@ -156,10 +154,11 @@ async function selectFoodObject(
 }
 
 test.describe("Result focus and accessibility", () => {
-  test("after every successful English result page — a new Search, an intermediate MORE! page, and the full three-card last page — the localized results heading becomes document.activeElement only after the response renders, with no result-count or result-status live-region insertion or update (P15-G3, P15-G5, REQ-083, REQ-085)", async ({
+  test("English searches focus the selected heading; infinite pages preserve editor focus through the full final page without live result announcements", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
+    test.setTimeout(60_000);
     await trackLiveRegions(page);
 
     let postCount = 0;
@@ -186,7 +185,7 @@ test.describe("Result focus and accessibility", () => {
     });
 
     await page.goto("/");
-    const heading = page.locator("[data-substitutions-heading]");
+    const heading = page.locator("[data-selected-food-heading]");
     const searchInput = page.getByPlaceholder(COPY.en.searchPlaceholder);
 
     await selectFoodObject(page, "margherita", 1, COPY.en);
@@ -204,21 +203,25 @@ test.describe("Result focus and accessibility", () => {
       "results",
     );
     await expect(page.locator("[data-result-card]")).toHaveCount(3);
-    await expect(heading).toHaveText(COPY.en.foundSubstitutions);
+    await expect(heading).toHaveText(COPY.en.selectedFood);
     await expect(heading).toBeFocused();
 
     let snapshot = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(snapshot, "new Search (English)");
 
-    const moreButton = page.locator("[data-more-button]");
-    await expect(moreButton).toBeVisible();
-    await moreButton.click();
+    const editor = page.locator("[data-nutrition-editor=quantity]");
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
+    await editor.focus();
+    await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => scrollY);
 
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "loadingMore",
     );
-    await expect(moreButton).toBeFocused();
+    await expect(editor).toBeFocused();
     await expect(heading).not.toBeFocused();
 
     releaseMoreGate();
@@ -228,35 +231,34 @@ test.describe("Result focus and accessibility", () => {
     );
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...PIZZA_ALL_PAGES[1]!]);
-    await expect(heading).toBeFocused();
+      .toEqual(PIZZA_ALL_PAGES.slice(0, 2).flat());
+    await expect(editor).toBeFocused();
 
+    expect(
+      Math.abs((await page.evaluate(() => scrollY)) - scrollBefore),
+    ).toBeLessThan(2);
     let next = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(
       next.slice(snapshot.length),
-      "intermediate MORE! page (English)",
+      "intermediate pagination page (English)",
     );
     snapshot = next;
 
     for (let pageIndex = 2; pageIndex <= 10; pageIndex++) {
-      const button = page.locator("[data-more-button]");
-      await expect(button).toBeVisible();
-      await button.click();
+      await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
       await expect
         .poll(() => renderedCardIDs(page))
-        .toEqual([...PIZZA_ALL_PAGES[pageIndex]!]);
-      await expect(heading).toBeFocused();
+        .toEqual(PIZZA_ALL_PAGES.slice(0, pageIndex + 1).flat());
+      await expect(editor).toBeFocused();
     }
 
-    const lastButton = page.locator("[data-more-button]");
-    await expect(lastButton).toBeVisible();
-    await lastButton.click();
+    await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...PIZZA_ALL_PAGES[11]!]);
-    await expect(page.locator("[data-more-button]")).toHaveCount(0);
-    await expect(heading).toHaveText(COPY.en.foundSubstitutions);
-    await expect(heading).toBeFocused();
+      .toEqual(PIZZA_ALL_PAGES.slice(0, 12).flat());
+    await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
+    await expect(heading).toHaveText(COPY.en.selectedFood);
+    await expect(editor).toBeFocused();
 
     next = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(
@@ -266,10 +268,11 @@ test.describe("Result focus and accessibility", () => {
     expectNoResultLiveAnnouncements(next, "whole English flow (REQ-085)");
   });
 
-  test("after every successful Polish result page — a new Search, an intermediate MORE! page, and the partial one-card last page — the localized results heading becomes document.activeElement only after the response renders, with no result-count or result-status live-region insertion or update (P15-G3, P15-G7, REQ-083, REQ-085)", async ({
+  test("Polish searches focus the selected heading; infinite pages preserve editor focus through the partial final page without live result announcements", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["pl-PL"]);
+    test.setTimeout(60_000);
     await trackLiveRegions(page);
 
     let postCount = 0;
@@ -296,7 +299,7 @@ test.describe("Result focus and accessibility", () => {
     });
 
     await page.goto("/");
-    const heading = page.locator("[data-substitutions-heading]");
+    const heading = page.locator("[data-selected-food-heading]");
     const searchInput = page.getByPlaceholder(COPY.pl.searchPlaceholder);
 
     await selectFoodObject(page, "kurczaka", 5, COPY.pl);
@@ -314,21 +317,25 @@ test.describe("Result focus and accessibility", () => {
       "results",
     );
     await expect(page.locator("[data-result-card]")).toHaveCount(3);
-    await expect(heading).toHaveText(COPY.pl.foundSubstitutions);
+    await expect(heading).toHaveText(COPY.pl.selectedFood);
     await expect(heading).toBeFocused();
 
     let snapshot = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(snapshot, "new Search (Polish)");
 
-    const moreButton = page.locator("[data-more-button]");
-    await expect(moreButton).toBeVisible();
-    await moreButton.click();
+    const editor = page.locator("[data-nutrition-editor=quantity]");
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
+    await editor.focus();
+    await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => scrollY);
 
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "loadingMore",
     );
-    await expect(moreButton).toBeFocused();
+    await expect(editor).toBeFocused();
     await expect(heading).not.toBeFocused();
 
     releaseMoreGate();
@@ -338,36 +345,35 @@ test.describe("Result focus and accessibility", () => {
     );
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...CHICKEN_ALL_PAGES[1]!]);
-    await expect(heading).toBeFocused();
+      .toEqual(CHICKEN_ALL_PAGES.slice(0, 2).flat());
+    await expect(editor).toBeFocused();
 
+    expect(
+      Math.abs((await page.evaluate(() => scrollY)) - scrollBefore),
+    ).toBeLessThan(2);
     let next = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(
       next.slice(snapshot.length),
-      "intermediate MORE! page (Polish)",
+      "intermediate pagination page (Polish)",
     );
     snapshot = next;
 
     for (let pageIndex = 2; pageIndex <= 11; pageIndex++) {
-      const button = page.locator("[data-more-button]");
-      await expect(button).toBeVisible();
-      await button.click();
+      await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
       await expect
         .poll(() => renderedCardIDs(page))
-        .toEqual([...CHICKEN_ALL_PAGES[pageIndex]!]);
-      await expect(heading).toBeFocused();
+        .toEqual(CHICKEN_ALL_PAGES.slice(0, pageIndex + 1).flat());
+      await expect(editor).toBeFocused();
     }
 
-    const lastButton = page.locator("[data-more-button]");
-    await expect(lastButton).toBeVisible();
-    await lastButton.click();
+    await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...CHICKEN_ALL_PAGES[12]!]);
-    await expect(page.locator("[data-more-button]")).toHaveCount(0);
-    await expect(page.locator("[data-result-card]")).toHaveCount(1);
-    await expect(heading).toHaveText(COPY.pl.foundSubstitutions);
-    await expect(heading).toBeFocused();
+      .toEqual(CHICKEN_ALL_PAGES.slice(0, 13).flat());
+    await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
+    await expect(page.locator("[data-result-card]")).toHaveCount(37);
+    await expect(heading).toHaveText(COPY.pl.selectedFood);
+    await expect(editor).toBeFocused();
 
     next = await liveRegionEntries(page);
     expectNoResultLiveAnnouncements(
@@ -377,3 +383,42 @@ test.describe("Result focus and accessibility", () => {
     expectNoResultLiveAnnouncements(next, "whole Polish flow (REQ-085)");
   });
 });
+
+for (const language of ["en-US", "pl-PL"]) {
+  test(`${language}: failed pagination and failed new searches do not move focus`, async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, [language]);
+    const copy = language === "en-US" ? COPY.en : COPY.pl;
+    await page.goto("/");
+    await selectFoodObject(page, "margherita", 1, copy);
+    await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(
+      4,
+    );
+    await page.route("**/api/v1/substitutes/search", async (route) => {
+      if (isLandingDialogueRequest(route.request())) await route.continue();
+      else await route.abort();
+    });
+    const editor = page.locator("[data-nutrition-editor=quantity]");
+    await editor.focus();
+    await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => scrollY);
+    await expect(page.locator("[data-retry-message]")).toBeVisible();
+    await expect(editor).toBeFocused();
+    expect(
+      Math.abs((await page.evaluate(() => scrollY)) - scrollBefore),
+    ).toBeLessThan(2);
+    await expect(page.locator("[data-result-card]")).toHaveCount(3);
+    await selectFoodObject(
+      page,
+      language === "en-US" ? "chicken" : "kurczak",
+      5,
+      copy,
+    );
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "newSearchFailure",
+    );
+    await expect(page.getByPlaceholder(copy.searchPlaceholder)).toBeFocused();
+  });
+}

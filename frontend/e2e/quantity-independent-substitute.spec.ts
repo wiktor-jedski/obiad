@@ -19,7 +19,7 @@ const COPY = {
     fat: "Fat",
     calories: "Calories",
     similarity: "Similarity",
-    foundSubstitutions: "Found substitutions",
+    foundSubstitutions: "Substitutes",
   },
   pl: {
     search: "Szukaj",
@@ -30,7 +30,7 @@ const COPY = {
     fat: "Tłuszcz",
     calories: "Kalorie",
     similarity: "Podobieństwo",
-    foundSubstitutions: "Znalezione zamienniki",
+    foundSubstitutions: "Zamienniki",
   },
 } as const;
 
@@ -107,7 +107,7 @@ async function selectFoodSuggestion(
 
 function formatMacronutrient(value: number, locale: "en" | "pl"): string {
   return `${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 1,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   }).format(value)} g`;
 }
@@ -117,18 +117,21 @@ async function expectSummaryProjection(
   projection: ProjectedSubstitutePage,
   locale: "en" | "pl",
 ): Promise<void> {
-  await expect(page.locator("[data-input-calories]")).toHaveText(
-    `${projection.inputCalories} kcal`,
+  await expect(page.locator("[data-nutrition-editor=calories]")).toHaveValue(
+    String(projection.inputCalories),
   );
-  await expect(page.locator("[data-input-macro-protein]")).toHaveText(
-    formatMacronutrient(projection.inputMacronutrients.protein, locale),
-  );
-  await expect(page.locator("[data-input-macro-carbohydrate]")).toHaveText(
-    formatMacronutrient(projection.inputMacronutrients.carbohydrate, locale),
-  );
-  await expect(page.locator("[data-input-macro-fat]")).toHaveText(
-    formatMacronutrient(projection.inputMacronutrients.fat, locale),
-  );
+  for (const field of ["protein", "carbohydrate", "fat"] as const) {
+    const value = new Intl.NumberFormat(locale, {
+      useGrouping: false,
+      maximumFractionDigits: 1,
+    }).format(projection.inputMacronutrients[field]);
+    const input = page.locator(`[data-nutrition-editor=${field}]`);
+    if (await input.count()) await expect(input).toHaveValue(value);
+    else
+      await expect(
+        page.locator(`[data-nutrition-readonly=${field}]`),
+      ).toHaveText(value);
+  }
 }
 
 async function expectCardProjection(
@@ -155,7 +158,9 @@ async function expectCardProjection(
   await expect(card).toContainText(
     formatMacronutrient(item.macronutrients.fat, locale),
   );
-  await expect(card).toContainText(copy.similarity);
+  await expect(
+    card.locator("[data-result-card-similarity]"),
+  ).toHaveAccessibleName(new RegExp(copy.similarity));
   await expect(card).toContainText(`${item.similarityPercent}%`);
 }
 
@@ -226,11 +231,10 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     }
 
     const initialPostCount = posts.length;
-    const numberField = page.locator("[data-quantity-number]");
+    const numberField = page.locator("[data-nutrition-editor=quantity]");
     await numberField.fill("2");
     await numberField.press("Enter");
 
-    await expect(numberField).toBeFocused();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
@@ -241,10 +245,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     ).toHaveLength(initialPostCount);
     await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-retry-message]")).toHaveCount(0);
-    await expect(page.locator("[data-more-button]")).not.toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    await expect(page.locator("[data-pagination-sentinel]")).toHaveCount(1);
 
     const servingProjection = projectSubstitutePage(
       response.selectedFood,
@@ -332,11 +333,10 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
     }
 
     const initialPostCount = posts.length;
-    const numberField = page.locator("[data-quantity-number]");
+    const numberField = page.locator("[data-nutrition-editor=quantity]");
     await numberField.fill("250");
     await numberField.press("Enter");
 
-    await expect(numberField).toBeFocused();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",

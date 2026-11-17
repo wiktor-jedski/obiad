@@ -1,114 +1,152 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
-const COPY = {
-  en: {
-    searchPlaceholder: "Search foods",
-    moreButton: "MORE!",
-    loadingNutritionValues: "Loading nutrition values",
-  },
-  pl: {
-    searchPlaceholder: "Szukaj potraw",
-    moreButton: "WIĘCEJ!",
-    loadingNutritionValues: "Ładowanie wartości odżywczych",
-  },
-} as const;
-
-const DISABLED_MORE_BACKGROUND_COLOR = "oklch(0.446 0.03 256.802)";
-const DISABLED_MORE_TEXT_COLOR = "oklch(0.872 0.01 258.338)";
-
-async function useBrowserLanguages(
-  page: Page,
-  languages: string[],
-): Promise<void> {
-  await page.addInitScript((tags: string[]) => {
-    Object.defineProperty(window.navigator, "languages", {
-      configurable: true,
-      get: () => tags,
-    });
-  }, languages);
-}
-
-test.describe("Spinner-free card presentation", () => {
-  for (const [lang, copy] of [
-    ["en-US", COPY.en],
-    ["pl-PL", COPY.pl],
-  ] as const) {
-    test(`[${lang}] new Search, MORE!, and local quantity commits render no card spinner while MORE! keeps its disabled opacity`, async ({
+for (const language of ["en-US", "pl-PL"]) {
+  for (const responseDelay of [0, 1300]) {
+    test(`${language}: pagination spinner lasts at least one painted second and waits for a ${responseDelay} ms response`, async ({
       page,
     }) => {
-      await useBrowserLanguages(page, [lang]);
-
-      let postCount = 0;
-      const initialGate = Promise.withResolvers<void>();
-      const moreGate = Promise.withResolvers<void>();
+      await page.addInitScript((tag) => {
+        Object.defineProperty(navigator, "languages", { get: () => [tag] });
+      }, language);
+      let posts = 0;
+      let nextPageResponded = false;
+      page.on("response", (response) => {
+        const request = response.request();
+        if (
+          !isLandingDialogueRequest(request) &&
+          request.url().includes("/api/v1/substitutes/search") &&
+          request.postDataJSON()?.pageIndex === 1
+        ) {
+          nextPageResponded = true;
+        }
+      });
       await page.route("**/api/v1/substitutes/search", async (route) => {
         if (isLandingDialogueRequest(route.request())) {
           await route.continue();
           return;
         }
-        postCount += 1;
-        if (postCount === 1) {
-          await initialGate.promise;
-        }
-        if (postCount === 2) {
-          await moreGate.promise;
+        posts += 1;
+        if (posts === 2 && responseDelay > 0) {
+          const delay = Promise.withResolvers<void>();
+          setTimeout(delay.resolve, responseDelay);
+          await delay.promise;
         }
         await route.continue();
       });
-
       await page.goto("/");
-      await page.getByPlaceholder(copy.searchPlaceholder).fill("margherita");
+      await page
+        .getByRole("combobox", {
+          name: language === "en-US" ? "Search" : "Szukaj",
+          exact: true,
+        })
+        .fill("margherita");
       await page.locator("#food-suggestion-option-1").click();
-      await expect.poll(() => postCount).toBe(1);
-
-      const numberInput = page.locator("[data-quantity-number]");
-      const unitSelect = page.locator("[data-quantity-unit]");
-      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
-      await expect(numberInput).toBeDisabled();
-      await expect(unitSelect).toBeDisabled();
-      await expect(page.locator("#quantity-editor-status")).toHaveText(
-        copy.loadingNutritionValues,
-      );
-
-      initialGate.resolve();
-      await expect(page.locator("main")).toHaveAttribute(
-        "data-interaction-state",
-        "results",
-      );
-      await numberInput.fill("2");
-      await numberInput.press("Enter");
-
-      expect(postCount).toBe(1);
-      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
-      await expect(numberInput).toBeEnabled();
-      await expect(unitSelect).toBeEnabled();
-      await expect(page.locator("#quantity-editor-status")).toHaveText("");
       await expect(
-        page.locator("[data-selected-input-region]"),
-      ).not.toHaveAttribute("aria-busy", "true");
-      await expect(page.locator("[data-result-region]")).not.toHaveAttribute(
-        "aria-busy",
-        "true",
-      );
+        page.locator('[data-card-reveal-state="shown"]'),
+      ).toHaveCount(4);
+      await expect(
+        page.locator("[data-card-reveal] .loader, [data-card-spinner]"),
+      ).toHaveCount(0);
 
-      const moreButton = page.locator("[data-more-button]");
-      await moreButton.click();
-      await expect.poll(() => postCount).toBe(2);
-      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
-      await expect(moreButton).toHaveAttribute("aria-disabled", "true");
-      await expect(moreButton).toHaveCSS(
-        "background-color",
-        DISABLED_MORE_BACKGROUND_COLOR,
-      );
-      await expect(moreButton).toHaveCSS("color", DISABLED_MORE_TEXT_COLOR);
-
-      moreGate.resolve();
-      await expect(page.locator("main")).toHaveAttribute(
-        "data-interaction-state",
-        "results",
-      );
-      await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
+      const timing = page.evaluate(() => {
+        const result = Promise.withResolvers<{ start: number; end: number }>();
+        let start: number | undefined;
+        const sample = (now: number) => {
+          const spinner = document.querySelector("[data-pagination-spinner]");
+          if (spinner && spinner.getBoundingClientRect().height > 0) {
+            start ??= now;
+          } else if (start !== undefined) {
+            result.resolve({ start, end: now });
+            return;
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+        return result.promise;
+      });
+      await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
+      await expect(page.locator("[data-pagination-spinner]")).toBeVisible();
+      await expect(page.locator("[data-result-card]")).toHaveCount(3);
+      const quantity = page.locator("[data-nutrition-editor=quantity]");
+      // Editing a retained card does not need another HTTP request, even while a page is pending.
+      await quantity.evaluate((element) => {
+        if (!(element instanceof HTMLInputElement))
+          throw new TypeError("Expected quantity input");
+        element.focus({ preventScroll: true });
+      });
+      await quantity.fill("2");
+      await quantity.press("Enter");
+      await expect(quantity).toBeEnabled();
+      await expect(page.locator("[data-result-card]")).toHaveCount(6);
+      const measured = await timing;
+      expect(measured.end - measured.start).toBeGreaterThanOrEqual(1000);
+      expect(nextPageResponded).toBe(true);
+      expect(posts).toBe(2);
+      await expect(
+        page.locator("[data-card-reveal] .loader, [data-card-spinner]"),
+      ).toHaveCount(0);
     });
   }
+}
+
+test("a failed page retains cards and an explicit retry receives its own one-second spinner", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", { get: () => ["en-US"] });
+  });
+  let posts = 0;
+  await page.route("**/api/v1/substitutes/search", async (route) => {
+    if (isLandingDialogueRequest(route.request())) {
+      await route.continue();
+      return;
+    }
+    posts += 1;
+    if (posts === 2) await route.abort();
+    else await route.continue();
+  });
+  await page.goto("/");
+  await page
+    .getByRole("combobox", { name: "Search", exact: true })
+    .fill("margherita");
+  await page.locator("#food-suggestion-option-1").click();
+  await expect(page.locator('[data-card-reveal-state="shown"]')).toHaveCount(4);
+  for (const retry of [false, true]) {
+    const timing = page.evaluate(() => {
+      const result = Promise.withResolvers<number>();
+      let start: number | undefined;
+      const sample = (now: number) => {
+        const spinner = document.querySelector("[data-pagination-spinner]");
+        if (spinner && spinner.getBoundingClientRect().height > 0)
+          start ??= now;
+        else if (start !== undefined) {
+          result.resolve(now - start);
+          return;
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      return result.promise;
+    });
+    if (retry) await page.getByRole("button", { name: "Try again" }).click();
+    else
+      await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
+    expect(await timing).toBeGreaterThanOrEqual(1000);
+    await expect(page.locator("[data-result-card]")).toHaveCount(retry ? 6 : 3);
+    if (!retry) {
+      await expect(page.locator("[data-retry-message]")).toBeVisible();
+      expect(posts).toBe(2);
+      // Remaining at the sentinel must not trigger an automatic retry.
+      await page.evaluate(async () => {
+        const frame = Promise.withResolvers<void>();
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => frame.resolve()),
+        );
+        await frame.promise;
+      });
+      expect(posts).toBe(2);
+    }
+  }
+  expect(posts).toBe(3);
 });

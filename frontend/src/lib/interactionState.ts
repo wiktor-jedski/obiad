@@ -2,17 +2,14 @@ import { writable, type Readable } from "svelte/store";
 import type { AllowedQuantity } from "../client/types.gen";
 import type { InterfaceLanguage } from "./i18n";
 import {
-  isValidQuantitySyntax,
-  resolveCommittedValue,
-  unitSelectionValue,
-} from "./quantity";
-import {
   isSubstitutionSearchLocked,
   resetSubstitutionSearch,
 } from "./substitutionSearch";
 
+/** Supported portion units. */
 export type QuantityUnit = "serving" | "g" | "ml";
 
+/** Selected suggestion and its advertised quantity limits. */
 export interface SelectedFoodObject {
   readonly foodObjectId: number;
 
@@ -25,6 +22,7 @@ export interface SelectedFoodObject {
   readonly capturedLanguage: InterfaceLanguage;
 }
 
+/** Search interaction before a food is selected. */
 export interface EmptyInteractionState {
   readonly name: "empty";
 
@@ -33,6 +31,7 @@ export interface EmptyInteractionState {
   readonly focused: boolean;
 }
 
+/** Shared request state; the results view owns the editable portion. */
 export interface SubstitutionSearchInteractionState {
   readonly query: string;
 
@@ -40,51 +39,47 @@ export interface SubstitutionSearchInteractionState {
 
   readonly selected: SelectedFoodObject;
 
-  readonly quantityText: string;
-
-  readonly draftUnit: QuantityUnit;
-
-  readonly committedUnit: QuantityUnit;
-
-  readonly committedValue: number;
-
-  readonly quantityInvalid: boolean;
-
   readonly pageIndex: number;
 }
 
+/** Quantity-independent identity of one substitution page. */
 export interface CommittedSubstitutionInput {
   readonly foodObjectId: number;
 
-  readonly quantity: { readonly value: number; readonly unit: QuantityUnit };
-
   readonly pageIndex: number;
 }
 
+/** A new food search is pending. */
 export interface LoadingNewInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "loadingNew";
 }
 
+/** The next substitution page is pending. */
 export interface LoadingMoreInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "loadingMore";
 }
 
+/** The current search has substitutes. */
 export interface ResultsInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "results";
 }
 
+/** The current search has no substitutes. */
 export interface ZeroResultsInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "zeroResults";
 }
 
+/** The initial search failed and can be retried. */
 export interface NewSearchFailureInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "newSearchFailure";
 }
 
+/** Pagination failed while earlier results remain available. */
 export interface MoreFailureInteractionState extends SubstitutionSearchInteractionState {
   readonly name: "moreFailure";
 }
 
+/** Search and request states exposed to the application. */
 export type InteractionState =
   | EmptyInteractionState
   | LoadingNewInteractionState
@@ -94,6 +89,7 @@ export type InteractionState =
   | NewSearchFailureInteractionState
   | MoreFailureInteractionState;
 
+/** Transitions for selecting foods and loading substitution pages. */
 export interface InteractionStateStore extends Readable<InteractionState> {
   setQuery: (query: string) => void;
 
@@ -109,37 +105,10 @@ export interface InteractionStateStore extends Readable<InteractionState> {
 
   loadNextPage: () => void;
 
-  setQuantityText: (text: string) => void;
-
-  selectUnit: (unit: QuantityUnit) => void;
-
-  commitQuantity: () => void;
-
   reset: () => void;
 }
 
-function withCommittedQuantity<S extends SubstitutionSearchInteractionState>(
-  state: S,
-  text: string,
-  unit: QuantityUnit,
-): S {
-  const value = resolveCommittedValue(
-    text,
-    unit,
-    state.selected.allowedQuantities,
-  );
-  const changed =
-    value !== state.committedValue || unit !== state.committedUnit;
-  return {
-    ...state,
-    quantityText: String(value),
-    draftUnit: unit,
-    quantityInvalid: false,
-    committedValue: changed ? value : state.committedValue,
-    committedUnit: changed ? unit : state.committedUnit,
-  };
-}
-
+/** Creates an isolated search interaction store. */
 export function createInteractionState(): InteractionStateStore {
   const { subscribe, update } = writable<InteractionState>({
     name: "empty",
@@ -168,11 +137,6 @@ export function createInteractionState(): InteractionStateStore {
           query: selected.names[selected.capturedLanguage],
           focused: state.focused,
           selected,
-          quantityText: String(selected.quantity.value),
-          draftUnit: selected.quantity.unit,
-          committedValue: selected.quantity.value,
-          committedUnit: selected.quantity.unit,
-          quantityInvalid: false,
           pageIndex: 0,
         };
       });
@@ -228,73 +192,11 @@ export function createInteractionState(): InteractionStateStore {
         };
       });
     },
-    setQuantityText(text) {
-      if (isSubstitutionSearchLocked()) {
-        return;
-      }
-      update((state) => {
-        if (
-          state.name === "empty" ||
-          state.name === "loadingNew" ||
-          state.name === "loadingMore" ||
-          state.name === "moreFailure"
-        ) {
-          return state;
-        }
-        return {
-          ...state,
-          quantityText: text,
-          quantityInvalid: !isValidQuantitySyntax(text, state.draftUnit),
-        };
-      });
-    },
-    selectUnit(unit) {
-      if (isSubstitutionSearchLocked()) {
-        return;
-      }
-      update((state) => {
-        if (
-          state.name === "empty" ||
-          state.name === "loadingNew" ||
-          state.name === "loadingMore" ||
-          state.name === "moreFailure"
-        ) {
-          return state;
-        }
-        return withCommittedQuantity(
-          state,
-          String(unitSelectionValue(unit)),
-          unit,
-        );
-      });
-    },
-    commitQuantity() {
-      if (isSubstitutionSearchLocked()) {
-        return;
-      }
-      update((state) => {
-        if (
-          state.name === "empty" ||
-          state.name === "loadingNew" ||
-          state.name === "loadingMore" ||
-          state.name === "moreFailure"
-        ) {
-          return state;
-        }
-        if (!isValidQuantitySyntax(state.quantityText, state.draftUnit)) {
-          return { ...state, quantityInvalid: true };
-        }
-        return withCommittedQuantity(
-          state,
-          state.quantityText,
-          state.draftUnit,
-        );
-      });
-    },
     reset() {
       update(() => ({ name: "empty", query: "", focused: false }));
     },
   };
 }
 
+/** Shared application search interaction. */
 export const interactionState: InteractionStateStore = createInteractionState();

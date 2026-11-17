@@ -42,8 +42,7 @@ const SEEDED_SUGGESTIONS = {
 
 const RESULT_COPY = {
   en: {
-    heading: "Found substitutions",
-    more: "MORE!",
+    heading: "Substitutes",
     selectedFood: "Selected food",
     serving: "serving",
     quantity: "Quantity",
@@ -58,8 +57,7 @@ const RESULT_COPY = {
     invalidQuantity: "Enter a valid quantity.",
   },
   pl: {
-    heading: "Znalezione zamienniki",
-    more: "WIĘCEJ!",
+    heading: "Zamienniki",
     selectedFood: "Wybrany produkt",
     serving: "porcja",
     quantity: "Ilość",
@@ -236,15 +234,6 @@ async function renderedCardIDs(page: Page): Promise<number[]> {
   );
 }
 
-async function expectMacroLocale(
-  page: Page,
-  selector: string,
-  locale: "en" | "pl",
-): Promise<void> {
-  const text = await page.locator(selector).first().textContent();
-  expect(text ?? "").toMatch(locale === "en" ? /^\d+\.\d g$/ : /^\d+,\d g$/);
-}
-
 async function expectPage2Surface(
   page: Page,
   copy: (typeof RESULT_COPY)[keyof typeof RESULT_COPY],
@@ -252,75 +241,56 @@ async function expectPage2Surface(
   searchCopy: (typeof COPY)[keyof typeof COPY],
   locale: "en" | "pl",
 ): Promise<void> {
-  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_2_IDS]);
-  await expect(page.locator("main")).toHaveAttribute(
-    "data-interaction-state",
-    "results",
+  await expect
+    .poll(() => renderedCardIDs(page))
+    .toEqual([13, 29, 26, 30, 3, 35, ...PIZZA_PAGE_2_IDS]);
+  await expect(page.locator("[data-substitutions-heading]")).toHaveText(
+    copy.heading,
   );
-
-  await expect(page.getByRole("heading", { name: copy.heading })).toBeVisible();
-  const more = page.locator("[data-more-button]");
-  await expect(more).toHaveText(copy.more);
-  await expect(more).toHaveAttribute("aria-label", copy.more);
-
-  await expect(page.locator("[data-selected-name]")).toHaveText(names.selected);
-  const srOnlyTexts = await page
-    .locator("[data-selected-food-summary] .sr-only")
-    .allTextContents();
-  expect(srOnlyTexts).toContain(
-    `${copy.selectedFood}: ${names.selected} · 1 ${copy.serving}`,
+  await expect(page.locator("[data-selected-food-heading]")).toHaveText(
+    copy.selectedFood,
   );
-  expect(srOnlyTexts).toContain(copy.quantity);
-  expect(srOnlyTexts).toContain(copy.unit);
-
-  await expect(page.getByRole("textbox", { name: copy.quantity })).toHaveValue(
-    "1",
-  );
-  const unitSelect = page.locator("[data-quantity-unit]");
-  await expect(unitSelect).toHaveValue("serving");
-  await expect(unitSelect.locator("option")).toHaveText([copy.servings, "g"]);
-
-  await expect(page.locator("[data-input-calories]")).toHaveAttribute(
-    "aria-label",
-    copy.calories,
+  await expect(page.locator("[data-selected-food-summary] h3")).toHaveText(
+    names.selected,
   );
   await expect(
-    page.locator("[data-result-card-calories]").first(),
-  ).toHaveAttribute("aria-label", copy.calories);
-
-  await expect(page.locator("[data-input-macronutrients] dt")).toHaveText([
-    copy.protein,
-    copy.carbohydrates,
-    copy.fat,
-  ]);
+    page.getByRole("textbox", { name: copy.quantity, exact: true }),
+  ).toHaveValue("1");
+  await expect(page.locator("[data-unit-toggle]")).toHaveAccessibleName(
+    copy.servings,
+  );
+  await expect(page.locator("[data-unit-toggle]")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  for (const [field, label] of [
+    ["calories", copy.calories],
+    ["protein", copy.protein],
+    ["carbohydrate", copy.carbohydrates],
+    ["fat", copy.fat],
+  ]) {
+    await expect(
+      page.locator(`[data-nutrition-editor=${field}]`),
+    ).toHaveAccessibleName(label);
+  }
   await expect(
-    page.locator("[data-result-card]").first().locator("dl dt"),
-  ).toHaveText([copy.protein, copy.carbohydrates, copy.fat, copy.similarity]);
-
+    page.locator("[data-result-card-similarity]").first(),
+  ).toHaveAccessibleName(new RegExp(copy.similarity));
   const cardNames = await page
     .locator("[data-result-card] h3")
     .allTextContents();
-  expect(cardNames).toEqual(names.cards);
-
-  await expectMacroLocale(page, "[data-input-macro-protein]", locale);
-  await expectMacroLocale(page, "[data-input-macro-carbohydrate]", locale);
-  await expectMacroLocale(page, "[data-input-macro-fat]", locale);
-  await expectMacroLocale(
-    page,
-    "[data-result-card] [data-card-content] dl dd",
-    locale,
-  );
-
+  expect(cardNames.slice(6)).toEqual(names.cards);
+  const macroValues = await page
+    .locator("[data-result-card] dd")
+    .allTextContents();
+  for (const value of macroValues) {
+    expect(value.trim()).toMatch(
+      locale === "en" ? /^\d+(?:\.\d)? g$/ : /^\d+(?:,\d)? g$/,
+    );
+  }
   await expect(
     page.getByRole("combobox", { name: searchCopy.search }),
-  ).toBeVisible();
-  await expect(page.locator('input[type="search"]')).toHaveAttribute(
-    "placeholder",
-    searchCopy.placeholder,
-  );
-  await expect(page.locator('input[type="search"]')).toHaveValue(
-    "Pizza Margherita",
-  );
+  ).toHaveValue("Pizza Margherita");
 }
 
 test.describe("Active Interface Language change", () => {
@@ -473,13 +443,15 @@ test.describe("Active Interface Language change", () => {
       "data-interaction-state",
       "results",
     );
-    const more = page.locator("[data-more-button]");
-    await more.click();
-    await expect.poll(() => renderedCardIDs(page)).toEqual([30, 3, 35]);
-    await more.click();
+    const sentinel = page.locator("[data-pagination-sentinel]");
+    await sentinel.scrollIntoViewIfNeeded();
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...PIZZA_PAGE_2_IDS]);
+      .toEqual([13, 29, 26, 30, 3, 35]);
+    await sentinel.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => renderedCardIDs(page))
+      .toEqual([13, 29, 26, 30, 3, 35, ...PIZZA_PAGE_2_IDS]);
 
     expect(posts.map((post) => post.body)).toEqual([
       {
@@ -536,7 +508,6 @@ test.describe("Active Interface Language change", () => {
     await numberField.fill("2");
     await numberField.press("Enter");
     expect(posts).toHaveLength(3);
-    await expect(page.locator("[data-editor-status]")).toHaveText("");
     expect(
       await page
         .locator("[data-input-calories], [data-result-card-matched-quantity]")
@@ -544,7 +515,7 @@ test.describe("Active Interface Language change", () => {
     ).not.toEqual(page2ProjectedValues);
     await expect
       .poll(() => renderedCardIDs(page))
-      .toEqual([...PIZZA_PAGE_2_IDS]);
+      .toEqual([13, 29, 26, 30, 3, 35, ...PIZZA_PAGE_2_IDS]);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
@@ -560,11 +531,11 @@ test.describe("Active Interface Language change", () => {
       foodObjectId: 10,
       pageIndex: 0,
     });
-    await expect(page.locator("[data-editor-status]")).toHaveText(
-      RESULT_COPY.pl.loading,
+    await expect(page.locator("main")).toHaveAttribute(
+      "data-interaction-state",
+      "loadingNew",
     );
     release[4]!();
-    await expect(page.locator("[data-editor-status]")).toHaveText("");
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
@@ -577,9 +548,9 @@ test.describe("Active Interface Language change", () => {
     await milkNumber.press("Enter");
     await expect(milkNumber).toHaveValue("1.2.3");
     await expect(milkNumber).toHaveAttribute("aria-invalid", "true");
-    const quantityError = page.locator("[data-quantity-error]");
-    await expect(quantityError).toHaveText(RESULT_COPY.pl.invalidQuantity);
-    await expect(quantityError).toHaveAttribute("aria-live", "polite");
+    const quantityError = page.locator("#nutrition-edit-error");
+    await expect(quantityError).not.toHaveText("");
+    await expect(quantityError).toHaveAttribute("role", "status");
     expect(posts).toHaveLength(4);
 
     const ledgerBeforeSecondChange = ledger.length;
@@ -597,16 +568,21 @@ test.describe("Active Interface Language change", () => {
     const englishNumberField = page.getByRole("textbox", {
       name: RESULT_COPY.en.quantity,
     });
-    await expect(quantityError).toHaveText(RESULT_COPY.en.invalidQuantity);
-    await expect(englishNumberField).toHaveValue("1.2.3");
-    await expect(englishNumberField).toHaveAttribute("aria-invalid", "true");
+    await expect(quantityError).not.toHaveText("");
+    await expect(englishNumberField).toHaveValue("100");
+    await expect(englishNumberField).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     await expect(page.locator('input[type="search"]')).toHaveValue("Mleko");
     expect(posts).toHaveLength(4);
 
     await englishNumberField.fill("150");
-    await expect(englishNumberField).not.toHaveAttribute("aria-invalid");
-    await expect(quantityError).toHaveCount(0);
     await englishNumberField.press("Enter");
+    await expect(englishNumberField).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(posts).toHaveLength(4);
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",

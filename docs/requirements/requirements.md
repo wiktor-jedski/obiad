@@ -117,6 +117,8 @@ This document is the source of truth for the active product requirements of the 
 
 **Statement:** IF a Food Object has no usable image, THEN its card shall show the bundled placeholder.
 
+**Notes:** REQ-100 defines decode readiness and the explicit localized image-unavailable state when the bundled placeholder also fails.
+
 **Catalog contract:** A Food Object may contain one optional nonempty string `imageKey`. Dummy, production, and third-party catalogs use the same field. An absent key is valid.
 
 | Attribute | Value |
@@ -264,8 +266,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: Valid values succeed, an entered Serving count converts using the returned Serving base quantity, and fractional base values, comma decimals, zero, negatives, empty text, and letters fail. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-092. The statement and verification above record the previous contract.
 
 ## REQ-026 — Invalid quantity
 
@@ -274,8 +278,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: Each invalid value stays visible, starts zero requests, and shows the message. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-094. The statement and verification above record the previous contract.
 
 ## REQ-027 — Quantity editing
 
@@ -294,8 +300,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: After a valid commit the input and card values change proportionally and eligibility, result identity, order, page, focus, and Interface Language are unchanged, and no Substitute Search request is started. Browser calculation test: reprojected values match the full-precision projection. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-093. The statement and verification above record the previous contract.
 
 ## REQ-029 — Derived calories
 
@@ -424,8 +432,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: Expected next-page IDs replace all current card IDs. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-097. The statement and verification above record the previous contract.
 
 ## REQ-042 — Unique Substitutes
 
@@ -444,8 +454,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: Full and partial last pages show all remaining IDs and hide MORE!. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-097. The statement and verification above record the previous contract.
 
 ## REQ-044 — Zero-result state
 
@@ -508,8 +520,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Performance) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Browser timing: Each spinner is absent within 100 ms after the real response ends. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-098. The statement and verification above record the previous contract.
 
 ## REQ-050 — New-search failure
 
@@ -528,8 +542,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Failure check: A database outage on page 2 gives the specified cards, control, and message states. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-099. The statement and verification above record the previous contract.
 
 ## REQ-052 — First card motion
 
@@ -538,8 +554,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Browser timing: Card order and times are within one animation frame of the specified values. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-100. The statement and verification above record the previous contract.
 
 ## REQ-053 — MORE! card motion
 
@@ -548,8 +566,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Browser timing: The fade ends before replacement motion starts, and all specified times pass. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-100. The statement and verification above record the previous contract.
 
 ## REQ-054 — Reduced motion
 
@@ -558,8 +578,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: Reduced-motion emulation shows all replacement cards at the same time. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-100. The statement and verification above record the previous contract.
 
 ## REQ-055 — Complete translation
 
@@ -638,8 +660,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Browser check: Viewports of 320, 768, and 1280 px have the specified column counts. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-096. The statement and verification above record the previous contract.
 
 ## REQ-063 — Viewport fit
 
@@ -765,7 +789,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-074 — Request response time
 
-**Statement:** After warm-up, each search and MORE! request shall end in 500 ms or less with one active request.
+**Statement:** After warm-up, each search and next-page request shall end in 500 ms or less with one active request. This limit measures the HTTP request, not the pagination spinner minimum interval.
 
 | Attribute | Value |
 | --- | --- |
@@ -780,8 +804,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Performance) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Browser performance check: Each of 20 searches meets the limit. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-100. The statement and verification above record the previous contract.
 
 ## REQ-076 — Autocomplete match order
 
@@ -811,7 +837,7 @@ This document is the source of truth for the active product requirements of the 
 | --- | --- |
 | Type | Behavior |
 | Status | Active |
-| Verification | Playwright: The input and each card show the browser-projected whole calories with the localized `Calories` or `Kalorie` label and `kcal`. Browser calculation test: the projected values match the full-precision result after final rounding. |
+| Verification | Playwright: The selected card and each substitute show whole projected calories with `kcal`; the selected calorie editor has the localized accessible name `Calories` or `Kalorie`. |
 
 ## REQ-079 — Compact result presentation
 
@@ -820,8 +846,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Usability) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: At 1920 × 1080, after a three-card result search, `scrollHeight` is not more than `clientHeight`; the selected-food card and substitutions heading are centered. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-096. The statement and verification above record the previous contract.
 
 ## REQ-080 — No Search loading spinner
 
@@ -852,8 +880,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: During a controlled pending MORE! request, the focused control keeps its localized label, has `aria-disabled=true`, uses the specified gray colors, and repeated activation starts no additional request. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-098. The statement and verification above record the previous contract.
 
 ## REQ-083 — Successful result-page focus
 
@@ -862,8 +892,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Quality (Accessibility) |
-| Status | Active |
+| Status | Deprecated |
 | Verification | Playwright: After a new Search, an intermediate MORE! page, and the last page, the localized results heading is the active element in English and Polish. |
+
+**Notes:** Superseded by approved results design G in ISSUE-024; see REQ-101. The statement and verification above record the previous contract.
 
 ## REQ-084 — Zero-result focus
 
@@ -948,3 +980,114 @@ This document is the source of truth for the active product requirements of the 
 | Verification | Catalog-schema validation: Version `1` synthetic catalogs with at least one Food Object succeed, including catalogs with no Food Families and with omitted or valid nonempty `imageKey`. Other schema versions, empty Food Object arrays, empty or nonstring `imageKey`, `dataCommit`, other provenance fields, catalog-kind discriminators, invalid records or references, and unknown fields fail without writing generated output. |
 
 **Notes:** Phase 30 release verification and the Phase 31 pinned-submodule launcher retain ownership of production provenance and attribution outside the generic catalog contract.
+
+## REQ-092 — Numeric entry precision
+
+**Statement:** The selected-food numeric editors shall accept positive whole g/ml and kcal, Serving counts with up to two decimal places, and macronutrients with up to one decimal place, with decimal comma or dot separators.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Accepted entries commit; empty, nonpositive, malformed, exponent, excess-precision, and over-limit entries fail without clamping. Quantity limits use the advertised active unit; nutrient targets use the base-unit limit scaled by the profile. |
+
+## REQ-093 — Canonical portion editing
+
+**Statement:** WHEN a selected-food quantity, calorie, protein, carbohydrate, or fat edit commits, the browser shall scale one unrounded canonical base portion and synchronously reproject all accumulated substitutes as equal-calorie matches without an HTTP request or a change to the food profile, ranking, similarity, focus, or card reveal state.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Each editor updates every loaded page proportionally, including while pagination is pending or failed; new cards use the latest portion. Unchanged focus and blur preserve the exact underlying amount. |
+
+## REQ-094 — Editor commit and cancellation
+
+**Statement:** The numeric editors shall commit on Enter or blur, cancel on Escape, retain draft and focus with a localized error on invalid Enter, and restore the last committed value with a localized error on invalid blur.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Exercise each outcome in English and Polish. True zero-profile values are read-only; positive values rounded to zero remain editable. |
+
+## REQ-095 — Amount-preserving unit control
+
+**Statement:** WHERE a selected food has a Serving, its header shall expose one whole-pill native button that switches between g/ml and ea without changing the canonical portion, including amounts beyond a rounded or floored Serving limit.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Every hit point switches units; both labels remain visible; aria-pressed means Servings active; the localized accessible name is Servings/Porcje. Space and Enter work. Pointer use retains logical focus without a persistent outline; keyboard focus has an outline. Foods without Servings have fixed units and no toggle. |
+
+## REQ-096 — Results card presentation
+
+**Statement:** The selected food and substitutes shall use the same 28 px rounded cards in one centered vertical list with a maximum width of 920 px.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser inspection: Below 640 px a square image is above details; at 640 px and wider it is on the left at 38% width. At 1024 px and wider names are 30 px, summary values 24 px, and bottom-aligned macros 18 px; smaller names and summaries are 18 px. Centered headings read Selected food/Wybrany produkt and Substitutes/Zamienniki. No rank labels or decorative slogans appear. The summary is quantity/unit, a separator, and kcal; substitute similarity is a right-aligned percentage with a localized accessible name. |
+
+## REQ-097 — Accumulated pagination
+
+**Statement:** WHEN the bottom sentinel enters the viewport and another page exists, the browser shall append the next page once without removing older cards or showing a MORE control.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: IntersectionObserver starts one request per pending page; all earlier IDs remain, the last page stops pagination, and a new search resets accumulated pages and the local portion. |
+
+## REQ-098 — Pagination loading indication
+
+**Statement:** WHILE a next-page request or explicit retry is pending, the browser shall show a centered pagination spinner until both the response has settled and at least one second has elapsed after the spinner paints.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser timing: Fast and delayed responses and retries obey both conditions. No visual spinner appears below Search or inside any selected-food or substitute card; card reverses contain only reverse art and localized loading text. |
+
+## REQ-099 — Pagination failure and retry
+
+**Statement:** IF a next-page request fails, THEN the browser shall retain all loaded cards and the editable portion and expose a localized explicit retry without automatic retry or focus movement.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: An outage retains IDs and edits; only Try again/Spróbuj ponownie starts the retry, with the same spinner minimum interval. |
+
+## REQ-100 — Image-ready card reveal
+
+**Statement:** Each selected-food and substitute card shall paint its reverse before an 800 ms flip after its image successfully decodes, using the X axis at 640 px and wider and the Y axis below 640 px.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Cached and appended images obey image.decode readiness and reverse paint. Local edits do not replay the flip. Reduced motion reveals after readiness without movement. A failed image decodes the bundled placeholder; if that also fails, localized Image unavailable/Obraz niedostępny replaces the broken image. The hidden front is inert until reveal completes. No fade or in-card visual spinner is present. |
+
+## REQ-101 — Results focus
+
+**Statement:** WHEN a new search succeeds with substitutes, the browser shall focus the selected-food heading; pagination and failures shall not move focus or scroll to a heading.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: First success focuses the selected-food heading, zero success focuses the zero-result message, appended pages preserve focus and scroll position, and unrevealed card inputs cannot receive focus. |
+
+## REQ-102 — Results typography and editors
+
+**Statement:** Results nutrition values shall use locally bundled Source Serif 4, and selected-food editors shall use native text inputs styled as underlined numbers sized to their rendered text width.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser inspection: No remote font dependency exists. Inter headings and other existing UI fonts remain. Editors have no boxes; hover text and underline are sage, and focused values are bold mint. Whole g/ml and kcal, up-to-one-decimal macros, and up-to-two-decimal ea displays omit trailing zeros. |
+

@@ -159,7 +159,7 @@ async function expectActiveOption(page: Page, index: number): Promise<void> {
 }
 
 function selectedInput(page: Page) {
-  return page.locator("[data-selected-input]");
+  return page.locator("[data-selected-food-summary]");
 }
 
 test.describe("suggestion keyboard control", () => {
@@ -221,12 +221,17 @@ test.describe("suggestion keyboard control", () => {
       .toEqual(CHICKEN_SOUP_DEFAULT);
     await expect.poll(() => posts[0]?.status ?? null).toBe(200);
 
-    await expect(selectedInput(page)).toContainText(COPY.en.selectedFood);
-    await expect(selectedInput(page)).toContainText(
-      "Polish chicken soup · 1 serving",
+    await expect(page.locator("[data-selected-food-heading]")).toHaveText(
+      COPY.en.selectedFood.replace(/:$/, ""),
+    );
+    await expect(selectedInput(page).locator("h3")).toHaveText(
+      "Polish chicken soup",
+    );
+    await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
+      "1",
     );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
-    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
+    await expect(page.locator("[data-selected-food-heading]")).toBeFocused();
 
     const committedSearchBox = await search.boundingBox();
     await search.fill("olive");
@@ -239,8 +244,8 @@ test.describe("suggestion keyboard control", () => {
       "data-interaction-state",
       "results",
     );
-    await expect(selectedInput(page)).toContainText(
-      "Polish chicken soup · 1 serving",
+    await expect(selectedInput(page).locator("h3")).toHaveText(
+      "Polish chicken soup",
     );
     await expect(page.locator("[data-result-card]").first()).toBeVisible();
 

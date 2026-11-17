@@ -25,6 +25,15 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
+function nutritionValue(field: string): string | null {
+  return (
+    document.querySelector<HTMLInputElement>(`[data-nutrition-editor=${field}]`)
+      ?.value ??
+    document.querySelector(`[data-nutrition-readonly=${field}]`)?.textContent ??
+    null
+  );
+}
+
 function elementText(selector: string): string | null {
   return document.querySelector(selector)?.textContent ?? null;
 }
@@ -107,10 +116,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     await settle();
 
     // Input: 31g protein, 0g carb, 3.6g fat per 100g -> 4*31 + 0 + 9*3.6 = 156.4 kcal -> 156 kcal
-    expect(elementText("[data-input-macro-protein]")).toBe("31.0 g");
-    expect(elementText("[data-input-macro-carbohydrate]")).toBe("0.0 g");
-    expect(elementText("[data-input-macro-fat]")).toBe("3.6 g");
-    expect(elementText("[data-input-calories]")).toBe("156 kcal");
+    expect(nutritionValue("protein")).toBe("31");
+    expect(nutritionValue("carbohydrate")).toBe("0");
+    expect(nutritionValue("fat")).toBe("3.6");
+    expect(nutritionValue("calories")).toBe("156");
 
     // Tofu (118 kcal/100g) matches 156.4 kcal at 132.542... g -> 133 g.
     // Unrounded scaling yields 33.1 g protein, 2.7 g fat, and 156 kcal.
@@ -120,7 +129,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues).toEqual(["33.1 g", "0.0 g", "2.7 g", "95%"]);
+    expect(ddValues).toEqual(["33.1 g", "0 g", "2.7 g"]);
+    expect(elementText("[data-result-card-similarity]")).toBe("95%");
   });
 
   test("liquid base-unit fixture proves whole ml output for liquid candidates", async () => {
@@ -163,10 +173,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
 
     // Input 250 ml (3.4g P, 4.8g C, 3.2g F / 100 ml) scales by 2.5 -> 8.5g P, 12.0g C, 8.0g F.
     // Input calories: 4*8.5 + 4*12 + 9*8 = 154 kcal.
-    expect(elementText("[data-input-macro-protein]")).toBe("8.5 g");
-    expect(elementText("[data-input-macro-carbohydrate]")).toBe("12.0 g");
-    expect(elementText("[data-input-macro-fat]")).toBe("8.0 g");
-    expect(elementText("[data-input-calories]")).toBe("154 kcal");
+    expect(nutritionValue("protein")).toBe("8.5");
+    expect(nutritionValue("carbohydrate")).toBe("12");
+    expect(nutritionValue("fat")).toBe("8");
+    expect(nutritionValue("calories")).toBe("154");
 
     // Candidate: 4g P, 2g C, 1g F per 100 ml -> 33 kcal / 100 ml
     // Matched Quantity: (154 * 100) / 33 = 466.666... ml -> 467 ml
@@ -176,10 +186,11 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues).toEqual(["18.7 g", "9.3 g", "4.7 g", "88%"]);
+    expect(ddValues).toEqual(["18.7 g", "9.3 g", "4.7 g"]);
+    expect(elementText("[data-result-card-similarity]")).toBe("88%");
 
-    const quantity = document.querySelector("[data-quantity-number]");
-    const editor = document.querySelector("[data-quantity-editor]");
+    const quantity = document.querySelector("[data-nutrition-editor=quantity]");
+    const editor = document.querySelector("[data-selected-food-summary]");
     if (
       !(quantity instanceof HTMLInputElement) ||
       !(editor instanceof HTMLElement)
@@ -187,11 +198,11 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
       throw new TypeError("Liquid quantity editor must be present");
     }
     await fireEvent.input(quantity, { target: { value: "500" } });
-    await fireEvent.focusOut(editor, { relatedTarget: document.body });
+    await fireEvent.blur(quantity);
     await tick();
 
-    expect(elementText("[data-input-macro-protein]")).toBe("17.0 g");
-    expect(elementText("[data-input-calories]")).toBe("308 kcal");
+    expect(nutritionValue("protein")).toBe("17");
+    expect(nutritionValue("calories")).toBe("308");
     expect(elementText("[data-result-card-matched-quantity]")).toBe("933 ml");
     expect(searches, "a local ml blur starts no additional POST").toBe(1);
     expect(
@@ -241,10 +252,10 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
 
     // 1 serving = 350 g (3.5x): 35.0g P, 105.0g C, 35.0g F.
     // Input calories: 4*35 + 4*105 + 9*35 = 875 kcal.
-    expect(elementText("[data-input-macro-protein]")).toBe("35.0 g");
-    expect(elementText("[data-input-macro-carbohydrate]")).toBe("105.0 g");
-    expect(elementText("[data-input-macro-fat]")).toBe("35.0 g");
-    expect(elementText("[data-input-calories]")).toBe("875 kcal");
+    expect(nutritionValue("protein")).toBe("35");
+    expect(nutritionValue("carbohydrate")).toBe("105");
+    expect(nutritionValue("fat")).toBe("35");
+    expect(nutritionValue("calories")).toBe("875");
 
     // Candidate: 8g P, 24g C, 8g F per 100 g -> 200 kcal/100 g
     // Matched Quantity: (875 * 100) / 200 = 437.5 g -> 438 g
@@ -254,7 +265,8 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues).toEqual(["35.0 g", "105.0 g", "35.0 g", "99%"]);
+    expect(ddValues).toEqual(["35 g", "105 g", "35 g"]);
+    expect(elementText("[data-result-card-similarity]")).toBe("99%");
   });
 
   test("whole-calorie boundary rounds exact half up (100.5 kcal -> 101 kcal)", async () => {
@@ -297,7 +309,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-input-calories]")).toBe("101 kcal");
+    expect(nutritionValue("calories")).toBe("101");
   });
 
   test("whole-calorie boundary rounds below half down (100.4 kcal -> 100 kcal)", async () => {
@@ -340,7 +352,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-input-calories]")).toBe("100 kcal");
+    expect(nutritionValue("calories")).toBe("100");
   });
 
   test("whole-quantity boundary rounds exact half up (150.5 g -> 151 g)", async () => {
@@ -506,7 +518,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues[0]).toBe("12.0 g");
+    expect(ddValues[0]).toBe("12 g");
   });
 
   test("a fixture that fails under early rounding confirms full calculation precision", async () => {
@@ -550,7 +562,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-input-calories]")).toBe("235 kcal");
+    expect(nutritionValue("calories")).toBe("235");
     expect(elementText("[data-result-card-matched-quantity]")).toBe("412 ml");
     expect(elementText("[data-result-card-calories]")).toBe("235 kcal");
 
@@ -561,7 +573,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     expect(ddValues[0]).toBe("32.9 g");
     expect(ddValues[1]).toBe("16.5 g");
     expect(ddValues[2]).toBe("4.1 g");
-    expect(ddValues[3]).toBe("85%");
+    expect(elementText("[data-result-card-similarity]")).toBe("85%");
   });
 
   test("equal-calorie exact-half boundary fixture proves candidate card calories match input calories under half-up display rounding", async () => {
@@ -601,17 +613,17 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-input-calories]")).toBe("101 kcal");
+    expect(nutritionValue("calories")).toBe("101");
     expect(elementText("[data-result-card-calories]")).toBe("101 kcal");
     expect(elementText("[data-result-card-matched-quantity]")).toBe("89 g");
 
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues[0]).toBe("0.0 g");
-    expect(ddValues[1]).toBe("0.0 g");
+    expect(ddValues[0]).toBe("0 g");
+    expect(ddValues[1]).toBe("0 g");
     expect(ddValues[2]).toBe("11.2 g");
-    expect(ddValues[3]).toBe("90%");
+    expect(elementText("[data-result-card-similarity]")).toBe("90%");
   });
 
   test("varied-ratio exact 150.5 g matched quantity half-up boundary rounds to 151 g", async () => {
@@ -651,7 +663,7 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     render(App);
     await settle();
 
-    expect(elementText("[data-input-calories]")).toBe("11 kcal");
+    expect(nutritionValue("calories")).toBe("11");
     expect(elementText("[data-result-card-calories]")).toBe("11 kcal");
     expect(elementText("[data-result-card-matched-quantity]")).toBe("151 g");
   });
@@ -784,6 +796,94 @@ describe("component integration: quantity reprojection (P22-G4, REQ-029, REQ-031
     const ddValues = Array.from(
       document.querySelectorAll("[data-result-card] dd"),
     ).map((element) => element.textContent);
-    expect(ddValues[0]).toBe("12.0 g");
+    expect(ddValues[0]).toBe("12 g");
+  });
+
+  test("rounded positive nutrients stay editable while true zero is read-only; unchanged blur preserves exact portion", async () => {
+    const selected: SelectedFoodObject = {
+      foodObjectId: 112,
+      names: { en: "Small profile", pl: "Mały profil" },
+      quantity: { value: 100, unit: "g" },
+      allowedQuantities: [{ unit: "g", maximumValue: 100000 }],
+      capturedLanguage: "en",
+    };
+    let searches = 0;
+    mockSubstituteResponse(
+      {
+        pageIndex: 0,
+        totalEligibleCount: 1,
+        hasMore: false,
+        selectedFood: {
+          foodObjectId: 112,
+          names: selected.names,
+          macroProfile: { protein: 0.04, carbohydrate: 0, fat: 1 },
+          baseUnit: "g",
+        },
+        items: [
+          {
+            foodObjectId: 212,
+            names: { en: "Alternative", pl: "Zamiennik" },
+            macroProfile: { protein: 25, carbohydrate: 0, fat: 0 },
+            baseUnit: "g",
+            similarityPercent: 80,
+          },
+        ],
+      },
+      () => {
+        searches += 1;
+      },
+    );
+    interactionState.selectSuggestion(selected);
+    render(App);
+    await settle();
+    const protein = document.querySelector<HTMLInputElement>(
+      "[data-nutrition-editor=protein]",
+    );
+    const calories = document.querySelector<HTMLInputElement>(
+      "[data-nutrition-editor=calories]",
+    );
+    const quantity = document.querySelector<HTMLInputElement>(
+      "[data-nutrition-editor=quantity]",
+    );
+    if (!protein || !calories || !quantity)
+      throw new Error("Positive nutrients must be editable");
+    expect(protein.value).toBe("0");
+    expect(
+      document.querySelector("[data-nutrition-editor=carbohydrate]"),
+    ).toBeNull();
+    expect(nutritionValue("carbohydrate")).toBe("0");
+    await fireEvent.focus(protein);
+    await fireEvent.blur(protein);
+    expect(quantity.value).toBe("100");
+    await fireEvent.focus(protein);
+    await fireEvent.input(protein, { target: { value: "0" } });
+    await fireEvent.keyDown(protein, { key: "Enter" });
+    await tick();
+    expect(protein.getAttribute("aria-invalid")).toBe("true");
+    expect(protein.value).toBe("0");
+    expect(quantity.value).toBe("100");
+    expect(elementText("#nutrition-edit-error")).toContain("Protein");
+    await fireEvent.keyDown(protein, { key: "Escape" });
+    await tick();
+    expect(protein.hasAttribute("aria-invalid")).toBe(false);
+    expect(quantity.value).toBe("100");
+    await fireEvent.focus(calories);
+    await fireEvent.input(calories, { target: { value: "1" } });
+    await fireEvent.keyDown(calories, { key: "Enter" });
+    await tick();
+    expect(quantity.value).toBe("11");
+    await fireEvent.focus(quantity);
+    await fireEvent.blur(quantity);
+    await tick();
+    expect(calories.value).toBe("1");
+    await fireEvent.focus(protein);
+    await fireEvent.input(protein, { target: { value: "0.1" } });
+    await fireEvent.keyDown(protein, { key: "Enter" });
+    await tick();
+    expect(quantity.value).toBe("250");
+    expect(nutritionValue("fat")).toBe("2.5");
+    expect(calories.value).toBe("23");
+    expect(elementText("[data-result-card-matched-quantity]")).toBe("23 g");
+    expect(searches).toBe(1);
   });
 });

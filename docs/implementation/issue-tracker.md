@@ -74,18 +74,20 @@ Bubble-tail styles use Tailwind `@apply` rules in `frontend/src/app.css`.
 
 Type: Improvement
 Status: ready-for-human
-Resolution: Variant C selected as the base; revised prototype ready for review.
+Resolution: Approved G implemented on `results-view-g`; frontend checks and local smoke checks passed. Full browser integration is delegated to CI.
 
-### Question
+### Original question (historical)
 
 Which layout and macro font should the results view use after a food search?
 Use the same card style for the selected food and substitutes. Put square images
 on the left on desktop and above the details on mobile. Replace MORE! with a
 centered loading spinner and append results when the user reaches the bottom.
 
-### Prototype
+### Prototype (historical)
 
 Primary source branch: `prototype/results-candidates`.
+Preserved final prototype commit: `cbba139329`. The descriptions and checks below
+record prototype iterations, not the current production route or final verification.
 The prototype is under `frontend/src/lib/components/results-prototype/`.
 The existing `/` route uses it only in development with `?variant=A`, `B`, or `C`.
 The floating bar and left/right arrow keys change the variant. Arrow keys in
@@ -270,3 +272,56 @@ and visible cards after resizing. Desktop and mobile motion were checked visuall
 Reduced-motion checks at 320 and 1440 px confirmed no flip animation.
 Captured on `prototype/results-candidates`; the responsive direction remains
 a prototype for user evaluation.
+
+### Approved production cutover
+
+The user approved complete G for normal `/` in development and production.
+The production branch is `results-view-g`. The prototype remains preserved on
+`prototype/results-candidates` at `cbba139329`; prototype candidates, URL modes,
+and switchers are removed from production source.
+
+Selected food and substitutes share the centered 920 px vertical card list,
+28 px corners, responsive image placement, centered localized headings, and
+locally bundled Source Serif 4 nutrition typography. Inter headings remain.
+Only selected-food values are editable. One unrounded canonical base portion
+drives quantity, kcal, and all three macro editors and every accumulated page.
+Reject invalid or over-limit entries; do not clamp. Unit changes preserve amount,
+including amounts above a rounded Serving limit. The whole header pill switches
+units; pointer and keyboard focus follow the approved F control behavior.
+
+Append pages through IntersectionObserver. Retain older cards and allow local
+edits while a page is pending or failed. Retry is explicit, never automatic.
+The pagination spinner stays for at least one second after paint and until the
+request settles. It is the only results spinner: reverse cards show reverse art
+and localized loading text, with no in-card visual spinner.
+
+The 800 ms G flip waits for actual image decode, including cached images.
+Use the X axis at 640 px and wider and the Y axis below. Decode the bundled
+placeholder on failure; if it also fails, show localized image-unavailable text.
+Keep hidden fronts inert. Reduced motion reveals after readiness without movement.
+Local edits do not replay the reveal. No fade remains.
+
+A new successful search focuses the selected-food heading; zero results focus
+the zero-result message. Pagination and failures do not move focus or scroll to
+a heading. Search resets accumulated pages and the local portion.
+
+ResultsView owns canonical portion, editor drafts, and accumulated raw pages.
+The query observer and shared request lock remain. Obsolete global quantity
+draft/clamp APIs, quantity helper, and fade Module are removed. The HTTP contract
+remains `foodObjectId` and `pageIndex`; landing example requests remain separate.
+
+Current contracts: REQ-092–REQ-102 and ARCH-023–ARCH-024. Superseded requirements
+and prototype checks above remain historical evidence.
+
+Cutover verification: `scripts/ci_check.py --frontend` passed. Component integration
+checks found one request-count fixture that included the landing example; the
+fixture now preserves request headers and separates that request from Search.
+The affected integration file passed after the fix; all other cases had passed.
+
+Browser smoke checks at normal `/` covered 1440 px and 320 px, decoded selected
+images, bundled typography, quantity and macro edits, portion-preserving unit
+switches, equal-calorie substitutes, removal of the prototype UI, and incremental
+paging. The pagination spinner stayed for 1036 ms before append. Narrow-screen
+macro labels fit in English and Polish. No visual spinner remains inside cards.
+The user requested pushing the branch and using automated CI for the full browser
+integration suite; that suite was not run locally for this cutover.

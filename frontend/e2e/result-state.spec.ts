@@ -4,10 +4,6 @@ import { isLandingDialogueRequest } from "./request-purpose";
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
-const SEARCH_TOP_PX = 64;
-
-const REGION_GAP_PX = 24;
-
 const VERTICAL_CENTER_DVH = 0.45;
 
 const CARD_COUNT = 3;
@@ -69,91 +65,39 @@ async function expectEmptyStateGeometry(page: Page): Promise<void> {
 
 async function expectResultStateComposition(page: Page): Promise<void> {
   await expect(page.locator("main")).toHaveCount(1);
-
-  const regionSequence = await page.evaluate(() => {
-    const regions = Array.from(
-      document.querySelectorAll(
-        "main [data-search-region], main [data-selected-input-region], main [data-result-region]",
-      ),
-    );
-    return regions.map((element) =>
-      element.hasAttribute("data-search-region")
-        ? "search"
-        : element.hasAttribute("data-selected-input-region")
-          ? "selected-input"
-          : "result",
-    );
-  });
-  expect(regionSequence).toEqual(["search", "selected-input", "result"]);
-  await expect(page.locator("[data-selected-input-region]")).toContainText(
-    "Pizza Margherita · 1 serving",
+  await expect(page.locator("[data-selected-food-summary] h3")).toHaveText(
+    "Pizza Margherita",
   );
-
-  const search = page.getByRole("combobox", { name: COPY.search });
-  const searchBox = await search.boundingBox();
-  if (searchBox === null) {
-    throw new Error("Search field has no bounding box");
-  }
-  expect(
-    Math.abs(searchBox.y - SEARCH_TOP_PX),
-    "the Search field's top edge is 64px from the viewport top",
-  ).toBeLessThanOrEqual(1);
-
-  const selectedBox = await page
-    .locator("[data-selected-input-region]")
-    .boundingBox();
-  if (selectedBox === null) {
-    throw new Error("Selected-input region has no bounding box");
-  }
-  expect(
-    Math.abs(selectedBox.y - (searchBox.y + searchBox.height) - REGION_GAP_PX),
-    "the selected-input region is 24px below the Search field",
-  ).toBeLessThanOrEqual(1);
-  const resultBox = await page.locator("[data-result-region]").boundingBox();
-  if (resultBox === null) {
-    throw new Error("Result region has no bounding box");
-  }
-  expect(
-    Math.abs(
-      resultBox.y - (selectedBox.y + selectedBox.height) - REGION_GAP_PX,
-    ),
-    "the result region is 24px below the selected-input region",
-  ).toBeLessThanOrEqual(1);
-
-  const cards = page.locator("[data-result-card]");
-  await expect(cards).toHaveCount(CARD_COUNT);
-  const cardBoxes = await Promise.all(
-    Array.from({ length: CARD_COUNT }, async (_, index) => {
-      const box = await cards.nth(index).boundingBox();
-      if (box === null) {
-        throw new Error(`Result card ${index + 1} has no bounding box`);
-      }
-      return box;
+  await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
+    "1",
+  );
+  const cards = page.locator(
+    "[data-selected-food-summary], [data-result-card]",
+  );
+  await expect(cards).toHaveCount(4);
+  const boxes = await cards.evaluateAll((elements) =>
+    elements.map((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
     }),
   );
-  for (let index = 1; index < CARD_COUNT; index += 1) {
-    expect(
-      Math.abs(cardBoxes[index].y - cardBoxes[0].y),
-      `card ${index + 1} stays in the desktop card row`,
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(cardBoxes[index].width - cardBoxes[0].width),
-    ).toBeLessThanOrEqual(1);
-    expect(
-      cardBoxes[index].x,
-      `card ${index + 1} is after card ${index}`,
-    ).toBeGreaterThanOrEqual(
-      cardBoxes[index - 1].x + cardBoxes[index - 1].width,
+  for (let index = 1; index < boxes.length; index += 1) {
+    expect(Math.abs(boxes[index].x - boxes[0].x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes[index].width - boxes[0].width)).toBeLessThanOrEqual(
+      1,
+    );
+    expect(boxes[index].y).toBeGreaterThanOrEqual(
+      boxes[index - 1].y + boxes[index - 1].height,
     );
   }
-
-  expect(cardBoxes[0].y).toBeGreaterThan(searchBox.y + searchBox.height);
-
-  await expect(cards.first().getByRole("heading")).toHaveText("Gyoza");
+  expect(boxes[0].width).toBeLessThanOrEqual(920);
+  await expect(
+    page.locator("[data-result-card]").first().getByRole("heading"),
+  ).toHaveText("Gyoza");
 }
 
 test.describe("result state", () => {
-  test("the complete anonymous pointer flow composes one primary column with distinct Search, selected-input, and result regions in order; Search sits 64px from the viewport top; the regions use the approved gaps; the three cards use equal desktop columns below Search; and every food-data request uses /api against the seeded catalog", async ({
+  test("the anonymous pointer flow shows one vertical card column and uses same-origin catalog requests", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -194,7 +138,7 @@ test.describe("result state", () => {
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
 
-  test("while a new search is pending, no spinner appears below Search and the selected-input region starts 24px below it; fulfillment completes the results composition", async ({
+  test("a pending search keeps focus and fulfillment reveals selected food and substitutes", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -226,38 +170,18 @@ test.describe("result state", () => {
       "loadingNew",
     );
     await expect(page.locator("[data-new-search-spinner]")).toHaveCount(0);
-    await expect(page.locator("[data-selected-input-region]")).toBeVisible();
-
-    const selectedGap = await page.evaluate(() => {
-      const input = document.getElementById("food-search");
-      const selected = document.querySelector("[data-selected-input-region]");
-      if (
-        !(input instanceof HTMLElement) ||
-        !(selected instanceof HTMLElement)
-      ) {
-        throw new Error(
-          "Search and selected-input regions must be HTML elements",
-        );
-      }
-      return (
-        selected.getBoundingClientRect().top -
-        input.getBoundingClientRect().bottom
-      );
-    });
-    expect(
-      selectedGap,
-      "the selected-input region starts 24px below Search",
-    ).toBe(REGION_GAP_PX);
+    await expect(search).toBeFocused();
+    await expect(page.locator("[data-result-card]")).toHaveCount(0);
 
     releaseFirst();
     await expect(page.locator("main")).toHaveAttribute(
       "data-interaction-state",
       "results",
     );
-    await expect(page.locator("[data-substitutions-heading]")).toBeFocused();
+    await expect(page.locator("[data-selected-food-heading]")).toBeFocused();
     await expect(page.locator("[data-result-card]")).toHaveCount(CARD_COUNT);
   });
-  test("at 1920 × 1080 desktop viewport, a three-card result search shows the centered selected-food card, centered substitutions heading, and all cards without vertical scroll, showing API calories with kcal and active-language accessibility labels in English and Polish (REQ-078, REQ-079, P19-G4, P19-G5)", async ({
+  test("desktop results center the cards and localize nutrition input names", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -275,7 +199,7 @@ test.describe("result state", () => {
     ).toBeLessThanOrEqual(1);
 
     const heading = page.locator("[data-substitutions-heading]");
-    await expect(heading).toHaveText("Found substitutions");
+    await expect(heading).toHaveText("Substitutes");
     const headingBox = (await heading.boundingBox())!;
     const headingCenter = headingBox.x + headingBox.width / 2;
     expect(
@@ -294,24 +218,24 @@ test.describe("result state", () => {
         document.documentElement.scrollHeight >
         document.documentElement.clientHeight,
     );
-    expect(isScrollable, "page has no vertical scrollbar").toBe(false);
+    expect(isScrollable, "the vertical result list scrolls").toBe(true);
 
-    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
-    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
-      "aria-label",
-      "Calories",
+    await expect(page.locator("[data-nutrition-editor=calories]")).toHaveValue(
+      "875",
     );
+    await expect(
+      page.locator("[data-nutrition-editor=calories]"),
+    ).toHaveAttribute("aria-label", "Calories");
 
     await page
       .getByRole("combobox", { name: "Interface language" })
       .selectOption("pl");
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
-      "Znalezione zamienniki",
+      "Zamienniki",
     );
-    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
-      "aria-label",
-      "Kalorie",
-    );
+    await expect(
+      page.locator("[data-nutrition-editor=calories]"),
+    ).toHaveAttribute("aria-label", "Kalorie");
 
     const searchPl = page.getByRole("combobox", { name: "Szukaj" });
     await searchPl.fill("margherita");
@@ -320,10 +244,11 @@ test.describe("result state", () => {
     await page.locator(`#${PIZZA_MARGHERITA_OPTION_ID}`).click();
     await expect(panelPl).toHaveCount(0);
 
-    await expect(page.locator("[data-input-calories]")).toHaveAttribute(
-      "aria-label",
-      "Kalorie",
+    await expect(
+      page.locator("[data-nutrition-editor=calories]"),
+    ).toHaveAttribute("aria-label", "Kalorie");
+    await expect(page.locator("[data-nutrition-editor=calories]")).toHaveValue(
+      "875",
     );
-    await expect(page.locator("[data-input-calories]")).toHaveText("875 kcal");
   });
 });

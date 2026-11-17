@@ -14,7 +14,7 @@ const COPY = {
     retryMessage: "Could not load substitutions. Try again.",
     chickenName: "Chicken breast",
     pizzaName: "Pizza Margherita",
-    moreButton: "MORE!",
+    retry: "Try again",
     control: "Interface language",
   },
   pl: {
@@ -23,7 +23,7 @@ const COPY = {
     retryMessage: "Nie udało się wczytać zamienników. Spróbuj ponownie.",
     chickenName: "Pierś z kurczaka",
     pizzaName: "Pizza margherita",
-    moreButton: "WIĘCEJ!",
+    retry: "Spróbuj ponownie",
     control: "Język interfejsu",
   },
 } as const;
@@ -192,14 +192,10 @@ async function expectNewSearchFailure(
   await expect(searchInput).toHaveValue(copy.chickenName);
   await expect(searchInput).toBeFocused();
 
-  await expect(page.locator("[data-selected-name]")).toHaveText(
-    copy.chickenName,
-  );
-  await expect(page.locator("[data-quantity-number]")).toHaveValue("100");
-  await expect(page.locator("[data-quantity-static-unit]")).toHaveText("g");
+  await expect(page.locator("[data-failure-region]")).toBeVisible();
 
   await expect(page.locator("[data-result-card]")).toHaveCount(0);
-  await expect(page.locator("[data-more-button]")).toHaveCount(0);
+  await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
 
   await expect(page.locator("[data-card-spinner]")).toHaveCount(0);
 
@@ -209,8 +205,9 @@ async function expectNewSearchFailure(
   await expect(retryMessage).toHaveAttribute("role", "status");
   await expect(page.getByText(copy.retryMessage)).toHaveCount(1);
 
-  await expect(page.locator("[data-quantity-number]")).toBeEnabled();
-  await expect(page.locator("[data-quantity-unit]")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: copy.retry, exact: true }),
+  ).toBeEnabled();
 
   await page.waitForTimeout(500);
   expect(posts).toHaveLength(2);
@@ -221,14 +218,11 @@ async function prepareSuccessfulIntermediatePage(
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
   await prepareSuccessfulCards(page, "margherita", PIZZA_FOOD_OBJECT_ID, copy);
-  const moreButton = page.locator("[data-more-button]");
-  await expect(moreButton).toBeVisible();
-  await moreButton.click();
+  await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
   await expect
     .poll(async () => renderedCardIDs(page))
-    .toEqual([...PIZZA_PAGE_1_IDS]);
-  await expect(moreButton).toBeVisible();
-  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+    .toEqual([13, 29, 26, ...PIZZA_PAGE_1_IDS]);
+  await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
 }
 
 async function renderedCardIDs(page: Page): Promise<number[]> {
@@ -245,10 +239,10 @@ async function expectMoreFailure(
   posts: SubstitutePost[],
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
-  const moreButton = page.locator("[data-more-button]");
+  const retry = page.getByRole("button", { name: copy.retry, exact: true });
   const retryMessage = page.locator("[data-retry-message]");
 
-  await moreButton.click();
+  await page.locator("[data-pagination-sentinel]").scrollIntoViewIfNeeded();
   await expect.poll(() => posts.length).toBe(3);
   expect(posts[0]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
@@ -276,25 +270,33 @@ async function expectMoreFailure(
     "moreFailure",
   );
 
-  await expect(page.locator("[data-selected-name]")).toHaveText(copy.pizzaName);
-  await expect(page.locator("[data-quantity-number]")).toHaveValue("1");
-  await expect(page.locator("[data-quantity-unit]")).toHaveValue("serving");
+  await expect(page.locator("[data-selected-food-summary] h3")).toHaveText(
+    copy.pizzaName,
+  );
+  await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
+    "1",
+  );
+  await expect(page.locator("[data-unit-toggle]")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   const page1Response = posts[1]?.responseBody;
   if (page1Response === undefined || !("pageIndex" in page1Response)) {
     throw new Error("Expected the successful page-1 response body");
   }
   expect(page1Response.pageIndex).toBe(1);
-  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
-  await expect(page.locator("[data-result-card]")).toHaveCount(3);
+  await expect
+    .poll(() => renderedCardIDs(page))
+    .toEqual([13, 29, 26, ...PIZZA_PAGE_1_IDS]);
+  await expect(page.locator("[data-result-card]")).toHaveCount(6);
   const firstCardName = await page
     .locator("[data-result-card] h3")
-    .first()
+    .nth(3)
     .textContent();
   expect(firstCardName).toBe(page1Response?.items?.[0]?.names[copy.language]);
 
-  await expect(moreButton).toBeFocused();
-  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+  await expect(retry).toBeEnabled();
 
   await expect(retryMessage).toBeVisible();
   await expect(retryMessage).toHaveText(copy.retryMessage);
@@ -304,7 +306,14 @@ async function expectMoreFailure(
   await page.waitForTimeout(500);
   expect(posts).toHaveLength(3);
 
-  await moreButton.click();
+  const quantity = page.locator("[data-nutrition-editor=quantity]");
+  await quantity.fill("2");
+  await quantity.press("Enter");
+  await expect(page.locator("[data-result-card-calories]")).toHaveText(
+    Array(6).fill("1750 kcal"),
+  );
+  expect(posts).toHaveLength(3);
+  await retry.click();
   await expect.poll(() => posts.length).toBe(4);
   expect(posts[3]?.body).toEqual({
     foodObjectId: PIZZA_FOOD_OBJECT_ID,
@@ -315,9 +324,10 @@ async function expectMoreFailure(
     "data-interaction-state",
     "moreFailure",
   );
-  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
-  await expect(moreButton).toBeFocused();
-  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+  await expect
+    .poll(() => renderedCardIDs(page))
+    .toEqual([13, 29, 26, ...PIZZA_PAGE_1_IDS]);
+  await expect(retry).toBeEnabled();
   await expect(retryMessage).toHaveText(copy.retryMessage);
   await page.waitForTimeout(500);
   expect(posts).toHaveLength(4);
@@ -349,11 +359,7 @@ async function expectNewSearchFailureLanguageChange(
   await expect(retryMessage).toHaveAttribute("role", "status");
   await expect(page.getByText(COPY.pl.retryMessage)).toHaveCount(1);
 
-  await expect(page.locator("[data-selected-name]")).toHaveText(
-    COPY.pl.chickenName,
-  );
-  await expect(page.locator("[data-quantity-number]")).toHaveValue("100");
-  await expect(page.locator("[data-quantity-static-unit]")).toHaveText("g");
+  await expect(page.locator("[data-failure-region]")).toBeVisible();
 
   const searchInput = page.getByPlaceholder(COPY.pl.searchPlaceholder);
   await expect(searchInput).toHaveValue(COPY.en.chickenName);
@@ -361,7 +367,7 @@ async function expectNewSearchFailureLanguageChange(
   await expect(polishControl).toBeFocused();
 
   await expect(page.locator("[data-result-card]")).toHaveCount(0);
-  await expect(page.locator("[data-more-button]")).toHaveCount(0);
+  await expect(page.locator("[data-pagination-spinner]")).toHaveCount(0);
 }
 
 async function expectMoreFailureLanguageChange(
@@ -385,31 +391,37 @@ async function expectMoreFailureLanguageChange(
     "data-interaction-state",
     "moreFailure",
   );
-  await expect.poll(() => renderedCardIDs(page)).toEqual([...PIZZA_PAGE_1_IDS]);
+  await expect
+    .poll(() => renderedCardIDs(page))
+    .toEqual([13, 29, 26, ...PIZZA_PAGE_1_IDS]);
   const cardNames = await page
     .locator("[data-result-card] h3")
     .allTextContents();
-  expect(cardNames).toEqual([...PIZZA_PAGE_1_PL_NAMES]);
+  expect(cardNames.slice(3)).toEqual([...PIZZA_PAGE_1_PL_NAMES]);
 
   const retryMessage = page.locator("[data-retry-message]");
   await expect(retryMessage).toHaveText(COPY.pl.retryMessage);
   await expect(retryMessage).toHaveAttribute("role", "status");
   await expect(page.getByText(COPY.pl.retryMessage)).toHaveCount(1);
 
-  await expect(page.locator("[data-selected-name]")).toHaveText(
+  await expect(page.locator("[data-selected-food-summary] h3")).toHaveText(
     COPY.pl.pizzaName,
   );
-  await expect(page.locator("[data-quantity-number]")).toHaveValue("1");
-  await expect(page.locator("[data-quantity-unit]")).toHaveValue("serving");
-  const moreButton = page.locator("[data-more-button]");
-  await expect(moreButton).toHaveText(COPY.pl.moreButton);
-  await expect(moreButton).toHaveAttribute("aria-label", COPY.pl.moreButton);
-  await expect(moreButton).toHaveAttribute("aria-disabled", "false");
+  await expect(page.locator("[data-nutrition-editor=quantity]")).toHaveValue(
+    "2",
+  );
+  await expect(page.locator("[data-unit-toggle]")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    page.getByRole("button", { name: COPY.pl.retry, exact: true }),
+  ).toBeEnabled();
   await expect(polishControl).toBeFocused();
 }
 
 test.describe("Substitution request failures", () => {
-  test("a new Search and a MORE! request fail after only the outage stack's PostgreSQL stops: each prepared English and Polish page keeps its retained state, control state, and focus, ends every pending spinner, releases the lock, and shows and announces the exact ISSUE-013 retry message with exactly one closed 503 CATALOG_UNAVAILABLE response per activation and no automatic retry (P13-G1, P13-G2, REQ-050, REQ-051)", async ({
+  test("a new Search and a next-page request fail after only the outage stack's PostgreSQL stops: each prepared English and Polish page keeps its retained state, control state, and focus, ends every pending spinner, releases the lock, and shows and announces the exact ISSUE-013 retry message with exactly one closed 503 CATALOG_UNAVAILABLE response per activation and no automatic retry (P13-G1, P13-G2, REQ-050, REQ-051)", async ({
     browser,
   }) => {
     const englishContext = await browser.newContext({
