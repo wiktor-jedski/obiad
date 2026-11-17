@@ -15,7 +15,7 @@
     D: "Fixed quantity width",
     E: "Toggle before quantity",
     F: "Ready · no animation",
-    G: "Horizontal-axis flip",
+    G: "Responsive card flip",
     H: "Opening shutters",
     I: "Slide up",
   };

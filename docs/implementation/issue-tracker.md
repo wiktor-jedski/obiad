@@ -258,3 +258,15 @@ The fast pagination check measured 1034 ms before both spinner removal and page
 append. Slow responses, simulated request failure and retry, image/fallback
 failure, reduced motion, and search changes during pending work also passed.
 Captured on `prototype/results-candidates`; no backend or production change.
+
+The user prefers G and requested a responsive flip direction. Below 640 px,
+cards now rotate around the vertical (Y) axis. At 640 px and wider, they keep
+the horizontal (X) axis. This breakpoint matches the card's stacked/mobile layout.
+The front and reverse use the same axis; timing and image readiness are unchanged.
+
+Type checks passed. Browser checks at 320, 639, 640, and 1440 px confirmed the
+reverse orientation and motion axis, usable editors, no horizontal overflow,
+and visible cards after resizing. Desktop and mobile motion were checked visually.
+Reduced-motion checks at 320 and 1440 px confirmed no flip animation.
+Captured on `prototype/results-candidates`; the responsive direction remains
+a prototype for user evaluation.

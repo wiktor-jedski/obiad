@@ -74,7 +74,7 @@
 </div>
 
 <style>
-  .reveal { position: relative; min-width: 0; border-radius: 28px; perspective: 4000px; }
+  .reveal { --flip-axis: 0, 1, 0; position: relative; min-width: 0; border-radius: 28px; perspective: 4000px; }
   .surface { position: relative; border-radius: inherit; }
   .front { position: relative; z-index: 0; border-radius: inherit; }
   .empty-front { aspect-ratio: 1; padding-bottom: 210px; box-sizing: content-box; }
@@ -99,12 +99,12 @@
 
   [data-reveal-mode="flip"] .surface {
     transform-style: preserve-3d;
-    transform: rotateX(180deg);
+    transform: rotate3d(var(--flip-axis), 180deg);
     transition: transform 800ms cubic-bezier(0.22, 0.7, 0.2, 1);
   }
   [data-reveal-mode="flip"] .front, [data-reveal-mode="flip"] .back { backface-visibility: hidden; }
-  [data-reveal-mode="flip"] .back { transform: rotateX(180deg); }
-  [data-reveal-mode="flip"][data-started="true"] .surface { transform: rotateX(0deg); }
+  [data-reveal-mode="flip"] .back { transform: rotate3d(var(--flip-axis), 180deg); }
+  [data-reveal-mode="flip"][data-started="true"] .surface { transform: rotate3d(var(--flip-axis), 0deg); }
 
   [data-reveal-mode="shutter"], [data-reveal-mode="rise"] { overflow: hidden; }
   .panel { position: absolute; top: 0; bottom: 0; width: 50%; z-index: 2; transition: transform 700ms cubic-bezier(0.22, 0.7, 0.2, 1); }
@@ -118,7 +118,10 @@
   [data-reveal-mode="rise"] .front { z-index: 1; transform: translateY(105%); transition: transform 700ms cubic-bezier(0.22, 0.7, 0.2, 1); }
   [data-reveal-mode="rise"][data-started="true"] .front { transform: translateY(0); }
 
-  @media (min-width: 640px) { .empty-front { aspect-ratio: 50 / 19; padding-bottom: 0; } }
+  @media (min-width: 640px) {
+    .reveal { --flip-axis: 1, 0, 0; }
+    .empty-front { aspect-ratio: 50 / 19; padding-bottom: 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .surface, .front, .panel { transition: none !important; }
   }
