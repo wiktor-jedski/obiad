@@ -11,6 +11,14 @@ export interface Messages {
 
   interfaceLanguage: () => string;
 
+  dataSourcesHeading: () => string;
+
+  openFoodFactsCredit: () => string;
+
+  dataVersionLabel: () => string;
+
+  downloadCatalogLabel: () => string;
+
   suggestionsListLabel: () => string;
 
   selectedFoodLabel: () => string;
@@ -58,6 +66,10 @@ const en = {
   searchLabel: () => "Search",
   searchPlaceholder: () => "Search foods",
   interfaceLanguage: () => "Interface language",
+  dataSourcesHeading: () => "Data Sources",
+  openFoodFactsCredit: () => "Open Food Facts contributors",
+  dataVersionLabel: () => "Data version:",
+  downloadCatalogLabel: () => "Download the catalog for free",
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
@@ -86,6 +98,10 @@ const pl = {
   searchLabel: () => "Szukaj",
   searchPlaceholder: () => "Szukaj potraw",
   interfaceLanguage: () => "Język interfejsu",
+  dataSourcesHeading: () => "Źródła danych",
+  openFoodFactsCredit: () => "Współtwórcy Open Food Facts",
+  dataVersionLabel: () => "Wersja danych:",
+  downloadCatalogLabel: () => "Pobierz katalog za darmo",
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",

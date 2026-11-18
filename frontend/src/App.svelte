@@ -2,11 +2,14 @@
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "./lib/queryClient";
   import { foodPlaceholderUrl } from "./lib/assets";
+  import DataSources from "./lib/components/DataSources.svelte";
   import Search from "./lib/components/Search.svelte";
   import InterfaceLanguage from "./lib/components/InterfaceLanguage.svelte";
   import SubstitutionResults from "./lib/components/SubstitutionResults.svelte";
   import { interactionState } from "./lib/interactionState";
   import LandingDialogue from "./lib/components/LandingDialogue.svelte";
+
+  const dataCommit = import.meta.env.VITE_DATA_COMMIT;
 </script>
 
 <QueryClientProvider client={queryClient}>
@@ -33,4 +36,7 @@
     <SubstitutionResults />
     <InterfaceLanguage />
   </main>
+  {#if dataCommit}
+    <DataSources {dataCommit} />
+  {/if}
 </QueryClientProvider>

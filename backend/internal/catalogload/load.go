@@ -59,15 +59,29 @@ const advisoryLockKey int64 = 0x0B1AD0001
 
 var sourceCharacters = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:([A-Za-z0-9._~!$&'()*+,;=:@/?#-]|%[0-9A-Fa-f]{2}|\[[0-9A-Fa-f:.]+\])+$`)
 
-// Run validates the complete file before connecting and atomically replaces the catalog.
-func Run(ctx context.Context, databaseURL, path string) (runErr error) {
+// ValidateFile validates a complete catalog without connecting to a database.
+func ValidateFile(path string) (int, error) {
+	c, err := readCatalog(path)
+	return len(c.FoodObjects), err
+}
+
+func readCatalog(path string) (catalog, error) {
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read catalog: %w", err)
+		return catalog{}, fmt.Errorf("read catalog: %w", err)
 	}
 	c, err := decode(body)
 	if err != nil {
-		return fmt.Errorf("validate catalog: %w", err)
+		return catalog{}, fmt.Errorf("validate catalog: %w", err)
+	}
+	return c, nil
+}
+
+// Run validates the complete file before connecting and atomically replaces the catalog.
+func Run(ctx context.Context, databaseURL, path string) (runErr error) {
+	c, err := readCatalog(path)
+	if err != nil {
+		return err
 	}
 	conn, err := pgx.Connect(ctx, databaseURL)
 	if err != nil {
