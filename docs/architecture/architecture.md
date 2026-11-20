@@ -4,7 +4,7 @@ This document is the source of truth for the current Obiad proof-of-concept arch
 
 ## System overview
 
-Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the runtime Food Catalog. Database setup loads application-owned dummy data for local development, CI, and integration checks. The production launcher instead loads a validated production Meal aggregate.
+Local development runs a client-only Svelte application through Vite, a Go/Fiber backend, and PostgreSQL. Vite proxies same-origin `/api` requests to Fiber. Production Compose runs the optimized frontend through Nginx, the compiled backend, persistent PostgreSQL, and release/setup jobs. The infrastructure repository owns public Caddy routing and monitoring. PostgreSQL owns the runtime Food Catalog. Local development and CI use application-owned dummy data. Production loads the validated Meal aggregate from the pinned data revision.
 
 The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns suggestion ranking, candidate eligibility, full-precision Nutritional Similarity calculation, deterministic rank order, and paging independently of Food Quantity. The browser owns interaction state, local quantity projection from the returned calculation basis (input calories, equal-calorie Matched Quantities, scaled macronutrients, and final display rounding), localization, accessibility behavior, and presentation.
 
@@ -309,7 +309,7 @@ An Ingredient contains `id`, localized `names`, one `source` URL, and `macro_pro
 
 **Runtime constraints:** Bun installs frontend dependencies and runs scripts and tests. Vite owns the development server, production bundle, preview server, and `/api` proxy. Development uses Vite dev. Acceptance, visual, browser-integration, and performance checks use the optimized Vite build through Vite preview.
 
-Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authentication, cookies, rate limiter, or third-party runtime system. The pgx pool has zero minimum and four maximum connections. Local deployment setup and integration fixtures create separate schema-owner and runtime database users before `dbsetup` runs. They remove `PUBLIC` object-creation and temporary-table privileges. Setup runs `dbsetup` and then the source-agnostic `catalogload` command with the application-owned dummy catalog. Both commands use `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. `scripts/start.py` has one optional `--catalog PATH` interface for private local preview. It resolves the selected regular file before resource mutation, uses normal dummy setup, replaces the catalog through `catalogload` before Fiber starts, and keeps all lifecycle implementation in the existing launcher. CI and integration callers omit the option and retain dummy data. The selected file follows ARCH-013: exactly schema version `1`, at least one Food Object, zero or more Food Families, optional source URLs, and no provenance or catalog-kind field.
+The local Fiber process listens on loopback only. The local POC adds no CORS mechanism, TLS, authentication, cookies, or rate limiter. The pgx pool has zero minimum and four maximum connections. Local deployment setup and integration fixtures create separate schema-owner and runtime database users before `dbsetup` runs. They remove `PUBLIC` object-creation and temporary-table privileges. Setup runs `dbsetup` and then the source-agnostic `catalogload` command with the application-owned dummy catalog. Both commands use `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. `scripts/start.py` has one optional `--catalog PATH` interface for private local preview. It resolves the selected regular file before resource mutation, uses normal dummy setup, replaces the catalog through `catalogload` before Fiber starts, and keeps all lifecycle implementation in the existing launcher. CI and integration callers omit the option and retain dummy data. The selected file follows ARCH-013: exactly schema version `1`, at least one Food Object, zero or more Food Families, optional source URLs, and no provenance or catalog-kind field. ARCH-025 defines the separate production deployment.
 
 ## ARCH-017 — Suggestion Ranking Mechanism
 
@@ -451,6 +451,38 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 
 **Behavior:** CardReveal waits for actual image.decode(), including appended cards. It paints reverse art and localized loading text before an 800 ms flip, even for cached images. It uses X rotation at 640 px and wider and Y rotation below. It does not show a visual spinner. A failed image decodes the bundled placeholder; if both fail, localized Image unavailable/Obraz niedostępny replaces the image. The front remains inert until shown. Local edits do not replay reveal. Reduced motion reveals after readiness without movement. No fade Module remains.
 
+## ARCH-025 — Production Compose Deployment
+
+| Attribute | Value |
+| --- | --- |
+| Type | Deployment |
+| Status | Active |
+| Requirements | REQ-071, REQ-073–REQ-074, REQ-086–REQ-087, REQ-091 |
+| Dependencies | ARCH-001, ARCH-007–ARCH-009, ARCH-013, ARCH-015, infrastructure Caddy |
+
+**Responsibility:** Deploy one reviewed catalog release with persistent database storage and separate proxy, monitoring, and database networks.
+
+**Placement:** Nginx serves the optimized browser bundle on container port `8080`. Fiber uses `OBIAD_LISTEN_ADDR=:8080` in production and the existing loopback default locally. Both join external `proxy-obiad`; only Fiber also joins external `observability`. PostgreSQL and the database setup job use a private internal database network. No Obiad service publishes a host port. Infrastructure Caddy terminates HTTPS, preserves `/api` paths, and blocks public metrics access.
+
+**Release contract:** `scripts/prepare_release.py` requires the clean `data/` checkout to match the application's committed submodule revision. It uses the data exporter to validate and calculate Meals, then packages the catalog, matching original images, image map, and `release.json` under ignored `.release/`. The manifest contains the full data commit, catalog checksum, Meal IDs, and image checksums. Production images contain only these release artifacts, not source credentials or authoring records. The production footer reads the build-time commit and links to the bundled manifest and catalog.
+
+**Startup contract:** The operator accepts all released Meals and publication rights by setting `OBIAD_ACCEPTED_DATA_COMMIT` to the reviewed full commit. The release-check job verifies that acceptance, the generic catalog contract, at least ten Meals, IDs, and checksums before PostgreSQL starts. The setup job repeats preflight, provisions separate schema-owner and restricted runtime roles, applies migrations, replaces the catalog transactionally, and grants runtime reads. The backend starts only after setup succeeds. Application restarts do not run setup. Credentials enter through environment variables; connection strings contain no passwords.
+
+**Persistence and recovery:** A named volume stores PostgreSQL data. `scripts/database.sh` creates custom-format dumps and restores them transactionally while the HTTP services are stopped. Restore reapplies runtime grants and starts the existing application containers without reloading the packaged catalog.
+
+## ARCH-026 — Private Prometheus Metrics
+
+| Attribute | Value |
+| --- | --- |
+| Type | Mechanism |
+| Status | Active |
+| Requirements | Architecture overhead: production health and request diagnostics |
+| Dependencies | ARCH-008, ARCH-025, infrastructure Prometheus and Grafana |
+
+**Responsibility:** Expose backend process health and HTTP measurements to infrastructure monitoring.
+
+**Contract:** `GET /metrics` exposes a per-application Prometheus registry with Go and process collectors, `obiad_http_requests_total`, and `obiad_http_request_duration_seconds`. HTTP labels contain only bounded methods, registered route templates or the unmatched label, and response status codes. Metrics scrapes are excluded from request observations. Infrastructure Prometheus scrapes the backend through `observability`; Grafana uses the supplied dashboard. Monitoring network membership permits communication between its members; it is not a per-application access-control policy.
+
 ## Requirement coverage
 
 | Requirement | Architecture coverage |
@@ -521,10 +553,10 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-068 | ARCH-003, ARCH-020 |
 | REQ-069 | ARCH-015, ARCH-020 |
 | REQ-070 | ARCH-007 |
-| REQ-071 | ARCH-007 |
+| REQ-071 | ARCH-007, ARCH-025 |
 | REQ-072 | ARCH-007 |
-| REQ-073 | ARCH-001, ARCH-015, ARCH-016, ARCH-020, ARCH-022 |
-| REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
+| REQ-073 | ARCH-001, ARCH-015–ARCH-016, ARCH-020, ARCH-022, ARCH-025 |
+| REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022, ARCH-025 |
 | REQ-075 (Deprecated) | Superseded by REQ-100 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
@@ -536,12 +568,12 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-083 (Deprecated) | Superseded by REQ-101 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-085 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
-| REQ-086 | ARCH-013 |
-| REQ-087 | ARCH-013 |
+| REQ-086 | ARCH-013, ARCH-025 |
+| REQ-087 | ARCH-013, ARCH-025 |
 | REQ-088 | ARCH-013 |
 | REQ-089 | ARCH-013 |
 | REQ-090 | ARCH-013 |
-| REQ-091 | ARCH-013 |
+| REQ-091 | ARCH-013, ARCH-025 |
 | REQ-092 | ARCH-023, ARCH-020 |
 | REQ-093 | ARCH-023, ARCH-020 |
 | REQ-094 | ARCH-023, ARCH-020 |

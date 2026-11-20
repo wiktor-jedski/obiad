@@ -1,0 +1,130 @@
+name: obiad
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-setup: &setup
+  image: obiad-setup:local
+  build:
+    context: .
+    target: setup
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+
+services:
+  release-check:
+    <<: *setup
+    entrypoint: [python3, /opt/obiad/validate_release.py, /opt/obiad/release]
+    environment:
+      OBIAD_ACCEPTED_DATA_COMMIT: ${OBIAD_ACCEPTED_DATA_COMMIT:?set the reviewed data commit}
+    network_mode: none
+    restart: "no"
+
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_PASSWORD: ${OBIAD_POSTGRES_PASSWORD:?set OBIAD_POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [database]
+    depends_on:
+      release-check:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  setup:
+    <<: *setup
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGDATABASE: postgres
+      PGSSLMODE: disable
+      PGPASSWORD: ${OBIAD_POSTGRES_PASSWORD:?set OBIAD_POSTGRES_PASSWORD}
+      OBIAD_OWNER_PASSWORD: ${OBIAD_OWNER_PASSWORD:?set OBIAD_OWNER_PASSWORD}
+      OBIAD_RUNTIME_PASSWORD: ${OBIAD_RUNTIME_PASSWORD:?set OBIAD_RUNTIME_PASSWORD}
+      OBIAD_ACCEPTED_DATA_COMMIT: ${OBIAD_ACCEPTED_DATA_COMMIT:?set the reviewed data commit}
+    networks: [database]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: obiad-backend:local
+    build:
+      context: .
+      target: backend
+    environment:
+      OBIAD_LISTEN_ADDR: :8080
+      OBIAD_RUNTIME_DATABASE_URL: host=postgres port=5432 user=obiad_runtime dbname=obiad sslmode=disable
+      PGPASSWORD: ${OBIAD_RUNTIME_PASSWORD:?set OBIAD_RUNTIME_PASSWORD}
+    networks:
+      database: {}
+      proxy-obiad:
+        aliases: [obiad-api]
+      observability:
+        aliases: [obiad-api]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    logging: *logging
+
+  frontend:
+    image: obiad-frontend:local
+    build:
+      context: .
+      target: frontend
+    networks:
+      proxy-obiad:
+        aliases: [obiad-web]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  database:
+    internal: true
+  proxy-obiad:
+    external: true
+  observability:
+    external: true
+
+volumes:
+  postgres_data:

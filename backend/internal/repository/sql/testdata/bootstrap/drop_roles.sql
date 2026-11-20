@@ -1,0 +1,1 @@
+DROP ROLE IF EXISTS "__OWNER__", "__RUNTIME__";

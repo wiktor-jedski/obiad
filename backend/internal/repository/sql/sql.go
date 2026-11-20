@@ -47,3 +47,43 @@ var InsertFoodObject string
 //
 //go:embed catalog/random_food.sql
 var RandomFood string
+
+// BootstrapPreflight checks the target database and runtime ownership.
+//
+//go:embed bootstrap/preflight.sql
+var BootstrapPreflight string
+
+// BootstrapRoleFunction defines role setup for one admin session.
+//
+//go:embed bootstrap/role_function.sql
+var BootstrapRoleFunction string
+
+// BootstrapRoles applies both login passwords in one statement.
+//
+//go:embed bootstrap/roles.sql
+var BootstrapRoles string
+
+// CreateDatabase creates the target database under its owner.
+//
+//go:embed bootstrap/create_database.sql
+var CreateDatabase string
+
+// SetDatabaseOwner restores ownership of an existing target database.
+//
+//go:embed bootstrap/set_database_owner.sql
+var SetDatabaseOwner string
+
+// RemovePublicPrivileges restricts database and schema access before migration.
+//
+//go:embed privileges/remove_public_privileges.sql
+var RemovePublicPrivileges string
+
+// RuntimeCatalogRead grants catalog SELECT rights after import.
+//
+//go:embed privileges/runtime_catalog_read.sql
+var RuntimeCatalogRead string
+
+// BootstrapFixtures contains SQL for deployment integration tests.
+//
+//go:embed testdata/bootstrap/*.sql
+var BootstrapFixtures embed.FS

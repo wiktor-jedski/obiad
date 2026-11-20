@@ -1,0 +1,65 @@
+{
+  "uid": "obiad-overview",
+  "title": "Obiad",
+  "tags": ["obiad"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [{"name": "datasource", "type": "datasource", "query": "prometheus", "label": "Prometheus"}]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Backend scrape health",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "up{job=\"obiad\"}"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "title": "Requests per second",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "sum by (route) (rate(obiad_http_requests_total{job=\"obiad\"}[5m]))", "legendFormat": "{{route}}"}]
+    },
+    {
+      "id": 3,
+      "title": "Server errors per second",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "sum by (route) (rate(obiad_http_requests_total{job=\"obiad\",status=~\"5..\"}[5m]))", "legendFormat": "{{route}}"}]
+    },
+    {
+      "id": 4,
+      "title": "p95 request duration",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(obiad_http_request_duration_seconds_bucket{job=\"obiad\"}[5m])))", "legendFormat": "{{route}}"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "title": "Backend resident memory",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "process_resident_memory_bytes{job=\"obiad\"}"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "title": "Go routines",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "go_goroutines{job=\"obiad\"}"}]
+    }
+  ]
+}

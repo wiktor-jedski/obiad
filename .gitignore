@@ -5,6 +5,10 @@ frontend/src/lib/assets/generated-meal-images.ts
 # Local dependencies
 frontend/node_modules/
 .env*
+!.env.example
+/.release/
+/.release-next/
+/backups/
 
 ### Go ##
 # Test binary, built with `go test -c`

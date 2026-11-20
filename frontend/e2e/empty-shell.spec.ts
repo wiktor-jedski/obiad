@@ -60,6 +60,16 @@ async function assertEmptyShell(
   await expect(languageSelect.locator("option")).toHaveCount(2);
   const logo = page.getByRole("link", { name: "obiad", exact: true });
   await expect(logo).toHaveAttribute("href", "/");
+  const footer = page.getByRole("contentinfo");
+  const commit = process.env.VITE_DATA_COMMIT;
+  if (commit) {
+    await expect(footer.getByRole("link", { name: commit })).toHaveAttribute(
+      "href",
+      "/release.json",
+    );
+  } else {
+    await expect(footer).toHaveCount(0);
+  }
   await expect(page.locator("select")).toHaveCount(1);
   await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   await expect(page.locator("ul, ol")).toHaveCount(0);
@@ -160,9 +170,9 @@ async function assertEmptyShell(
 
   expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
-    expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
-      PREVIEW_ORIGIN,
-    );
+    const { origin, pathname } = new URL(url);
+    expect(["/release.json", "/catalog.json"]).not.toContain(pathname);
+    expect(origin, `unexpected request origin ${url}`).toBe(PREVIEW_ORIGIN);
   }
 
   await expect(input).toBeFocused();
