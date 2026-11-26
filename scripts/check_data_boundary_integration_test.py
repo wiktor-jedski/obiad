@@ -101,6 +101,20 @@ def test_permits_authoring_records_only_in_initialized_data() -> None:
         _assert_rejects(root, "ingredients/1-wheat-flour.json", "production Ingredient record")
 
 
+def test_permits_provider_review_notes() -> None:
+    """Accept Markdown documentation about a provider, but not its downloads."""
+    with initialized_repository() as root:
+        notes = (
+            "docs/implementation/usda-ingredient-comparison.md",
+            "docs/open-food-facts-review.md",
+        )
+        for note in notes:
+            _write(root / note, "# Ingredient source review\n")
+        _run("git", "-C", root, "add", *notes)
+        _assert_passes(root)
+        _assert_rejects(root, "docs/implementation/usda-foods.csv", "Open Food Facts or USDA download")
+
+
 def test_rejects_application_artifacts() -> None:
     """Reject every production-data artifact that remains outside data."""
     cases = (
@@ -120,6 +134,7 @@ def test_rejects_prohibited_data_artifacts() -> None:
     """Reject every still-prohibited artifact inside initialized data."""
     cases = (
         ("cache/usda.json", "Open Food Facts or USDA download"),
+        ("cache/usda/README.md", "Open Food Facts or USDA download"),
         ("catalogs/catalog.json", "generated aggregate catalog"),
         ("source.html", "source HTML"),
         ("source.txt", "source page text"),
@@ -133,6 +148,7 @@ def test_rejects_prohibited_data_artifacts() -> None:
 def main() -> int:
     """Run integration coverage without an external test framework."""
     test_permits_authoring_records_only_in_initialized_data()
+    test_permits_provider_review_notes()
     test_rejects_application_artifacts()
     test_rejects_prohibited_data_artifacts()
     print("Data boundary integration test passed.")

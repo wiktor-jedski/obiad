@@ -18,12 +18,13 @@ APPROVED_RECIPE_FIXTURES = frozenset({
     "tests/fixtures/wikibooks/synthetic_bake.html",
 })
 
+PROVIDER_DOWNLOAD = "Open Food Facts or USDA download"
 
 PROHIBITED_ARTIFACTS = (
     ("production Ingredient record", re.compile(r"(?:^|/)ingredients/[^/]+\.json$")),
     ("production Meal record", re.compile(r"(?:^|/)meals/[^/]+\.json$")),
     (
-        "Open Food Facts or USDA download",
+        PROVIDER_DOWNLOAD,
         re.compile(r"(?:^|/)[^/]*(?:open[-_]?food[-_]?facts|usda)[^/]*(?:/|$)", re.IGNORECASE),
     ),
     ("generated aggregate catalog", re.compile(r"(?:^|/)catalogs(?:/|$)|(?:^|/)catalog\.json$")),
@@ -64,6 +65,8 @@ def prohibited_artifacts(
             if artifact == "production Meal record" and allow_meal_records:
                 continue
             if pattern.search(path):
+                if artifact == PROVIDER_DOWNLOAD and path.startswith("docs/") and path.lower().endswith(".md"):
+                    continue
                 violations.append((path, artifact))
                 break
     return violations
