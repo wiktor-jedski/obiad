@@ -44,6 +44,10 @@
 }
 
 @layer components {
+  .header-menu-item {
+    @apply flex min-h-11 w-full cursor-pointer items-center px-3 text-sm text-dark-text-primary hover:bg-dark-primary hover:text-dark-text-on-bright focus-visible:bg-dark-primary focus-visible:text-dark-text-on-bright;
+  }
+
   .landing-bubble::before {
     @apply absolute top-1/2 size-[10px] -translate-y-1/2 rotate-45 border border-inherit bg-dark-surface content-[''];
   }

@@ -1,3 +1,4 @@
+import { languageSummary, wordmark } from "./header";
 import { isLandingDialogueRequest } from "./request-purpose";
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
@@ -558,10 +559,11 @@ for (const language of ["en", "pl"] as const) {
       exact: true,
     });
     await expect(search).toBeFocused();
-    await expectNamedControls(page, [
-      ["combobox", copy.search],
-      ["combobox", copy.languageControl],
-    ]);
+    await expectNamedControls(page, [["combobox", copy.search]]);
+    await expect(languageSummary(page)).toHaveAccessibleName(
+      copy.languageControl,
+    );
+    await expect(wordmark(page)).toHaveAccessibleName("obiad — menu");
     await expectWcagAAndAaClean(page, "empty");
     await expectContrastTargets(page, [
       {
@@ -578,7 +580,7 @@ for (const language of ["en", "pl"] as const) {
         where: "Search focus",
       },
       {
-        selector: "[data-interface-language] select",
+        selector: "[data-interface-language] summary",
         kind: "text",
         minimum: 4.5,
         where: "Language selector",
@@ -630,7 +632,7 @@ for (const language of ["en", "pl"] as const) {
       await expect(
         page.getByRole("textbox", { name, exact: true }),
       ).toHaveCount(1);
-    await expect(page.getByRole("combobox")).toHaveCount(2);
+    await expect(page.getByRole("combobox")).toHaveCount(1);
     const toggle = page.getByRole("button", {
       name: copy.servings,
       exact: true,

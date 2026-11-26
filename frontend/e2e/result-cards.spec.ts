@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 import type {
@@ -16,7 +17,6 @@ const COPY = {
   en: {
     search: "Search",
     listbox: "Suggestions",
-    languageControl: "Interface language",
     protein: "Protein",
     carbohydrates: "Carbohydrates",
     fat: "Fat",
@@ -27,7 +27,6 @@ const COPY = {
   pl: {
     search: "Szukaj",
     listbox: "Podpowiedzi",
-    languageControl: "Język interfejsu",
     protein: "Białko",
     carbohydrates: "Węglowodany",
     fat: "Tłuszcz",
@@ -248,9 +247,7 @@ test.describe("result cards", () => {
       `${paella.matchedQuantity.value} g`,
     );
 
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
       COPY.pl.foundSubstitutions,
     );
@@ -325,9 +322,7 @@ test.describe("result cards", () => {
     const items = captureSubstituteItems(page);
 
     await page.goto("/");
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     await selectFoodObject(page, "mleko", 10, COPY.pl);
     const placeholderUrl = await page
       .locator("main")

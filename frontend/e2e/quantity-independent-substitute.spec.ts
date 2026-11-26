@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 import type {
@@ -13,7 +14,6 @@ const COPY = {
   en: {
     search: "Search",
     listbox: "Suggestions",
-    languageControl: "Interface language",
     protein: "Protein",
     carbohydrates: "Carbohydrates",
     fat: "Fat",
@@ -24,7 +24,6 @@ const COPY = {
   pl: {
     search: "Szukaj",
     listbox: "Podpowiedzi",
-    languageControl: "Język interfejsu",
     protein: "Białko",
     carbohydrates: "Węglowodany",
     fat: "Tłuszcz",
@@ -263,9 +262,7 @@ test.describe("quantity-independent Substitute API and local projection (P22-G3,
       );
     }
 
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
 
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
       COPY.pl.foundSubstitutions,

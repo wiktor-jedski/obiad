@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
@@ -10,9 +11,7 @@ for (const language of ["en", "pl"] as const) {
       language,
     );
     await page.goto("/");
-    await page
-      .getByRole("combobox", { name: /Interface language|Język interfejsu/ })
-      .selectOption(language);
+    await chooseLanguage(page, language);
     let posts = 0;
     page.on("request", (request) => {
       if (
@@ -152,9 +151,7 @@ test("single-unit foods expose fixed units and true zero nutrients are read-only
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("combobox", { name: /Interface language|Język interfejsu/ })
-    .selectOption("en");
+  await chooseLanguage(page, "en");
   for (const [query, id, unit] of [
     ["chicken", 5, "g"],
     ["milk", 10, "ml"],

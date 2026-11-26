@@ -394,3 +394,23 @@ all 20 first-card performance samples were 843.2–896.4 ms against the unchange
 Verification: frontend checks passed with no type errors or warnings.
 The affected keyboard-overlay scenario passed against a production build and
 the dummy database with `CI=1`, including the unchanged overlap assertion.
+
+## ISSUE-025: Choose where to show data sources
+
+Type: Improvement
+Status: ready-for-human
+Resolution: Variant F approved for the production interface.
+
+People must be able to find the source information without loading every result. Compare the placements on the landing page and in search results, on both desktop and mobile.
+
+### Decision
+
+Adopt F from `prototype/source-placement` at `67f5d477ef`. A wordmark menu keeps Sources reachable from the landing page or any results page without scrolling through results. A dedicated URL leaves room for separate food and recipe lists and lets people link to them directly. This supersedes the direct wordmark-to-home link in ISSUE-023: choose Search in the wordmark menu to return to `/`.
+
+Use the matching language disclosure on both pages. Ship neither the prototype switcher nor a sources footer. The lists are available without release data; only a production release adds its full data commit linked to `/release.json`. Do not publish the aggregate catalog.
+
+### Comments (prototype history)
+
+Prototype: branch `prototype/source-placement`, commit `58e2ebb49e`. From `frontend/`, run `bun run prototype:sources`. Open `/?variant=A` and use the arrow buttons to compare A–E. The preview uses the demo catalog.
+
+Variant F (`ea36ebe2e0` on the same branch): open `/?variant=F`. The wordmark opens a menu instead of linking home. Search links to `/`. Sources links to `/sources`, which describes the food and recipe sources in English and Polish.

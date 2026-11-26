@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
-import { tick } from "svelte";
 import App from "./App.svelte";
 import {
   INTERFACE_LANGUAGE_STORAGE_KEY,
@@ -34,15 +33,18 @@ function installStorageSetItem(impl: Storage["setItem"]): () => void {
   };
 }
 
-function getLanguageSelect(name: string): HTMLSelectElement {
-  const select = screen.getByRole("combobox", { name });
-  if (!(select instanceof HTMLSelectElement)) {
-    throw new TypeError("Interface Language combobox must be a select element");
-  }
-  return select;
+function languageSummary(name: string): HTMLElement {
+  return screen.getByLabelText(name, {
+    selector: "[data-interface-language] summary",
+  });
 }
 
-describe("the Interface Language dropdown", () => {
+async function chooseLanguage(label: string, name: string): Promise<void> {
+  await fireEvent.click(languageSummary(label));
+  await fireEvent.click(screen.getByRole("button", { name }));
+}
+
+describe("the Interface Language disclosure", () => {
   beforeEach(() => {
     interfaceLanguage.set("en");
   });
@@ -51,26 +53,35 @@ describe("the Interface Language dropdown", () => {
     cleanup();
   });
 
-  test("renders one localized native dropdown with fixed PL-then-EN options", async () => {
+  test("shows the current language code and marks only its native button as pressed", async () => {
     render(App);
+    const summary = languageSummary(COPY.en.control);
+    expect(summary.textContent).toContain("EN");
+    const details = summary.closest("details");
+    expect(details?.open).toBe(false);
+    await fireEvent.click(summary);
+    expect(details?.open).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "English", pressed: true }).tagName,
+    ).toBe("BUTTON");
+    const polish = screen.getByRole("button", {
+      name: "Polski",
+      pressed: false,
+    });
+    expect(polish.tagName).toBe("BUTTON");
 
-    const select = getLanguageSelect(COPY.en.control);
-    expect(select.value).toBe("en");
+    await fireEvent.click(polish);
+    const localizedSummary = languageSummary(COPY.pl.control);
+    expect(localizedSummary.textContent).toContain("PL");
+    expect(localizedSummary.closest("details")?.open).toBe(false);
+    expect(document.activeElement).toBe(localizedSummary);
+    await fireEvent.click(localizedSummary);
     expect(
-      screen.getAllByRole("option").map((option) => option.textContent),
-    ).toEqual(["PL", "EN"]);
-    expect(
-      screen
-        .getAllByRole("option")
-        .map((option) => option.getAttribute("value")),
-    ).toEqual(["pl", "en"]);
-
-    interfaceLanguage.set("pl");
-    await tick();
-    expect(
-      screen.getByRole("combobox", { name: COPY.pl.control }),
+      screen.getByRole("button", { name: "Polski", pressed: true }),
     ).toBeTruthy();
-    expect(select.value).toBe("pl");
+    expect(
+      screen.getByRole("button", { name: "English", pressed: false }),
+    ).toBeTruthy();
   });
 
   test("selection immediately applies the shared dictionary and persists exactly once", async () => {
@@ -88,16 +99,12 @@ describe("the Interface Language dropdown", () => {
 
     try {
       render(App);
-      const select = getLanguageSelect(COPY.en.control);
-
-      await fireEvent.change(select, { target: { value: "pl" } });
+      await chooseLanguage(COPY.en.control, "Polski");
       expect(screen.getByPlaceholderText(COPY.pl.placeholder)).toBeTruthy();
-      expect(
-        screen.getByRole("combobox", { name: COPY.pl.control }),
-      ).toBeTruthy();
+      expect(document.activeElement).toBe(languageSummary(COPY.pl.control));
       expect(calls).toEqual([[INTERFACE_LANGUAGE_STORAGE_KEY, "pl"]]);
 
-      await fireEvent.change(select, { target: { value: "en" } });
+      await chooseLanguage(COPY.pl.control, "English");
       expect(screen.getByPlaceholderText(COPY.en.placeholder)).toBeTruthy();
       expect(calls).toEqual([
         [INTERFACE_LANGUAGE_STORAGE_KEY, "pl"],
@@ -117,12 +124,8 @@ describe("the Interface Language dropdown", () => {
 
     try {
       render(App);
-      const select = getLanguageSelect(COPY.en.control);
-
-      await expect(
-        fireEvent.change(select, { target: { value: "pl" } }),
-      ).resolves.toBeTruthy();
-      expect(select.value).toBe("pl");
+      await chooseLanguage(COPY.en.control, "Polski");
+      expect(languageSummary(COPY.pl.control).textContent).toContain("PL");
       expect(screen.getByPlaceholderText(COPY.pl.placeholder)).toBeTruthy();
       expect(window.localStorage.getItem(INTERFACE_LANGUAGE_STORAGE_KEY)).toBe(
         "en",

@@ -61,7 +61,7 @@ describe("the persisted Interface Language store", () => {
     const input = screen.getByLabelText(COPY.en.label);
     expect(input).toBeTruthy();
     expect(screen.getByPlaceholderText(COPY.en.placeholder)).toBe(input);
-    expect(screen.getByText(COPY.en.label)).toBeTruthy();
+    expect(screen.getByText(COPY.en.label, { selector: "label" })).toBeTruthy();
   });
 
   test("the same typed dictionary switches the rendered Search to the exact Polish copy", async () => {
@@ -71,7 +71,7 @@ describe("the persisted Interface Language store", () => {
     const input = screen.getByLabelText(COPY.pl.label);
     expect(input).toBeTruthy();
     expect(screen.getByPlaceholderText(COPY.pl.placeholder)).toBe(input);
-    expect(screen.getByText(COPY.pl.label)).toBeTruthy();
+    expect(screen.getByText(COPY.pl.label, { selector: "label" })).toBeTruthy();
     expect(screen.queryByLabelText(COPY.en.label)).toBeNull();
     expect(window.localStorage.getItem(INTERFACE_LANGUAGE_STORAGE_KEY)).toBe(
       "pl",

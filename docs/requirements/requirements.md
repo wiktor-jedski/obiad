@@ -24,7 +24,7 @@ This document is the source of truth for the active product requirements of the 
 | Status | Active |
 | Verification | Catalog validation: Version `1` and a one-Food-Object catalog with no Food Families succeed; other versions, empty Food Object arrays, and provenance fields fail. Launcher integration: Default startup loads only the application-owned dummy catalog without an initialized production-data submodule; `scripts/start.py --catalog PATH` loads the selected valid catalog before Fiber starts and rejects a missing or invalid file before Fiber starts. CI and integration stacks continue to load dummy data. |
 
-## REQ-003 — Single-page interface
+## REQ-003 — Single-column Search page
 
 **Statement:** The POC shall use one primary content column for the search, selected input, and results.
 
@@ -32,7 +32,7 @@ This document is the source of truth for the active product requirements of the 
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | Playwright: The page has one primary content column with the three specified regions. |
+| Verification | Playwright: `/` has one primary content column for Search, the selected input, and results. |
 
 ## REQ-004 — Generic Food Objects
 
@@ -605,7 +605,7 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-057 — Language preference
 
-**Statement:** WHEN the user selects PL or EN, the system shall apply and save the selected language.
+**Statement:** WHEN the user selects English or Polski, the system shall apply and save the selected language.
 
 | Attribute | Value |
 | --- | --- |
@@ -936,8 +936,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
-| Status | Active |
+| Status | Deprecated |
 | Verification | In English and Polish, the footer shows only the USDA FoodData Central link and the full commit ID linked to `/release.json`. The public `/catalog.json` URL returns 404. Aggregate metadata contains no attribution or license field. |
+
+**Notes:** ISSUE-025 moves attribution from the footer to Sources. REQ-105–REQ-107 replace this contract, retaining production manifest access and catalog privacy.
 
 ## REQ-088 — Recipe composition
 
@@ -1091,3 +1093,52 @@ This document is the source of truth for the active product requirements of the 
 | Status | Active |
 | Verification | Browser inspection: No remote font dependency exists. Inter headings and other existing UI fonts remain. Editors have no boxes; hover text and underline are sage, and focused values are bold mint. Whole g/ml and kcal, up-to-one-decimal macros, and up-to-two-decimal ea displays omit trailing zeros. |
 
+## REQ-103 — Wordmark navigation
+
+**Statement:** On `/` (in every Search state) and `/sources`, the `obiad` wordmark shall open a native disclosure with links to both pages.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Playwright: Tab to the summary named `obiad — menu` and press Enter. Search/Szukaj links to `/`; Sources/Źródła links to `/sources`. Both links perform full-page navigation; each destination also works by direct entry and reload. Escape and a click outside dismiss the disclosure. |
+
+## REQ-104 — Interface Language disclosure
+
+**Statement:** Both pages shall offer the Interface Language choice in a second native disclosure.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Quality (Accessibility) |
+| Status | Active |
+| Verification | Playwright: The summary shows EN or PL and a chevron; its accessible name is exactly `Interface language` or `Język interfejsu`. Tab and Enter open it and activate either English or Polski. Only the current language button has `aria-pressed="true"`. Selection updates the page, closes the disclosure, and returns focus to its summary. Escape and a click outside also dismiss it. |
+
+## REQ-105 — Public source lists
+
+**Statement:** In every build, `/sources` shall show separate vertical lists of food and recipe source links in the active Interface Language.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser inspection: In development and production, Foods/Składniki lists the approved food sources (including USDA FoodData Central); Recipes/Przepisy lists the recipe sources. Neither page has a footer. |
+
+## REQ-106 — Production release link
+
+**Statement:** Only a production data release shall add a link on `/sources` to `/release.json`, labeled with the full `VITE_DATA_COMMIT`.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | Browser integration: Without a release, the two lists remain and no manifest link appears. With a release, the link text equals the full data commit and following it retrieves the manifest. Neither page requests the manifest before activation. |
+
+## REQ-107 — Private aggregate catalog
+
+**Statement:** The frontend shall not publish the aggregate catalog.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Release inspection: The public `/catalog.json` returns 404. Neither page requests the catalog. Catalog-schema validation rejects aggregate attribution and license fields; public source credits live on `/sources`, not in the aggregate. |

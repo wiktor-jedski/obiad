@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
@@ -231,9 +232,7 @@ test.describe("result state", () => {
       page.locator("[data-nutrition-editor=calories]"),
     ).toHaveAttribute("aria-label", "Calories");
 
-    await page
-      .getByRole("combobox", { name: "Interface language" })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     await expect(page.locator("[data-substitutions-heading]")).toHaveText(
       "Zamienniki",
     );

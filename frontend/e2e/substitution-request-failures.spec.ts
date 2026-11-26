@@ -1,3 +1,4 @@
+import { chooseLanguage, languageSummary } from "./header";
 import { execFileSync } from "node:child_process";
 import { isActionRequest, isLandingDialogueRequest } from "./request-purpose";
 import { expect, test, type Page } from "@playwright/test";
@@ -15,7 +16,6 @@ const COPY = {
     chickenName: "Chicken breast",
     pizzaName: "Pizza Margherita",
     retry: "Try again",
-    control: "Interface language",
   },
   pl: {
     language: "pl",
@@ -24,7 +24,6 @@ const COPY = {
     chickenName: "Pierś z kurczaka",
     pizzaName: "Pizza margherita",
     retry: "Spróbuj ponownie",
-    control: "Język interfejsu",
   },
 } as const;
 
@@ -339,16 +338,14 @@ async function expectNewSearchFailureLanguageChange(
   ledger: string[],
 ): Promise<void> {
   const ledgerBeforeChange = ledger.length;
-  const control = page.getByRole("combobox", { name: "Interface language" });
-  await control.focus();
-  await control.selectOption("pl");
+  await chooseLanguage(page, "pl");
   expect(
     ledger.slice(ledgerBeforeChange),
     "the language action in newSearchFailure starts no suggestion GET, Substitute POST, retry, or other application request",
   ).toEqual([]);
   expect(posts).toHaveLength(2);
 
-  const polishControl = page.getByRole("combobox", { name: COPY.pl.control });
+  const polishControl = languageSummary(page);
 
   await expect(page.locator("main")).toHaveAttribute(
     "data-interaction-state",
@@ -376,16 +373,14 @@ async function expectMoreFailureLanguageChange(
   ledger: string[],
 ): Promise<void> {
   const ledgerBeforeChange = ledger.length;
-  const control = page.getByRole("combobox", { name: "Interface language" });
-  await control.focus();
-  await control.selectOption("pl");
+  await chooseLanguage(page, "pl");
   expect(
     ledger.slice(ledgerBeforeChange),
     "the language action in moreFailure starts no suggestion GET, Substitute POST, retry, or other application request",
   ).toEqual([]);
   expect(posts).toHaveLength(4);
 
-  const polishControl = page.getByRole("combobox", { name: COPY.pl.control });
+  const polishControl = languageSummary(page);
 
   await expect(page.locator("main")).toHaveAttribute(
     "data-interaction-state",
