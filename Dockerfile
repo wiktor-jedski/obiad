@@ -30,11 +30,12 @@ COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY frontend/ ./
 COPY api/ /src/api/
-COPY .release/ /src/.release/
+COPY .release/images/ /src/.release/images/
+COPY .release/generated-meal-images.ts .release/release.json /src/.release/
 RUN cp /src/.release/generated-meal-images.ts src/lib/assets/generated-meal-images.ts && \
     bun --bun run generate:api && \
     VITE_DATA_COMMIT="$(bun -e 'console.log(require("../.release/release.json").dataCommit)')" bun --bun run build && \
-    cp /src/.release/catalog.json /src/.release/release.json dist/
+    cp /src/.release/release.json dist/
 
 FROM nginx:1.30.0-alpine AS frontend
 COPY deploy/nginx.conf /etc/nginx/nginx.conf

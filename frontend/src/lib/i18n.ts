@@ -17,8 +17,6 @@ export interface Messages {
 
   dataVersionLabel: () => string;
 
-  downloadCatalogLabel: () => string;
-
   suggestionsListLabel: () => string;
 
   selectedFoodLabel: () => string;
@@ -69,7 +67,6 @@ const en = {
   dataSourcesHeading: () => "Data Sources",
   openFoodFactsCredit: () => "Open Food Facts contributors",
   dataVersionLabel: () => "Data version:",
-  downloadCatalogLabel: () => "Download the catalog for free",
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
@@ -101,7 +98,6 @@ const pl = {
   dataSourcesHeading: () => "Źródła danych",
   openFoodFactsCredit: () => "Współtwórcy Open Food Facts",
   dataVersionLabel: () => "Wersja danych:",
-  downloadCatalogLabel: () => "Pobierz katalog za darmo",
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",

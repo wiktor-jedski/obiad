@@ -32,7 +32,4 @@
       {dataCommit}
     </a>
   </p>
-  <p>
-    <a href="/catalog.json" download>{dictionary.downloadCatalogLabel()}</a>
-  </p>
 </footer>

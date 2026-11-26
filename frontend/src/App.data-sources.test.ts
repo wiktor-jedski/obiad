@@ -31,14 +31,12 @@ test.each([
     heading: "Data Sources",
     credit: "Open Food Facts contributors",
     version: "Data version:",
-    catalog: "Download the catalog for free",
   },
   {
     language: "pl",
     heading: "Źródła danych",
     credit: "Współtwórcy Open Food Facts",
     version: "Wersja danych:",
-    catalog: "Pobierz katalog za darmo",
   },
 ])("the selector shows release sources in $language", async (copy) => {
   process.env.VITE_DATA_COMMIT = commit;
@@ -64,7 +62,7 @@ test.each([
   );
   expect(footer.getByText(copy.version)).toBeTruthy();
   expect(link(commit).getAttribute("href")).toBe("/release.json");
-  const catalog = link(copy.catalog);
-  expect(catalog.getAttribute("href")).toBe("/catalog.json");
-  expect(catalog.hasAttribute("download")).toBe(true);
+  expect(
+    footer.getAllByRole("link").map((item) => item.getAttribute("href")),
+  ).not.toContain("/catalog.json");
 });
