@@ -481,7 +481,7 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 
 **Responsibility:** Expose backend process health and HTTP measurements to infrastructure monitoring.
 
-**Contract:** `GET /metrics` exposes a per-application Prometheus registry with Go and process collectors, `obiad_http_requests_total`, and `obiad_http_request_duration_seconds`. HTTP labels contain only bounded methods, registered route templates or the unmatched label, and response status codes. Metrics scrapes are excluded from request observations. Infrastructure Prometheus scrapes the backend through `observability`; Grafana uses the supplied dashboard. Monitoring network membership permits communication between its members; it is not a per-application access-control policy.
+**Contract:** `GET /metrics` exposes a per-application Prometheus registry with Go and process collectors, `obiad_http_requests_total`, and `obiad_http_request_duration_seconds`. HTTP labels contain only bounded methods, registered route templates or the unmatched label, and response status codes. Metrics scrapes are excluded from request observations. Infrastructure Prometheus scrapes the backend through `observability`. Monitoring network membership permits communication between its members; it is not a per-application access-control policy.
 
 ## Requirement coverage
 
