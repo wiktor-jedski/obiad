@@ -16,15 +16,6 @@
   >
     {dictionary.dataSourcesHeading()}
   </h2>
-  <p>
-    <a href="https://world.openfoodfacts.org/data">
-      {dictionary.openFoodFactsCredit()}
-    </a>
-    —
-    <a href="https://opendatacommons.org/licenses/odbl/1-0/">
-      Open Database License (ODbL)
-    </a>
-  </p>
   <p><a href="https://fdc.nal.usda.gov/">USDA FoodData Central</a></p>
   <p>
     {dictionary.dataVersionLabel()}

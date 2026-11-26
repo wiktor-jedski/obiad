@@ -931,13 +931,13 @@ This document is the source of truth for the active product requirements of the 
 
 ## REQ-087 — Production data attribution
 
-**Statement:** The production Data Sources footer shall link to Open Food Facts attribution, the ODbL, USDA attribution, and the release manifest identified by the full production-data commit ID. The frontend shall not publish the aggregate catalog. The aggregate catalog shall not contain attribution or license notices.
+**Statement:** The production Data Sources footer shall link to USDA FoodData Central and to the release manifest. The manifest link shall show the full production-data commit ID. The frontend shall not publish the aggregate catalog. The aggregate catalog shall not contain attribution or license notices.
 
 | Attribute | Value |
 | --- | --- |
 | Type | Constraint |
 | Status | Active |
-| Verification | The localized footer shows the required links. The public `/catalog.json` URL returns 404. Aggregate metadata contains no attribution or license field. |
+| Verification | In English and Polish, the footer shows only the USDA FoodData Central link and the full commit ID linked to `/release.json`. The public `/catalog.json` URL returns 404. Aggregate metadata contains no attribution or license field. |
 
 ## REQ-088 — Recipe composition
 

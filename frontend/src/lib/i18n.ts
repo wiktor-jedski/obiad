@@ -13,8 +13,6 @@ export interface Messages {
 
   dataSourcesHeading: () => string;
 
-  openFoodFactsCredit: () => string;
-
   dataVersionLabel: () => string;
 
   suggestionsListLabel: () => string;
@@ -65,7 +63,6 @@ const en = {
   searchPlaceholder: () => "Search foods",
   interfaceLanguage: () => "Interface language",
   dataSourcesHeading: () => "Data Sources",
-  openFoodFactsCredit: () => "Open Food Facts contributors",
   dataVersionLabel: () => "Data version:",
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
@@ -96,7 +93,6 @@ const pl = {
   searchPlaceholder: () => "Szukaj potraw",
   interfaceLanguage: () => "Język interfejsu",
   dataSourcesHeading: () => "Źródła danych",
-  openFoodFactsCredit: () => "Współtwórcy Open Food Facts",
   dataVersionLabel: () => "Wersja danych:",
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
