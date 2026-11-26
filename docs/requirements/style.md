@@ -54,6 +54,10 @@ theme: {
 
 The page uses one centered primary content column with a maximum width of `1280px`.
 
+On Search and Sources, place the `obiad` wordmark disclosure at the top left and the matching Interface Language disclosure at the top right. Each summary shows a chevron and has a visible keyboard focus state. Keep the language summary compact (EN or PL); use English and Polski in the open panel.
+
+On `/sources`, stack Foods/Składniki above Recipes/Przepisy at every viewport width. Give each source its own list item and underlined link. In a production release, allow the full linked commit ID to wrap rather than truncating it. Neither page uses a footer.
+
 - **Mobile:** `320–639px`, one results card column; square image above details.
 - **Tablet:** `640–1023px`, one results card column; image left at 38% width.
 - **Desktop:** `≥1024px`, one results card column; image left at 38% width.

@@ -1,3 +1,4 @@
+import { chooseLanguage, expectLanguage, languageSummary } from "./header";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -18,11 +19,9 @@ const REVIEW_COPY_DIR = "/tmp/obiad-interface-language-dropdown";
 const COPY = {
   en: {
     placeholder: "Search foods",
-    control: "Interface language",
   },
   pl: {
     placeholder: "Szukaj potraw",
-    control: "Język interfejsu",
   },
 } as const;
 
@@ -67,20 +66,13 @@ test.describe("Interface Language selection", () => {
 
     await page.goto("/");
     const searchInput = page.locator('input[type="search"]');
-    let languageSelect = page.getByRole("combobox", {
-      name: COPY.pl.control,
-    });
-    await expect(languageSelect).toHaveValue("pl");
+    await expectLanguage(page, "pl");
     await expect(searchInput).toHaveAttribute(
       "placeholder",
       COPY.pl.placeholder,
     );
 
-    await languageSelect.selectOption("en");
-    languageSelect = page.getByRole("combobox", {
-      name: COPY.en.control,
-    });
-    await expect(languageSelect).toHaveValue("en");
+    await chooseLanguage(page, "en");
     await expect(searchInput).toHaveAttribute(
       "placeholder",
       COPY.en.placeholder,
@@ -88,17 +80,10 @@ test.describe("Interface Language selection", () => {
     await expectStored(page, "en");
 
     await page.reload();
-    languageSelect = page.getByRole("combobox", {
-      name: COPY.en.control,
-    });
-    await expect(languageSelect).toHaveValue("en");
+    await expectLanguage(page, "en");
     await expectStored(page, "en");
 
-    await languageSelect.selectOption("pl");
-    languageSelect = page.getByRole("combobox", {
-      name: COPY.pl.control,
-    });
-    await expect(languageSelect).toHaveValue("pl");
+    await chooseLanguage(page, "pl");
     await expect(searchInput).toHaveAttribute(
       "placeholder",
       COPY.pl.placeholder,
@@ -107,9 +92,7 @@ test.describe("Interface Language selection", () => {
 
     await useBrowserLanguages(page, ["en-US"]);
     await page.reload();
-    await expect(
-      page.getByRole("combobox", { name: COPY.pl.control }),
-    ).toHaveValue("pl");
+    await expectLanguage(page, "pl");
     await expectStored(page, "pl");
 
     expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
@@ -119,7 +102,7 @@ test.describe("Interface Language selection", () => {
     expect(await page.evaluate(() => document.cookie)).toBe("");
   });
 
-  test("changing language retains unfinished Search text and leaves focus on the dropdown", async ({
+  test("changing language retains unfinished Search text and returns focus to the summary", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -133,26 +116,22 @@ test.describe("Interface Language selection", () => {
 
     await page.goto("/");
     const searchInput = page.locator('input[type="search"]');
-    const languageSelect = page.getByRole("combobox", {
-      name: COPY.en.control,
-    });
+    const summary = languageSummary(page);
 
     await searchInput.fill("abc");
     await expect(page.getByRole("listbox")).toBeVisible();
     const requestsAfterTyping = userRequestUrls.length;
 
-    await languageSelect.focus();
+    await summary.focus();
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(searchInput).not.toHaveAttribute("aria-activedescendant");
-    await languageSelect.selectOption("pl");
+    await chooseLanguage(page, "pl");
 
     await expect(searchInput).toHaveValue("abc");
+    await expect(summary).toBeFocused();
     await expect(
-      page.getByRole("combobox", { name: COPY.pl.control }),
-    ).toBeFocused();
-    await expect(page.locator("button, [role='listbox'], ul, ol")).toHaveCount(
-      0,
-    );
+      page.locator("button:visible, [role='listbox'], ul:visible, ol:visible"),
+    ).toHaveCount(0);
     expect(
       userRequestUrls
         .slice(requestsAfterTyping)
@@ -194,18 +173,13 @@ async function assertControlAtViewport(
   await page.goto("/");
 
   const wrapper = page.locator("[data-interface-language]");
-  const languageSelect = page.getByRole("combobox", {
-    name: COPY.en.control,
-  });
+  const summary = languageSummary(page);
   const searchInput = page.locator('input[type="search"]');
 
   await expect(wrapper).toBeVisible();
-  await expect(languageSelect).toBeVisible();
-  await expect(languageSelect).toHaveValue("en");
-  await expect(languageSelect.locator("option")).toHaveCount(2);
-  await expect(languageSelect.locator("option").nth(0)).toHaveText("PL");
-  await expect(languageSelect.locator("option").nth(1)).toHaveText("EN");
-  await expect(page.locator("button")).toHaveCount(0);
+  await expect(summary).toBeVisible();
+  await expectLanguage(page, "en");
+  await expect(page.locator("button:visible")).toHaveCount(0);
 
   const wrapperBox = await wrapper.boundingBox();
   if (wrapperBox === null) {
@@ -218,36 +192,50 @@ async function assertControlAtViewport(
     ),
   ).toBeLessThanOrEqual(1);
 
-  const selectBox = await languageSelect.boundingBox();
-  if (selectBox === null) {
-    throw new Error(`${viewport.name}: language select has no bounding box`);
+  const summaryBox = await summary.boundingBox();
+  if (summaryBox === null) {
+    throw new Error(`${viewport.name}: language summary has no bounding box`);
   }
-  expect(selectBox.width).toBeGreaterThanOrEqual(MIN_TARGET_PX);
-  expect(selectBox.height).toBeGreaterThanOrEqual(MIN_TARGET_PX);
-  await expect(languageSelect).toHaveCSS("border-top-width", "0px");
-  await expect(languageSelect).toHaveCSS("border-right-width", "0px");
-  await expect(languageSelect).toHaveCSS("border-bottom-width", "0px");
-  await expect(languageSelect).toHaveCSS("border-left-width", "0px");
-  await expect(languageSelect).toHaveCSS("background-color", TRANSPARENT_RGBA);
-  await expect(languageSelect).toHaveCSS("color", TEXT_PRIMARY_RGB);
+  expect(summaryBox.width).toBeGreaterThanOrEqual(MIN_TARGET_PX);
+  expect(summaryBox.height).toBeGreaterThanOrEqual(MIN_TARGET_PX);
+  await expect(summary).toHaveCSS("border-top-width", "0px");
+  await expect(summary).toHaveCSS("border-right-width", "0px");
+  await expect(summary).toHaveCSS("border-bottom-width", "0px");
+  await expect(summary).toHaveCSS("border-left-width", "0px");
+  await expect(summary).toHaveCSS("background-color", TRANSPARENT_RGBA);
+  await expect(summary).toHaveCSS("color", TEXT_PRIMARY_RGB);
 
   await expect(searchInput).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(languageSelect).toBeFocused();
+  await expect(summary).toBeFocused();
   expect(
-    await languageSelect.evaluate((element) =>
-      element.matches(":focus-visible"),
-    ),
+    await summary.evaluate((element) => element.matches(":focus-visible")),
   ).toBe(true);
-  await expect(languageSelect).toHaveCSS("outline-style", "solid");
-  await expect(languageSelect).toHaveCSS("outline-width", "2px");
-  await expect(languageSelect).toHaveCSS("outline-color", PRIMARY_RGB);
-  await expect(languageSelect).toHaveCSS("outline-offset", "2px");
+  await expect(summary).toHaveCSS("outline-style", "solid");
+  await expect(summary).toHaveCSS("outline-width", "2px");
+  await expect(summary).toHaveCSS("outline-color", PRIMARY_RGB);
+  await expect(summary).toHaveCSS("outline-offset", "2px");
 
-  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  const choices = wrapper.getByRole("button");
+  const polish = wrapper.getByRole("button", { name: "Polski", exact: true });
+  await expect(choices).toHaveCount(2);
+  await expect(polish).toHaveAttribute("aria-pressed", "false");
   await expect(
-    page.getByRole("combobox", { name: COPY.pl.control }),
-  ).toHaveValue("pl");
+    wrapper.getByRole("button", { name: "English", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Tab");
+  await expect(choices.first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(choices.last()).toBeFocused();
+  if (!(await polish.evaluate((button) => button === document.activeElement))) {
+    await page.keyboard.press("Shift+Tab");
+  }
+  await expect(polish).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expectLanguage(page, "pl");
+  await expect(summary).toBeFocused();
+  await expect(choices).toHaveCount(0);
   await expectStored(page, "pl");
 
   const searchBox = await searchInput.boundingBox();

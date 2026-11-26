@@ -11,6 +11,16 @@ export interface Messages {
 
   interfaceLanguage: () => string;
 
+  dataSourcesHeading: () => string;
+
+  navigationLabel: () => string;
+
+  foodsHeading: () => string;
+
+  recipesHeading: () => string;
+
+  dataVersionLabel: () => string;
+
   suggestionsListLabel: () => string;
 
   selectedFoodLabel: () => string;
@@ -58,6 +68,11 @@ const en = {
   searchLabel: () => "Search",
   searchPlaceholder: () => "Search foods",
   interfaceLanguage: () => "Interface language",
+  dataSourcesHeading: () => "Sources",
+  navigationLabel: () => "Navigation",
+  foodsHeading: () => "Foods",
+  recipesHeading: () => "Recipes",
+  dataVersionLabel: () => "Data version:",
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
   servingUnit: () => "serving",
@@ -86,6 +101,11 @@ const pl = {
   searchLabel: () => "Szukaj",
   searchPlaceholder: () => "Szukaj potraw",
   interfaceLanguage: () => "Język interfejsu",
+  dataSourcesHeading: () => "Źródła",
+  navigationLabel: () => "Nawigacja",
+  foodsHeading: () => "Składniki",
+  recipesHeading: () => "Przepisy",
+  dataVersionLabel: () => "Wersja danych:",
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",
   servingUnit: () => "porcja",

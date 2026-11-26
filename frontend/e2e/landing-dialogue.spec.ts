@@ -1,3 +1,4 @@
+import { chooseLanguage, wordmark } from "./header";
 import { expect, test, type Request } from "@playwright/test";
 import type {
   FoodQuantity,
@@ -153,9 +154,7 @@ for (const presentation of presentations) {
       ).toHaveLength(0);
 
       const otherLanguage = language === "en" ? "pl" : "en";
-      await page
-        .locator("[data-interface-language] select")
-        .selectOption(otherLanguage);
+      await chooseLanguage(page, otherLanguage);
       await expect(page.locator("[data-dialogue-meal] h2")).toHaveText(
         firstAlternative.names[otherLanguage],
       );
@@ -176,11 +175,15 @@ for (const presentation of presentations) {
         "results",
       );
       await expect(page.locator("[data-result-card]")).toHaveCount(3);
-      await expect(
-        page.getByRole("link", { name: "obiad", exact: true }),
-      ).toBeVisible();
+      await expect(wordmark(page)).toHaveAccessibleName("obiad — menu");
       await expect(dialogue).toHaveCount(0);
-      await page.getByRole("link", { name: "obiad", exact: true }).click();
+      await wordmark(page).click();
+      await page
+        .getByRole("link", {
+          name: otherLanguage === "en" ? "Search" : "Szukaj",
+          exact: true,
+        })
+        .click();
       await expect(page).toHaveURL("/");
       await expect(page.locator("main")).toHaveAttribute(
         "data-interaction-state",

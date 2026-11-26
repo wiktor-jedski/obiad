@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
@@ -50,7 +51,7 @@ for (const fixture of [
     quantity: "200",
     calories: "313 kcal",
   },
-]) {
+] as const) {
   test(`${fixture.language}: bottom scrolling appends every page and a new search resets the portion`, async ({
     page,
   }) => {
@@ -65,9 +66,7 @@ for (const fixture of [
         posts.push(request.postDataJSON());
     });
     await page.goto("/");
-    await page
-      .getByRole("combobox", { name: /Interface language|Język interfejsu/ })
-      .selectOption(fixture.language);
+    await chooseLanguage(page, fixture.language);
     const search = page.getByRole("combobox", { name: /^(Search|Szukaj)$/ });
     await search.fill(fixture.query);
     await page.locator(`#food-suggestion-option-${fixture.id}`).click();

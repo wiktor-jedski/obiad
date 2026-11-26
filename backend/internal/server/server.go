@@ -12,7 +12,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// DefaultListenAddr is the fixed loopback listener address.
+// DefaultListenAddr is the loopback address for local development.
 const DefaultListenAddr = "127.0.0.1:8080"
 
 const healthPingTimeout = time.Second
@@ -42,6 +42,7 @@ func Compose(runtimeDatabaseURL string, logger *slog.Logger) (*fiber.App, *pgxpo
 
 	app := fiber.New(fiber.Config{ErrorHandler: errorHandler(logger)})
 	app.Use(requestLogger(logger))
+	registerMetrics(app)
 	app.Get("/health", healthHandler(pool))
 	app.Get("/api/v1/food-suggestions", suggestionsHandler(pool))
 	app.Get("/api/v1/food-objects/random", randomFoodHandler(pool))

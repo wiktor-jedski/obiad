@@ -1,3 +1,4 @@
+import { expectHeader } from "./header";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -52,17 +53,12 @@ async function assertEmptyShell(
   await expect(input).toHaveCount(1);
   await expect(input).toHaveAttribute("type", "search");
 
-  await expect(page.locator("button")).toHaveCount(0);
-  const languageSelect = page.getByRole("combobox", {
-    name: "Interface language",
-  });
-  await expect(languageSelect).toHaveCount(1);
-  await expect(languageSelect.locator("option")).toHaveCount(2);
-  const logo = page.getByRole("link", { name: "obiad", exact: true });
-  await expect(logo).toHaveAttribute("href", "/");
-  await expect(page.locator("select")).toHaveCount(1);
+  await expectHeader(page, "en");
+  await expect(page.locator("select")).toHaveCount(0);
+  await expect(page.locator('[href="/release.json"]')).toHaveCount(0);
+  await expect(page.locator("button:visible")).toHaveCount(0);
   await expect(page.locator('[role="listbox"]')).toHaveCount(0);
-  await expect(page.locator("ul, ol")).toHaveCount(0);
+  await expect(page.locator("ul:visible, ol:visible")).toHaveCount(0);
   await expect(main).toContainText("Search");
 
   const label = page.locator("label");
@@ -160,9 +156,9 @@ async function assertEmptyShell(
 
   expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
-    expect(new URL(url).origin, `unexpected request origin ${url}`).toBe(
-      PREVIEW_ORIGIN,
-    );
+    const { origin, pathname } = new URL(url);
+    expect(["/release.json", "/catalog.json"]).not.toContain(pathname);
+    expect(origin, `unexpected request origin ${url}`).toBe(PREVIEW_ORIGIN);
   }
 
   await expect(input).toBeFocused();

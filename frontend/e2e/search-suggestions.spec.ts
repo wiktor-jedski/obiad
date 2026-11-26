@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
@@ -21,13 +22,11 @@ const COPY = {
     search: "Search",
     placeholder: "Search foods",
     listbox: "Suggestions",
-    languageControl: "Interface language",
   },
   pl: {
     search: "Szukaj",
     placeholder: "Szukaj potraw",
     listbox: "Podpowiedzi",
-    languageControl: "Język interfejsu",
   },
 } as const;
 
@@ -250,9 +249,7 @@ test.describe("live Food Object suggestions", () => {
     await useBrowserLanguages(page, ["en-US"]);
     await page.goto("/");
 
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     const search = page.getByRole("combobox", { name: COPY.pl.search });
     await expect(search).toHaveAttribute("placeholder", COPY.pl.placeholder);
 

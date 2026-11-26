@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
@@ -9,13 +10,11 @@ const COPY = {
     search: "Search",
     listbox: "Suggestions",
     selectedFood: "Selected food",
-    languageControl: "Interface language",
   },
   pl: {
     search: "Szukaj",
     listbox: "Podpowiedzi",
     selectedFood: "Wybrany produkt",
-    languageControl: "Język interfejsu",
   },
 } as const;
 
@@ -367,9 +366,7 @@ test.describe("pointer substitution search", () => {
     await expectSubstitutePost(posts, 1, SEEDED_DEFAULTS[1], observedDefaults);
     await expectSelectedInput(page, COPY.en, "Pizza Margherita · 1 serving");
 
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     await expectSelectedInput(page, COPY.pl, "Pizza margherita · 1 porcja");
     await expect(selectedInput(page).locator("h3")).not.toHaveText(
       "Pizza Margherita",
@@ -416,9 +413,7 @@ test.describe("pointer substitution search", () => {
 
     await page.goto("/");
 
-    await page
-      .getByRole("combobox", { name: COPY.en.languageControl })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     const search = page.getByRole("combobox", { name: COPY.pl.search });
     await search.fill("mleko");
     await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.mleko, COPY.pl);
@@ -433,9 +428,7 @@ test.describe("pointer substitution search", () => {
     await expectSelectedInput(page, COPY.pl, "Mleko · 100 ml");
     await expect(search).toHaveValue("Mleko");
 
-    await page
-      .getByRole("combobox", { name: COPY.pl.languageControl })
-      .selectOption("en");
+    await chooseLanguage(page, "en");
     await expectSelectedInput(page, COPY.en, "Milk · 100 ml");
     await expect(selectedInput(page).locator("h3")).not.toHaveText("Mleko");
     await expect(page.locator("main")).toHaveAttribute(

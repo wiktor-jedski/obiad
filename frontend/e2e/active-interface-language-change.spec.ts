@@ -1,3 +1,4 @@
+import { chooseLanguage, expectLanguage, languageSummary } from "./header";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { isActionRequest, isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
@@ -146,9 +147,8 @@ async function expectSearchSideLanguageChange(
   panel: Locator,
   copy: (typeof COPY)[keyof typeof COPY],
 ): Promise<void> {
-  await expect(
-    page.getByRole("combobox", { name: copy.control }),
-  ).toBeFocused();
+  await expect(languageSummary(page)).toHaveAccessibleName(copy.control);
+  await expect(languageSummary(page)).toBeFocused();
   await expect(search).not.toBeFocused();
 
   const range = await selectionRange(search);
@@ -306,9 +306,7 @@ test.describe("Active Interface Language change", () => {
 
     const search = page.locator('input[type="search"]');
     await expect(search).toHaveAttribute("placeholder", COPY.en.placeholder);
-    await expect(
-      page.getByRole("combobox", { name: COPY.en.control }),
-    ).toHaveValue("en");
+    await expectLanguage(page, "en");
     expect(ledger.some((url) => url.includes("/api/"))).toBe(false);
     for (const url of allUrls) {
       expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
@@ -325,11 +323,7 @@ test.describe("Active Interface Language change", () => {
     ).toBeLessThan(before.end);
 
     const ledgerBeforeLanguageChange = ledger.length;
-    const englishControl = page.getByRole("combobox", {
-      name: COPY.en.control,
-    });
-    await englishControl.focus();
-    await englishControl.selectOption("pl");
+    await chooseLanguage(page, "pl");
     expect(
       ledger.slice(ledgerBeforeLanguageChange),
       "the language action starts no suggestion GET, Substitute POST, retry, or other application request",
@@ -357,11 +351,7 @@ test.describe("Active Interface Language change", () => {
     expect(substitutePosts(ledger.slice(ledgerBeforeRefocus))).toEqual([]);
 
     const ledgerBeforeSecondChange = ledger.length;
-    const polishControl = page.getByRole("combobox", {
-      name: COPY.pl.control,
-    });
-    await polishControl.focus();
-    await polishControl.selectOption("en");
+    await chooseLanguage(page, "en");
     expect(
       ledger.slice(ledgerBeforeSecondChange),
       "the repeated language action starts no application request",
@@ -393,9 +383,7 @@ test.describe("Active Interface Language change", () => {
 
     const ledgerBeforeReload = ledger.length;
     await page.reload();
-    await expect(
-      page.getByRole("combobox", { name: COPY.en.control }),
-    ).toHaveValue("en");
+    await expectLanguage(page, "en");
     await expect(search).toHaveAttribute("placeholder", COPY.en.placeholder);
     await expectStored(page, "en");
     expect(
@@ -477,11 +465,7 @@ test.describe("Active Interface Language change", () => {
     );
 
     const ledgerBeforeLanguageChange = ledger.length;
-    const englishControl = page.getByRole("combobox", {
-      name: COPY.en.control,
-    });
-    await englishControl.focus();
-    await englishControl.selectOption("pl");
+    await chooseLanguage(page, "pl");
     expect(
       ledger.slice(ledgerBeforeLanguageChange),
       "the language action starts no suggestion GET, Substitute POST, retry, or other application request",
@@ -495,9 +479,7 @@ test.describe("Active Interface Language change", () => {
       COPY.pl,
       "pl",
     );
-    await expect(
-      page.getByRole("combobox", { name: COPY.pl.control }),
-    ).toBeFocused();
+    await expect(languageSummary(page)).toBeFocused();
 
     const numberField = page.getByRole("textbox", {
       name: RESULT_COPY.pl.quantity,
@@ -554,11 +536,7 @@ test.describe("Active Interface Language change", () => {
     expect(posts).toHaveLength(4);
 
     const ledgerBeforeSecondChange = ledger.length;
-    const polishControl = page.getByRole("combobox", {
-      name: COPY.pl.control,
-    });
-    await polishControl.focus();
-    await polishControl.selectOption("en");
+    await chooseLanguage(page, "en");
     expect(
       ledger.slice(ledgerBeforeSecondChange),
       "the repeated language action starts no application request",

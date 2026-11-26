@@ -4,7 +4,7 @@ This document is the source of truth for the current Obiad proof-of-concept arch
 
 ## System overview
 
-Obiad runs as three local processes: a client-only Svelte browser application, a Go/Fiber backend, and PostgreSQL. Vite serves the browser application and proxies same-origin `/api` requests to Fiber. PostgreSQL owns the runtime Food Catalog. Database setup loads application-owned dummy data for local development, CI, and integration checks. The production launcher instead loads a validated production Meal aggregate.
+Local development runs a client-only Svelte application through Vite, a Go/Fiber backend, and PostgreSQL. Vite proxies same-origin `/api` requests to Fiber. Production Compose runs the optimized frontend through Nginx, the compiled backend, persistent PostgreSQL, and release/setup jobs. The infrastructure repository owns public Caddy routing and monitoring. PostgreSQL owns the runtime Food Catalog. Local development and CI use application-owned dummy data. Production loads the validated Meal aggregate from the pinned data revision.
 
 The browser requests Food Object suggestions and pages of Substitutes through an OpenAPI-first HTTP Interface. Two backend Modules own these operations. Go owns suggestion ranking, candidate eligibility, full-precision Nutritional Similarity calculation, deterministic rank order, and paging independently of Food Quantity. The browser owns interaction state, local quantity projection from the returned calculation basis (input calories, equal-calorie Matched Quantities, scaled macronutrients, and final display rounding), localization, accessibility behavior, and presentation.
 
@@ -27,12 +27,14 @@ flowchart LR
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-003, REQ-029, REQ-031, REQ-039–REQ-040, REQ-060–REQ-061, REQ-073, REQ-093, REQ-096, REQ-102 |
+| Requirements | REQ-003, REQ-029, REQ-031, REQ-039–REQ-040, REQ-060–REQ-061, REQ-073, REQ-093, REQ-096, REQ-102–REQ-106 |
 | Dependencies | ARCH-002, ARCH-003, ARCH-008, ARCH-014–ARCH-016, ARCH-019–ARCH-020, ARCH-023–ARCH-024 |
 
-**Responsibility:** Render the single-page substitution interface and project calculation basis values.
+**Responsibility:** Render Search at `/` and Sources at `/sources`, and project Search calculation basis values.
 
 **Contract:** This client-only Svelte 5 Module renders one primary content column. It uses the generated TypeScript HTTP client. It owns one pure projection from the returned calculation basis and committed Food Quantity to input calories, equal-calorie Matched Quantities, scaled macronutrients, and final rounded display values. It converts an entered Serving count to the base grams or millilitres using the returned Serving base quantity, computes derived input calories as `4p + 4c + 9f`, computes candidate equal-calorie Matched Quantities, and scales candidate macronutrients to the unrounded Matched Quantity using full calculation precision before final display rounding. Final display rounding rounds input calories and Matched Quantity to whole numbers and macronutrients to 0.1 g; exact nonnegative halves round up at each target precision. It does not implement Search ranking, candidate eligibility, or paging.
+
+Both paths use the same header. The `obiad` wordmark opens native `details` with ordinary links to Search and Sources. Following a link loads the destination document; direct entry and reload use the same path. Sources renders the bundled food and recipe source lists instead of mounting Search or the landing dialogue. Neither page renders a footer or fetches the catalog or release manifest on load.
 
 ## ARCH-002 — Browser Interaction Module
 
@@ -215,7 +217,7 @@ A new-search failure clears cards, retains the input, and shows the localized re
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-055–REQ-059 |
+| Requirements | REQ-055–REQ-059, REQ-104 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-008, ARCH-014 |
 
 **Responsibility:** Change Interface Language without changing current Search identity or order.
@@ -224,7 +226,7 @@ A new-search failure clears cards, retains the input, and shows the localized re
 
 **Runtime behavior:** A valid saved `en` or `pl` preference wins. Otherwise, the browser inspects `navigator.languages` in order and selects the first supported primary language. It defaults to English when none match.
 
-A user selection updates memory and persistence. It closes suggestions, removes focus from the search field, and retains unfinished text. Current result IDs, order, and page remain unchanged. Visible names and all interface and accessibility text change locally without an HTTP request.
+On either page, the second `details` summary displays the active language code and a chevron. English and Polski are native buttons; `aria-pressed` identifies the current preference. Selection updates memory and persistence, closes the disclosure, and returns focus to the summary. On Search it also closes suggestions and retains unfinished text. Current result IDs, order, and page remain unchanged. Visible names and all interface and accessibility text change locally without an HTTP request.
 
 ## ARCH-013 — Food Catalog Data
 
@@ -232,13 +234,13 @@ A user selection updates memory and persistence. It closes suggestions, removes 
 | --- | --- |
 | Type | Data |
 | Status | Active |
-| Requirements | REQ-004–REQ-010, REQ-086–REQ-091 |
+| Requirements | REQ-004–REQ-010, REQ-086, REQ-088–REQ-091, REQ-107 |
 | Dependencies | PostgreSQL, `data/` production repository |
 | ADR | [0001 — Store localized names in Food Object JSONB](0001-localized-names-jsonb.md) |
 
 **Responsibility:** Define the Food Object catalog contracts at the application and production-data boundary.
 
-**Ownership:** ARCH-013 owns REQ-004–REQ-010 and REQ-086–REQ-091. ARCH-006 owns REQ-002. ARCH-007 owns REQ-070–REQ-072. ARCH-006 and ARCH-007 consume this contract but keep application-owned dummy-catalog ownership.
+**Ownership:** ARCH-013 owns REQ-004–REQ-010, REQ-086, REQ-088–REQ-091, and the catalog privacy contract in REQ-107. ARCH-006 owns REQ-002. ARCH-007 owns REQ-070–REQ-072. ARCH-006 and ARCH-007 consume this contract but keep application-owned dummy-catalog ownership.
 
 **Application contract:** Food Object is the application and HTTP term for one generic prepared dish in a validated production Meal aggregate. Dummy fixtures and third-party catalogs use the same source-agnostic interface. The application owns `api/catalog.schema.json`; it remains available when `data/` is uninitialized. Aggregate fields use `camelCase`: a catalog requires exactly `schemaVersion: 1`, a `foodFamilies` array that may be empty, and a `foodObjects` array with at least one entry. Each Food Object requires a stable opaque positive `id`, nonempty `en` and `pl` names, `macroProfile`, and `nutritionBasis` of `g` or `ml`. It may have `serving`, `source`, `foodFamilyId`, and a nonempty string `imageKey`; Serving is positive and uses the Nutrition Basis unit. Each Food Object has zero or one Food Family reference. Unknown fields, `dataCommit`, other provenance fields, catalog-kind discriminators, record revisions, license notices, catalog versions, and release download URLs are invalid. No catalog metadata table is required. The generic interface accepts the Phase 27 one-Meal artifact; the Phase 31 launcher separately requires at least ten accepted Meals before database mutation.
 
@@ -256,7 +258,7 @@ An Ingredient contains `id`, localized `names`, one `source` URL, and `macro_pro
 
 **Serving derivation contract:** Where a Meal derives a Serving, production data divides the Decimal finished yield by the positive declared serving count, then quantizes the result to six fractional decimal places with Decimal `ROUND_HALF_UP`. It stores the resulting finite decimal in the Meal Nutrition Basis unit, `g` or `ml`, and accepts nonterminating divisions; no exact-representability rule applies. The finite stored decimal then follows the existing `float64` catalog-storage and browser-projection paths. This contract does not promise arbitrary end-to-end precision.
 
-**Attribution contract:** Open Food Facts and USDA credit appears only in the production Data Sources footer with the ODbL, the full production-data commit ID, and the free catalog download. It is not stored in the aggregate catalog.
+**Attribution contract:** Public food and recipe credits are static links on `/sources`, not records read from the aggregate catalog. The aggregate contains no attribution or license notices and is not served by the frontend.
 
 **Flow:** Application-owned dummy catalog data provides default local startup, CI, and integration data without `data/`; legacy dummy fixtures do not define private Meal catalog eligibility. Setup runs `dbsetup` and then `catalogload` with the dummy catalog. `catalogload` uses `OBIAD_SCHEMA_OWNER_DATABASE_URL` and the shared `dbsetup` advisory-lock key `0x0B1AD0001`. For a private local preview, `scripts/start.py --catalog PATH` validates and transactionally replaces the dummy rows with the caller-selected source-agnostic catalog after setup and before Fiber starts. This preview reads no Ingredient or Meal authoring file, publishes no artifact, and grants no production approval. ARCH-006 reads only the loaded PostgreSQL rows. HTTP returns Food Object source URLs only where the source catalog provides them.
 
@@ -309,7 +311,7 @@ An Ingredient contains `id`, localized `names`, one `source` URL, and `macro_pro
 
 **Runtime constraints:** Bun installs frontend dependencies and runs scripts and tests. Vite owns the development server, production bundle, preview server, and `/api` proxy. Development uses Vite dev. Acceptance, visual, browser-integration, and performance checks use the optimized Vite build through Vite preview.
 
-Fiber listens on loopback only. The POC adds no CORS mechanism, TLS, authentication, cookies, rate limiter, or third-party runtime system. The pgx pool has zero minimum and four maximum connections. Local deployment setup and integration fixtures create separate schema-owner and runtime database users before `dbsetup` runs. They remove `PUBLIC` object-creation and temporary-table privileges. Setup runs `dbsetup` and then the source-agnostic `catalogload` command with the application-owned dummy catalog. Both commands use `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. `scripts/start.py` has one optional `--catalog PATH` interface for private local preview. It resolves the selected regular file before resource mutation, uses normal dummy setup, replaces the catalog through `catalogload` before Fiber starts, and keeps all lifecycle implementation in the existing launcher. CI and integration callers omit the option and retain dummy data. The selected file follows ARCH-013: exactly schema version `1`, at least one Food Object, zero or more Food Families, optional source URLs, and no provenance or catalog-kind field.
+The local Fiber process listens on loopback only. The local POC adds no CORS mechanism, TLS, authentication, cookies, or rate limiter. The pgx pool has zero minimum and four maximum connections. Local deployment setup and integration fixtures create separate schema-owner and runtime database users before `dbsetup` runs. They remove `PUBLIC` object-creation and temporary-table privileges. Setup runs `dbsetup` and then the source-agnostic `catalogload` command with the application-owned dummy catalog. Both commands use `OBIAD_SCHEMA_OWNER_DATABASE_URL` and advisory-lock key `0x0B1AD0001`. `scripts/start.py` has one optional `--catalog PATH` interface for private local preview. It resolves the selected regular file before resource mutation, uses normal dummy setup, replaces the catalog through `catalogload` before Fiber starts, and keeps all lifecycle implementation in the existing launcher. CI and integration callers omit the option and retain dummy data. The selected file follows ARCH-013: exactly schema version `1`, at least one Food Object, zero or more Food Families, optional source URLs, and no provenance or catalog-kind field. ARCH-025 defines the separate production deployment.
 
 ## ARCH-017 — Suggestion Ranking Mechanism
 
@@ -374,12 +376,14 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-061, REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080, REQ-084–REQ-085, REQ-092–REQ-102 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-061, REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080, REQ-084–REQ-085, REQ-092–REQ-105 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
 
 **Behavior:** The empty state centers Search; results place Search near the top. ResultsView renders one centered vertical list up to 920 px wide. Shared FoodCard Modules use 28 px corners. Below 640 px the square image is above details; at 640 px and wider it occupies the left 38%. Desktop names use 30 px, summaries 24 px, and bottom-aligned macros 18 px. Smaller names and summaries use 18 px. Content fits the viewport.
+
+On both pages, the wordmark summary is named `obiad — menu`. Its links read Search/Szukaj and Sources/Źródła. The Interface Language summary is named `Interface language` or `Język interfejsu`. Both disclosures support native Tab and Enter interaction, Escape, and outside dismissal. Sources stacks Foods/Składniki above Recipes/Przepisy with one linked source per list item.
 
 The suggestion control retains its combobox/listbox interface. Shared cards show localized names, quantity/unit and kcal summaries, scaled macros, and percentage-only substitute similarity with an accessible localized name. Only selected-food values are editable. NutritionValueEditor uses native text inputs, actual rendered-width sizing, underlined numbers, sage hover, and bold mint focus without boxes. The stable header unit control is one native whole-pill button with localized Servings/Porcje name and aria-pressed for ea. Pointer interaction keeps logical focus without a persistent outline; keyboard interaction shows an outline. Single-unit foods have no toggle.
 
@@ -451,6 +455,38 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 
 **Behavior:** CardReveal waits for actual image.decode(), including appended cards. It paints reverse art and localized loading text before an 800 ms flip, even for cached images. It uses X rotation at 640 px and wider and Y rotation below. It does not show a visual spinner. A failed image decodes the bundled placeholder; if both fail, localized Image unavailable/Obraz niedostępny replaces the image. The front remains inert until shown. Local edits do not replay reveal. Reduced motion reveals after readiness without movement. No fade Module remains.
 
+## ARCH-025 — Production Compose Deployment
+
+| Attribute | Value |
+| --- | --- |
+| Type | Deployment |
+| Status | Active |
+| Requirements | REQ-071, REQ-073–REQ-074, REQ-086, REQ-091, REQ-103, REQ-106–REQ-107 |
+| Dependencies | ARCH-001, ARCH-007–ARCH-009, ARCH-013, ARCH-015, infrastructure Caddy |
+
+**Responsibility:** Deploy one reviewed catalog release with persistent database storage and separate proxy, monitoring, and database networks.
+
+**Placement:** Nginx serves the optimized browser bundle on container port `8080`. Fiber uses `OBIAD_LISTEN_ADDR=:8080` in production and the existing loopback default locally. Both join external `proxy-obiad`; only Fiber also joins external `observability`. PostgreSQL and the database setup job use a private internal database network. No Obiad service publishes a host port. Infrastructure Caddy terminates HTTPS, preserves `/api` paths, and blocks public metrics access.
+
+**Release contract:** `scripts/prepare_release.py` requires the clean `data/` checkout to match the application's committed submodule revision. It uses the data exporter to validate and calculate Meals, then packages the catalog, matching original images, image map, and `release.json` under ignored `.release/`. The manifest contains the full data commit, catalog checksum, Meal IDs, and image checksums. The setup job receives the catalog. The frontend build receives only the manifest, image map, and images from the release. Serve the application on direct requests to `/` and `/sources`. On `/sources`, a production release uses the full `VITE_DATA_COMMIT` as the link text for `/release.json`; other builds omit the link. The public `/catalog.json` path returns 404.
+
+**Startup contract:** The operator accepts all released Meals and publication rights by setting `OBIAD_ACCEPTED_DATA_COMMIT` to the reviewed full commit. The release-check job verifies that acceptance, the generic catalog contract, at least ten Meals, IDs, and checksums before PostgreSQL starts. The setup job repeats preflight, provisions separate schema-owner and restricted runtime roles, applies migrations, replaces the catalog transactionally, and grants runtime reads. The backend starts only after setup succeeds. Application restarts do not run setup. Credentials enter through environment variables; connection strings contain no passwords.
+
+**Persistence and recovery:** A named volume stores PostgreSQL data. `scripts/database.sh` creates custom-format dumps and restores them transactionally while the HTTP services are stopped. Restore reapplies runtime grants and starts the existing application containers without reloading the packaged catalog.
+
+## ARCH-026 — Private Prometheus Metrics
+
+| Attribute | Value |
+| --- | --- |
+| Type | Mechanism |
+| Status | Active |
+| Requirements | Architecture overhead: production health and request diagnostics |
+| Dependencies | ARCH-008, ARCH-025, infrastructure Prometheus and Grafana |
+
+**Responsibility:** Expose backend process health and HTTP measurements to infrastructure monitoring.
+
+**Contract:** `GET /metrics` exposes a per-application Prometheus registry with Go and process collectors, `obiad_http_requests_total`, and `obiad_http_request_duration_seconds`. HTTP labels contain only bounded methods, registered route templates or the unmatched label, and response status codes. Metrics scrapes are excluded from request observations. Infrastructure Prometheus scrapes the backend through `observability`. Monitoring network membership permits communication between its members; it is not a per-application access-control policy.
+
 ## Requirement coverage
 
 | Requirement | Architecture coverage |
@@ -521,10 +557,10 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-068 | ARCH-003, ARCH-020 |
 | REQ-069 | ARCH-015, ARCH-020 |
 | REQ-070 | ARCH-007 |
-| REQ-071 | ARCH-007 |
+| REQ-071 | ARCH-007, ARCH-025 |
 | REQ-072 | ARCH-007 |
-| REQ-073 | ARCH-001, ARCH-015, ARCH-016, ARCH-020, ARCH-022 |
-| REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022 |
+| REQ-073 | ARCH-001, ARCH-015–ARCH-016, ARCH-020, ARCH-022, ARCH-025 |
+| REQ-074 | ARCH-008, ARCH-011, ARCH-016, ARCH-019, ARCH-022, ARCH-025 |
 | REQ-075 (Deprecated) | Superseded by REQ-100 |
 | REQ-076 | ARCH-004, ARCH-017 |
 | REQ-077 | ARCH-002, ARCH-003, ARCH-010 |
@@ -536,12 +572,12 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-083 (Deprecated) | Superseded by REQ-101 |
 | REQ-084 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
 | REQ-085 | ARCH-002, ARCH-003, ARCH-011, ARCH-020 |
-| REQ-086 | ARCH-013 |
-| REQ-087 | ARCH-013 |
+| REQ-086 | ARCH-013, ARCH-025 |
+| REQ-087 (Deprecated) | Superseded by REQ-105–REQ-107 |
 | REQ-088 | ARCH-013 |
 | REQ-089 | ARCH-013 |
 | REQ-090 | ARCH-013 |
-| REQ-091 | ARCH-013 |
+| REQ-091 | ARCH-013, ARCH-025 |
 | REQ-092 | ARCH-023, ARCH-020 |
 | REQ-093 | ARCH-023, ARCH-020 |
 | REQ-094 | ARCH-023, ARCH-020 |
@@ -553,3 +589,8 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-100 | ARCH-024, ARCH-015 |
 | REQ-101 | ARCH-023, ARCH-020 |
 | REQ-102 | ARCH-023, ARCH-020 |
+| REQ-103 | ARCH-001, ARCH-020, ARCH-025 |
+| REQ-104 | ARCH-001, ARCH-012, ARCH-020 |
+| REQ-105 | ARCH-001, ARCH-020 |
+| REQ-106 | ARCH-001, ARCH-025 |
+| REQ-107 | ARCH-013, ARCH-025 |

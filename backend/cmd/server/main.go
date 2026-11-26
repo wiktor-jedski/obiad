@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -36,14 +37,15 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	addr := cmp.Or(os.Getenv("OBIAD_LISTEN_ADDR"), server.DefaultListenAddr)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- app.Listen(server.DefaultListenAddr)
+		errCh <- app.Listen(addr)
 	}()
 
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("listen on %s: %w", server.DefaultListenAddr, err)
+		return fmt.Errorf("listen on %s: %w", addr, err)
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

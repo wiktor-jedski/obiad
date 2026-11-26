@@ -1,3 +1,4 @@
+import { languageSummary } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
@@ -322,9 +323,10 @@ test.describe("suggestion keyboard control", () => {
     await expect(page.getByRole("listbox")).toHaveCount(0);
     await expect(search).not.toHaveAttribute("aria-activedescendant");
     await expect(search).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      page.getByRole("combobox", { name: COPY.en.languageControl }),
-    ).toBeFocused();
+    await expect(languageSummary(page)).toHaveAccessibleName(
+      COPY.en.languageControl,
+    );
+    await expect(languageSummary(page)).toBeFocused();
     expect(posts, "Tab must not start a Substitution Search").toHaveLength(0);
   });
 });

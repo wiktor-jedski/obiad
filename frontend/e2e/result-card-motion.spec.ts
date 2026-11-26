@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 
 interface DecodeControl {
@@ -181,9 +182,7 @@ test.describe("Result Card motion", () => {
       await expect(card).toContainText("Image unavailable");
       await expect(card.locator("img")).toBeHidden();
     }
-    await page
-      .getByRole("combobox", { name: "Interface language" })
-      .selectOption("pl");
+    await chooseLanguage(page, "pl");
     for (const card of await page
       .locator("[data-selected-food-summary], [data-result-card]")
       .all()) {

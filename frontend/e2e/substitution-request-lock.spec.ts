@@ -1,3 +1,4 @@
+import { chooseLanguage } from "./header";
 import { expect, test } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
@@ -15,9 +16,7 @@ test("search requests lock selection, but pending pagination permits local edits
     await route.continue();
   });
   await page.goto("/");
-  await page
-    .getByRole("combobox", { name: /Interface language|Język interfejsu/ })
-    .selectOption("en");
+  await chooseLanguage(page, "en");
   const search = page.getByRole("combobox", { name: "Search", exact: true });
   await search.fill("margherita");
   await page.locator("#food-suggestion-option-1").click();

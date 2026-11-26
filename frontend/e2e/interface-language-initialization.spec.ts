@@ -1,3 +1,4 @@
+import { expectLanguage, languageSummary } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
 
@@ -9,12 +10,10 @@ const COPY = {
   en: {
     label: "Search",
     placeholder: "Search foods",
-    group: "Interface language",
   },
   pl: {
     label: "Szukaj",
     placeholder: "Szukaj potraw",
-    group: "Język interfejsu",
   },
 } as const;
 
@@ -61,16 +60,17 @@ async function assertInitialCopy(
   await expect(label).toHaveText(expected.label);
   await expect(input).toHaveAccessibleName(expected.label);
 
-  const languageSelect = page.getByRole("combobox", {
-    name: expected.group,
-  });
-  await expect(languageSelect).toHaveValue(language);
-  const options = languageSelect.locator("option");
-  await expect(options).toHaveCount(2);
-  await expect(options.nth(0)).toHaveText("PL");
-  await expect(options.nth(0)).toHaveAttribute("value", "pl");
-  await expect(options.nth(1)).toHaveText("EN");
-  await expect(options.nth(1)).toHaveAttribute("value", "en");
+  await expectLanguage(page, language);
+  await languageSummary(page).click();
+  const choices = page.locator("[data-interface-language]").getByRole("button");
+  await expect(choices).toHaveCount(2);
+  for (const [name, active] of [
+    ["English", language === "en"],
+    ["Polski", language === "pl"],
+  ] as const) {
+    const choice = page.getByRole("button", { name, exact: true });
+    await expect(choice).toHaveAttribute("aria-pressed", String(active));
+  }
 
   expect(userRequestUrls.some((url) => url.includes("/api/"))).toBe(false);
   for (const url of requestUrls) {
