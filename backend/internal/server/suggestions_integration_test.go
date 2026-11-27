@@ -85,8 +85,8 @@ func assertSuccessEnvelope(t *testing.T, status int, body string, contentType st
 	if err := json.Unmarshal([]byte(body), &response); err != nil {
 		t.Fatalf("body %q does not match the generated FoodSuggestionsResponse: %v", body, err)
 	}
-	if len(response.Items) != 5 {
-		t.Fatalf("response has %d items, want exactly five (body %s)", len(response.Items), body)
+	if len(response.Items) != 8 {
+		t.Fatalf("response has %d items, want exactly eight (body %s)", len(response.Items), body)
 	}
 	seen := make(map[int32]bool, len(response.Items))
 	for _, item := range response.Items {
@@ -206,27 +206,27 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	baseURL, _ := startServer(t, db.RuntimeURL)
 
 	enPizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "en")
-	assertOrderedIDs(t, enPizza, 1, 2, 8, 12, 3)
+	assertOrderedIDs(t, enPizza, 1, 2, 8, 12, 3, 29, 26, 35)
 
 	plPizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "pl")
-	assertOrderedIDs(t, plPizza, 1, 2, 3, 29, 35)
+	assertOrderedIDs(t, plPizza, 1, 2, 3, 29, 35, 4, 13, 23)
 
 	enNone := getSuggestionsEnvelope(t, baseURL, "zzzzzz", "en")
-	assertOrderedIDs(t, enNone, 13, 18, 16, 15, 10)
+	assertOrderedIDs(t, enNone, 13, 18, 16, 15, 10, 29, 30, 38)
 
 	plNone := getSuggestionsEnvelope(t, baseURL, "zzzzzz", "pl")
-	assertOrderedIDs(t, plNone, 38, 16, 15, 3, 18)
+	assertOrderedIDs(t, plNone, 38, 16, 15, 3, 18, 10, 27, 29)
 
 	pizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "en")
-	assertOrderedIDs(t, pizza, 1, 2, 8, 12, 3)
+	assertOrderedIDs(t, pizza, 1, 2, 8, 12, 3, 29, 26, 35)
 	assertSuggestionItem(t, pizza.Items[0], "Pizza Margherita", "Pizza margherita", 1, transport.FoodQuantityUnitServing)
 
 	chicken := getSuggestionsEnvelope(t, baseURL, "chicken breast", "en")
-	assertOrderedIDs(t, chicken, 5, 23, 7, 36, 15)
+	assertOrderedIDs(t, chicken, 5, 23, 7, 36, 15, 8, 32, 22)
 	assertSuggestionItem(t, chicken.Items[0], "Chicken breast", "Pierś z kurczaka", 100, transport.FoodQuantityUnitG)
 
 	milk := getSuggestionsEnvelope(t, baseURL, "milk", "en")
-	assertOrderedIDs(t, milk, 10, 14, 30, 13, 16)
+	assertOrderedIDs(t, milk, 10, 14, 30, 13, 16, 15, 29, 18)
 	assertSuggestionItem(t, milk.Items[0], "Milk", "Mleko", 100, transport.FoodQuantityUnitMl)
 
 	assertAllowedQuantities(t, pizza.Items[0],
@@ -255,11 +255,11 @@ func TestFoodSuggestionsHTTPIntegration(t *testing.T) {
 	assertSameOrder(t, nbVariant, enPizza)
 
 	zForm := getSuggestionsEnvelope(t, baseURL, "pierozki gyoza", "pl")
-	assertOrderedIDs(t, zForm, 13, 23, 4, 5, 25)
+	assertOrderedIDs(t, zForm, 13, 23, 4, 5, 25, 10, 24, 28)
 	assertSuggestionItem(t, zForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.FoodQuantityUnitServing)
 
 	accentedForm := getSuggestionsEnvelope(t, baseURL, "pierożki gyoza", "pl")
-	assertOrderedIDs(t, accentedForm, 13, 4, 23, 5, 25)
+	assertOrderedIDs(t, accentedForm, 13, 4, 23, 5, 25, 10, 24, 28)
 	assertSuggestionItem(t, accentedForm.Items[0], "Gyoza", "Pierożki gyoza", 1, transport.FoodQuantityUnitServing)
 	if zForm.Items[1].FoodObjectId == accentedForm.Items[1].FoodObjectId {
 		t.Fatalf("the z-form and ż-form queries must rank differently: both put ID %d at rank 2", zForm.Items[1].FoodObjectId)
@@ -273,13 +273,13 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	owner := connect(t, db.OwnerURL)
 
 	enPizza := getSuggestionsEnvelope(t, baseURL, "pizza margherita", "en")
-	assertOrderedIDs(t, enPizza, 1, 2, 8, 12, 3)
+	assertOrderedIDs(t, enPizza, 1, 2, 8, 12, 3, 29, 26, 35)
 
 	enPierogi := getSuggestionsEnvelope(t, baseURL, "pierogi", "en")
-	assertOrderedIDs(t, enPierogi, 4, 16, 29, 30, 13)
+	assertOrderedIDs(t, enPierogi, 4, 16, 29, 30, 13, 15, 10, 33)
 
 	plPierogi := getSuggestionsEnvelope(t, baseURL, "pierogi", "pl")
-	assertOrderedIDs(t, plPierogi, 4, 16, 10, 29, 36)
+	assertOrderedIDs(t, plPierogi, 4, 16, 10, 29, 36, 15, 18, 25)
 
 	plOws := getSuggestionsEnvelope(t, baseURL, "ows", "pl")
 	if plOws.Items[0].FoodObjectId != 28 {
@@ -306,19 +306,19 @@ func TestFoodSuggestionRankingHTTPIntegration(t *testing.T) {
 	}
 
 	dupEn := getSuggestionsEnvelope(t, baseURL, "sernik duplikat", "en")
-	assertOrderedIDs(t, dupEn, 39, 40, 34, 12, 37)
+	assertOrderedIDs(t, dupEn, 39, 40, 34, 12, 37, 9, 7, 10)
 	assertSuggestionItem(t, dupEn.Items[0], "Sernik duplikat", "Sernik duplikat", 100, transport.FoodQuantityUnitG)
 
 	dupPl := getSuggestionsEnvelope(t, baseURL, "sernik duplikat", "pl")
-	assertOrderedIDs(t, dupPl, 39, 40, 36, 34, 23)
+	assertOrderedIDs(t, dupPl, 39, 40, 36, 34, 23, 5, 32, 26)
 
 	acEn := getSuggestionsEnvelope(t, baseURL, "ac", "en")
-	assertOrderedIDs(t, acEn, 30, 42, 41, 15, 10)
+	assertOrderedIDs(t, acEn, 30, 42, 41, 15, 10, 13, 16, 29)
 	assertSuggestionItem(t, acEn.Items[1], "żaba", "Żaba", 100, transport.FoodQuantityUnitG)
 	assertSuggestionItem(t, acEn.Items[2], "źle", "Źle", 100, transport.FoodQuantityUnitG)
 
 	acPl := getSuggestionsEnvelope(t, baseURL, "ac", "pl")
-	assertOrderedIDs(t, acPl, 41, 42, 15, 18, 38)
+	assertOrderedIDs(t, acPl, 41, 42, 15, 18, 38, 16, 10, 27)
 }
 
 func TestFoodSuggestionAllowedQuantityBoundaryHTTPIntegration(t *testing.T) {

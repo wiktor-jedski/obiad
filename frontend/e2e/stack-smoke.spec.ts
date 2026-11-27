@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 import type {
   FoodSuggestionsResponse,
   GetFoodSuggestionsErrors,
@@ -10,7 +11,7 @@ const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
 
 test.describe("real-stack smoke", () => {
-  test("the generated client, executed in Chromium, receives the five-item seeded response through the preview /api proxy", async ({
+  test("the generated client receives the eight ranked suggestions through the preview /api proxy", async ({
     page,
   }) => {
     const bundlePath = process.env.OBIAD_E2E_BROWSER_CLIENT_BUNDLE;
@@ -54,7 +55,7 @@ test.describe("real-stack smoke", () => {
       },
     );
 
-    expect(suggestions.items).toHaveLength(5);
+    expect(suggestions.items).toHaveLength(8);
     for (const item of suggestions.items) {
       expect(item.foodObjectId).toBeGreaterThanOrEqual(1);
       expect(item.names.en.length).toBeGreaterThan(0);
@@ -62,9 +63,9 @@ test.describe("real-stack smoke", () => {
       expect(["g", "ml", "serving"]).toContain(item.defaultQuantity.unit);
     }
 
-    expect(suggestions.items.map((item) => item.foodObjectId)).toEqual([
-      5, 22, 17, 10, 26,
-    ]);
+    expect(suggestions.items.map((item) => item.foodObjectId)).toEqual(
+      SEEDED_SUGGESTIONS.en.chicken.map((item) => item.foodObjectId),
+    );
     expect(suggestions.items[0].defaultQuantity).toEqual({
       value: 100,
       unit: "g",

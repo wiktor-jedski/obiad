@@ -10,7 +10,7 @@
    */
 
   interface Props {
-    /** The returned five suggestions, in ranked order. */
+    /** Suggestions in ranked order. */
     items: FoodSuggestion[];
     /** Zero-based index of the keyboard-active option. */
     activeIndex: number;
@@ -31,7 +31,7 @@
   id={SUGGESTIONS_LISTBOX_ID}
   role="listbox"
   aria-label={dictionary.suggestionsListLabel()}
-  class="absolute top-full left-0 z-20 w-full overflow-hidden rounded-b-[28px] border border-t-0 border-solid border-dark-secondary bg-dark-surface"
+  class="absolute top-full left-0 z-20 w-full overflow-hidden rounded-b-[28px] border border-t-0 border-solid border-dark-secondary bg-dark-surface max-sm:max-h-[calc(100dvh-7.5rem)] max-sm:overflow-y-auto"
 >
   {#each items as item, index (item.foodObjectId)}
     <!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -47,7 +47,7 @@
           onselect(item);
         }
       }}
-      class="flex h-12 items-center pl-[calc(1.75rem+0.5em)] pr-4 text-base {locked
+      class="flex items-center py-1.5 pl-[calc(1.75rem+0.5em)] pr-4 text-base {locked
         ? 'cursor-not-allowed opacity-60'
         : ''} {index === activeIndex
         ? 'bg-dark-primary text-dark-text-on-bright'

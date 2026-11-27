@@ -48,13 +48,13 @@ paths:
       operationId: getFoodSuggestions
       summary: Suggest Food Objects
       description: >
-        Return exactly five distinct Food Object suggestions for a Search
-        Query. The backend compares the normalized Search Query against the
-        Food Object names of the active Interface Language, orders by raw
+        Return the eight highest-ranked distinct Food Objects for a Search
+        Query, or all Food Objects if the catalog has fewer than eight.
+        The backend compares the normalized Search Query against names in the
+        active Interface Language. Exact matches precede full-name prefixes,
+        then substrings, then all other names. Within each tier, order by raw
         code-point Levenshtein distance, active-language collation, and stable
-        Food Object ID, and derives the default Food Quantity for every item.
-        The response envelope contains exactly five items and no unknown
-        fields.
+        Food Object ID.
       parameters:
         - name: query
           in: query
@@ -88,12 +88,11 @@ paths:
       responses:
         "200":
           description: >
-            Exactly five distinct Food Object suggestions ordered by raw
-            Levenshtein distance, active-language collation, and stable Food
-            Object ID. The response envelope has exactly five items and no
-            unknown fields; every item carries the stable positive Food Object
-            ID, both required localized names, the backend-derived default
-            Food Quantity, and the allowed quantity-editor units.
+            Up to eight distinct Food Object suggestions in ranked order.
+            The response envelope has no unknown fields; every item carries
+            the stable positive Food Object ID, both required localized names,
+            the backend-derived default Food Quantity, and the allowed
+            quantity-editor units.
           content:
             application/json:
               schema:
@@ -272,7 +271,7 @@ components:
           minimum: 1
     FoodSuggestionsResponse:
       description: >
-        The successful suggestion response: an envelope with exactly five
+        The successful suggestion response: an envelope with up to eight
         distinct Food Object suggestions and no unknown fields.
       type: object
       required:
@@ -280,10 +279,9 @@ components:
       additionalProperties: false
       properties:
         items:
-          description: Exactly five distinct Food Object suggestions.
+          description: The first eight distinct Food Objects in ranked order, or all if fewer exist.
           type: array
-          minItems: 5
-          maxItems: 5
+          maxItems: 8
           items:
             $ref: "#/components/schemas/FoodSuggestion"
     FoodSuggestion:

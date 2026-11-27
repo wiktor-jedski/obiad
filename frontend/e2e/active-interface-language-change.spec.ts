@@ -1,6 +1,7 @@
 import { chooseLanguage, expectLanguage, languageSummary } from "./header";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { isActionRequest, isLandingDialogueRequest } from "./request-purpose";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
@@ -22,23 +23,6 @@ const COPY = {
     listbox: "Podpowiedzi",
     control: "Język interfejsu",
   },
-} as const;
-
-const SEEDED_SUGGESTIONS = {
-  en: [
-    { foodObjectId: 5, name: "Chicken breast" },
-    { foodObjectId: 22, name: "Fried chicken wings" },
-    { foodObjectId: 17, name: "Polish chicken soup" },
-    { foodObjectId: 10, name: "Milk" },
-    { foodObjectId: 30, name: "Pho" },
-  ],
-  pl: [
-    { foodObjectId: 16, name: "Gyros" },
-    { foodObjectId: 15, name: "Kebab" },
-    { foodObjectId: 18, name: "Masło" },
-    { foodObjectId: 10, name: "Mleko" },
-    { foodObjectId: 27, name: "Omlet" },
-  ],
 } as const;
 
 const RESULT_COPY = {
@@ -173,7 +157,7 @@ async function expectSuggestionPanel(
   const panel = page.getByRole("listbox", { name: copy.listbox });
   const options = panel.getByRole("option");
   await expect(panel).toBeVisible();
-  await expect(options).toHaveCount(5);
+  await expect(options).toHaveCount(expected.length);
   for (let index = 0; index < expected.length; index += 1) {
     await expect(options.nth(index)).toHaveText(expected[index].name);
   }
@@ -312,8 +296,15 @@ test.describe("Active Interface Language change", () => {
       expect(new URL(url).origin).toBe(PREVIEW_ORIGIN);
     }
 
+    // Finish the landing example before measuring requests from language changes.
+    await expect(page.locator("[data-dialogue-complete]")).toHaveAttribute(
+      "data-dialogue-complete",
+      "true",
+      { timeout: 15_000 },
+    );
+
     await search.fill(UNFINISHED_QUERY);
-    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en, COPY.en);
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chick, COPY.en);
 
     await search.click();
     const before = await selectionRange(search);
@@ -339,7 +330,7 @@ test.describe("Active Interface Language change", () => {
 
     const ledgerBeforeRefocus = ledger.length;
     await search.focus();
-    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl, COPY.pl);
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.pl.chick, COPY.pl);
     const freshPolishGets = suggestionGets(ledger.slice(ledgerBeforeRefocus));
     expect(freshPolishGets).toHaveLength(1);
     expect(new URL(freshPolishGets[0] ?? "").searchParams.get("language")).toBe(
@@ -366,7 +357,7 @@ test.describe("Active Interface Language change", () => {
 
     const ledgerBeforeSecondRefocus = ledger.length;
     await search.focus();
-    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en, COPY.en);
+    await expectSuggestionPanel(page, SEEDED_SUGGESTIONS.en.chick, COPY.en);
     const freshEnglishGets = suggestionGets(
       ledger.slice(ledgerBeforeSecondRefocus),
     );

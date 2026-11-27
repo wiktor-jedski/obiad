@@ -102,7 +102,7 @@ test.describe("normalized-empty Search Query no-op", () => {
     await search.fill("chicken");
     const panel = page.getByRole("listbox", { name: COPY.en.listbox });
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("option")).toHaveCount(5);
+    await expect(panel.getByRole("option")).toHaveCount(8);
     expect(suggestionGets, "one live suggestion request").toHaveLength(1);
     expect(
       new URL(suggestionGets[0]).searchParams.get("query"),

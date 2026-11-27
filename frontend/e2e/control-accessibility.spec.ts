@@ -3,6 +3,7 @@ import { isLandingDialogueRequest } from "./request-purpose";
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 import { AxeBuilder } from "@axe-core/playwright";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 
 const COPY = {
   en: {
@@ -39,23 +40,6 @@ const COPY = {
   },
 } as const;
 
-const SEEDED_SUGGESTIONS = {
-  en: [
-    { foodObjectId: 5, name: "Chicken breast" },
-    { foodObjectId: 22, name: "Fried chicken wings" },
-    { foodObjectId: 17, name: "Polish chicken soup" },
-    { foodObjectId: 10, name: "Milk" },
-    { foodObjectId: 26, name: "Pancakes" },
-  ],
-  pl: [
-    { foodObjectId: 5, name: "Pierś z kurczaka" },
-    { foodObjectId: 22, name: "Smażone skrzydełka z kurczaka" },
-    { foodObjectId: 15, name: "Kebab" },
-    { foodObjectId: 36, name: "Sernik" },
-    { foodObjectId: 38, name: "Gulasz" },
-  ],
-} as const;
-
 const PIZZA_FOOD_OBJECT_ID = 1;
 
 function optionId(foodObjectId: number): string {
@@ -83,7 +67,7 @@ async function expectKeyboardActiveOption(
   const search = page.getByRole("combobox", { name: copy.search });
   const panel = page.getByRole("listbox", { name: copy.listbox });
   const options = panel.getByRole("option");
-  await expect(options).toHaveCount(5);
+  await expect(options).toHaveCount(expected.length);
   await expect(search).toHaveAttribute("aria-expanded", "true");
   for (let index = 0; index < expected.length; index += 1) {
     await expect(options.nth(index)).toHaveText(expected[index].name);
@@ -587,19 +571,13 @@ for (const language of ["en", "pl"] as const) {
       },
     ]);
     await page.keyboard.type(copy.chickenQuery);
-    await expectKeyboardActiveOption(
-      page,
-      SEEDED_SUGGESTIONS[language],
-      0,
-      copy,
-    );
+    const expected =
+      language === "en"
+        ? SEEDED_SUGGESTIONS.en.chicken
+        : SEEDED_SUGGESTIONS.pl.kurczak;
+    await expectKeyboardActiveOption(page, expected, 0, copy);
     await search.press("ArrowDown");
-    await expectKeyboardActiveOption(
-      page,
-      SEEDED_SUGGESTIONS[language],
-      1,
-      copy,
-    );
+    await expectKeyboardActiveOption(page, expected, 1, copy);
     await expectWcagAAndAaClean(page, "suggestions");
     await search.press("Escape");
     await expect(page.getByRole("listbox")).toHaveCount(0);

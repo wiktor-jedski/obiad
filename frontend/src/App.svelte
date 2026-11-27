@@ -11,10 +11,16 @@
   import HeaderDropdown from "./lib/components/HeaderDropdown.svelte";
   import { getDictionary } from "./lib/i18n";
   import { interfaceLanguage } from "./lib/interfaceLanguage";
+  import { isNormalizedEmptySearchQuery } from "./lib/searchQuery";
 
   const dataCommit = import.meta.env.VITE_DATA_COMMIT;
   const sourcesPage = window.location.pathname === "/sources";
   const dictionary = $derived(getDictionary($interfaceLanguage));
+  const editingDraft = $derived(
+    $interactionState.name === "empty" &&
+      $interactionState.focused &&
+      !isNormalizedEmptySearchQuery($interactionState.query),
+  );
 </script>
 
 <QueryClientProvider client={queryClient}>
@@ -24,7 +30,7 @@
     class="relative mx-auto min-h-dvh w-full max-w-[1280px] px-4 sm:px-6 lg:px-8 {!sourcesPage &&
     $interactionState.name === 'empty'
       ? 'pt-[max(340px,calc(45dvh_-_28px))]'
-      : 'pt-16'}"
+      : 'pt-16'} {editingDraft ? 'max-sm:pt-16' : ''}"
   >
     <div class="absolute left-4 top-4 z-20 sm:left-6 lg:left-8">
       <HeaderDropdown align="left" label="obiad — menu">
@@ -52,7 +58,9 @@
     {:else}
       <div class="relative mx-auto w-full max-w-[640px]">
         {#if $interactionState.name === "empty"}
-          <LandingDialogue />
+          <div class={editingDraft ? "max-sm:hidden" : undefined}>
+            <LandingDialogue />
+          </div>
         {/if}
         <Search />
       </div>
