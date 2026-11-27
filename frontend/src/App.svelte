@@ -12,9 +12,17 @@
   import { getDictionary } from "./lib/i18n";
   import { interfaceLanguage } from "./lib/interfaceLanguage";
   import { isNormalizedEmptySearchQuery } from "./lib/searchQuery";
+  import MealPage from "./lib/components/MealPage.svelte";
+  import type { SearchReturn } from "./lib/searchReturn";
+
+  let { restored }: { restored?: SearchReturn } = $props();
 
   const dataCommit = import.meta.env.VITE_DATA_COMMIT;
   const sourcesPage = window.location.pathname === "/sources";
+  const mealPage = window.location.pathname.match(/^\/meals\/([^/]+)\/?$/);
+  const mealId =
+    mealPage && /^[1-9]\d*$/.test(mealPage[1]) ? Number(mealPage[1]) : 0;
+  const searchPage = !sourcesPage && !mealPage;
   const dictionary = $derived(getDictionary($interfaceLanguage));
   const editingDraft = $derived(
     $interactionState.name === "empty" &&
@@ -27,7 +35,7 @@
   <main
     data-placeholder-url={foodPlaceholderUrl}
     data-interaction-state={$interactionState.name}
-    class="relative mx-auto min-h-dvh w-full max-w-[1280px] px-4 sm:px-6 lg:px-8 {!sourcesPage &&
+    class="relative mx-auto min-h-dvh w-full max-w-[1280px] px-4 sm:px-6 lg:px-8 {searchPage &&
     $interactionState.name === 'empty'
       ? 'pt-[max(340px,calc(45dvh_-_28px))]'
       : 'pt-16'} {editingDraft ? 'max-sm:pt-16' : ''}"
@@ -41,7 +49,7 @@
           <a
             class="header-menu-item"
             href="/"
-            aria-current={!sourcesPage ? "page" : undefined}
+            aria-current={searchPage ? "page" : undefined}
             >{dictionary.searchLabel()}</a
           >
           <a
@@ -55,6 +63,8 @@
     </div>
     {#if sourcesPage}
       <DataSources {dataCommit} />
+    {:else if mealPage}
+      <MealPage id={mealId} />
     {:else}
       <div class="relative mx-auto w-full max-w-[640px]">
         {#if $interactionState.name === "empty"}
@@ -64,7 +74,7 @@
         {/if}
         <Search />
       </div>
-      <SubstitutionResults />
+      <SubstitutionResults {restored} />
     {/if}
     <InterfaceLanguage />
   </main>

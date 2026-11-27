@@ -103,6 +103,12 @@ export interface InteractionStateStore extends Readable<InteractionState> {
 
   applyMoreFailure: () => void;
 
+  restore: (
+    state:
+      | ResultsInteractionState
+      | ZeroResultsInteractionState
+      | MoreFailureInteractionState,
+  ) => void;
   loadNextPage: () => void;
 
   reset: () => void;
@@ -110,13 +116,14 @@ export interface InteractionStateStore extends Readable<InteractionState> {
 
 /** Creates an isolated search interaction store. */
 export function createInteractionState(): InteractionStateStore {
-  const { subscribe, update } = writable<InteractionState>({
+  const { subscribe, update, set } = writable<InteractionState>({
     name: "empty",
     query: "",
     focused: false,
   });
   return {
     subscribe,
+    restore: set,
     setQuery(query) {
       update((state) => ({ ...state, query }));
     },

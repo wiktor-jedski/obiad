@@ -31,9 +31,11 @@ RUN bun install --frozen-lockfile
 COPY frontend/ ./
 COPY api/ /src/api/
 COPY .release/images/ /src/.release/images/
+COPY .release/recipe-assets/ /src/.release/recipe-assets/
 COPY .release/generated-meal-images.ts .release/release.json /src/.release/
 RUN cp /src/.release/generated-meal-images.ts src/lib/assets/generated-meal-images.ts && \
     bun --bun run generate:api && \
+    OBIAD_RECIPE_ASSETS=/src/.release/recipe-assets \
     VITE_DATA_COMMIT="$(bun -e 'console.log(require("../.release/release.json").dataCommit)')" bun --bun run build && \
     cp /src/.release/release.json dist/
 

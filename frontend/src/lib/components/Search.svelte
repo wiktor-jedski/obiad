@@ -189,7 +189,7 @@
   <input
     id="food-search"
     type="search"
-    autofocus
+    autofocus={interaction.name === "empty"}
     value={query}
     placeholder={dictionary.searchPlaceholder()}
     role="combobox"

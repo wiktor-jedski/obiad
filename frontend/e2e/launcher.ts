@@ -1000,13 +1000,28 @@ async function runStack(
   assertRunning();
   assertStepSucceeded(status, "bundling the browser client entry");
 
+  const recipeFixtures = join(tempDir, "recipe-fixtures");
+  status = await runStep(
+    resources,
+    "python3",
+    ["e2e/prepare_recipes.py", recipeFixtures],
+    { cwd: FRONTEND },
+  );
+  assertStepSucceeded(status, "preparing browser recipe fixtures");
+
   const buildOutDir = join(tempDir, "dist");
   log(`building the optimized client into ${buildOutDir}`);
   status = await runStep(
     resources,
     "bun",
     ["run", "build", "--", "--outDir", buildOutDir],
-    { cwd: FRONTEND },
+    {
+      cwd: FRONTEND,
+      env: {
+        ...process.env,
+        OBIAD_RECIPE_ASSETS: join(recipeFixtures, "bundle"),
+      },
+    },
   );
   assertRunning();
   assertStepSucceeded(status, "bun run build");

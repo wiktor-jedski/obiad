@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the pinned production catalog and images for Docker builds."""
+"""Package the pinned production catalog, images, and recipes for Docker builds."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from recipe_assets import read_records, write_recipe_assets
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -44,27 +46,49 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def export_catalog(path: Path) -> list[dict]:
+    """Read the validated Food Objects calculated by the data exporter."""
+    subprocess.run(
+        ["uv", "run", "--project", str(DATA), "--frozen", "obiad-data",
+         "export-catalog", "--ingredients-dir", str(DATA / "ingredients"),
+         "--meals-dir", str(DATA / "meals"), "--schema", str(ROOT / "api/catalog.schema.json"),
+         "--output", str(path)],
+        cwd=ROOT, check=True,
+    )
+    return json.loads(path.read_text())["foodObjects"]
+
+
+def prepare_preview_recipes(catalog: Path, temporary: Path) -> Path | None:
+    """Prepare details only for selected rows identical to the pinned export."""
+    if not (DATA / "meals").is_dir():
+        return None
+    commit = data_commit()
+    canonical = {item["id"]: item for item in export_catalog(temporary / "pinned.json")}
+    selected = json.loads(catalog.read_text())["foodObjects"]
+    matches = [item for item in selected if item == canonical.get(item["id"])]
+    if not matches:
+        return None
+    output = temporary / "recipe-assets"
+    write_recipe_assets(output, matches, read_records(DATA / "meals"), DATA / "ingredients")
+    if data_commit() != commit:
+        raise ValueError("data changed during preview preparation")
+    return output
+
+
 def prepare() -> None:
     """Export validated Meals and publish the completed build inputs."""
     commit = data_commit()
     with tempfile.TemporaryDirectory(prefix="obiad-release-") as temporary:
         release = Path(temporary)
-        subprocess.run(
-            ["uv", "run", "--project", str(DATA), "--frozen", "obiad-data",
-             "export-catalog", "--ingredients-dir", str(DATA / "ingredients"),
-             "--meals-dir", str(DATA / "meals"), "--schema", str(ROOT / "api/catalog.schema.json"),
-             "--output", str(release / "catalog.json")],
-            cwd=ROOT, check=True,
-        )
-        catalog = json.loads((release / "catalog.json").read_text())
+        objects = export_catalog(release / "catalog.json")
         (release / "catalog.json").chmod(0o644)
-        objects = catalog["foodObjects"]
         if len(objects) < 10:
             raise ValueError("production requires at least ten validated Meals")
-        meals = {meal["id"]: meal for path in (DATA / "meals").glob("*.json")
-                 if isinstance(meal := json.loads(path.read_text()), dict)}
+        meals = read_records(DATA / "meals")
         if set(meals) != {item["id"] for item in objects}:
             raise ValueError("catalog IDs do not match the pinned Meal records")
+        recipes = release / "recipe-assets"
+        write_recipe_assets(recipes, objects, meals, DATA / "ingredients")
         (release / "images").mkdir()
         images = {}
         imports = []
@@ -90,8 +114,9 @@ def prepare() -> None:
         ])
         (release / "generated-meal-images.ts").write_text(image_map)
         manifest = {
-            "schemaVersion": 1, "dataCommit": commit,
+            "schemaVersion": 2, "dataCommit": commit,
             "catalogSha256": digest(release / "catalog.json"),
+            "recipeIndexSha256": digest(recipes / "index.json"),
             "mealIds": sorted(meals), "images": images,
         }
         (release / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -116,7 +141,7 @@ def main() -> int:
     """Prepare release inputs without accepting them for publication."""
     try:
         prepare()
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"release preparation failed: {error}", file=sys.stderr)
         return 1
     return 0
