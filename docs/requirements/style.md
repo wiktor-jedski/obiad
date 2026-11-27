@@ -66,6 +66,10 @@ On `/sources`, stack Foods/Składniki above Recipes/Przepisy at every viewport w
 - **Empty state:** the search control uses the prominent center position.
 - **Mobile search:** While the focused field contains a nonblank draft, place it below the header and hide the landing dialogue. Clearing the field or leaving it restores the empty-state layout.
 - **Result state:** the search control is near the top, with result cards below it.
+- **Meal page:** Link each meal name on the selected card and substitution cards when a recipe is available. Keep the rest of the card unchanged. The link opens `/meals/{id}` in the same tab. Back returns to the previous search position.
+- **Recipe quantities:** Start with the full recipe. An edit to quantity, calories, or a macro scales all ingredient amounts together. Keep the preparation steps unchanged under “Recipe” or “Przepis”. When scaled, explain that the ingredient list shows the scaled amounts and the steps show the original amounts. Reload restores the full recipe.
+
+For local use, export the current catalog first (`cd data && uv run obiad-data export-catalog --output catalogs/catalog.json`). From the application root, run `scripts/start.py --catalog data/catalogs/catalog.json`. The default development catalog contains test foods, not authored recipes. Its names have no recipe links.
 
 #### 5. Component Standards (Svelte)
 

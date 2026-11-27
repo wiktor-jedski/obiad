@@ -19,6 +19,22 @@ export interface Messages {
 
   recipesHeading: () => string;
 
+  nutritionHeading: () => string;
+
+  ingredientsHeading: () => string;
+
+  recipeHeading: () => string;
+
+  recipeSourceLabel: () => string;
+
+  scaledRecipeNote: () => string;
+
+  loadingRecipeMessage: () => string;
+
+  recipeNotFoundMessage: () => string;
+
+  recipeFailureMessage: () => string;
+
   dataVersionLabel: () => string;
 
   suggestionsListLabel: () => string;
@@ -72,6 +88,15 @@ const en = {
   navigationLabel: () => "Navigation",
   foodsHeading: () => "Foods",
   recipesHeading: () => "Recipes",
+  nutritionHeading: () => "Nutrition",
+  ingredientsHeading: () => "Ingredients",
+  recipeHeading: () => "Recipe",
+  recipeSourceLabel: () => "Source",
+  scaledRecipeNote: () =>
+    "The ingredient list is scaled. Amounts in the steps are for the original recipe.",
+  loadingRecipeMessage: () => "Loading recipe…",
+  recipeNotFoundMessage: () => "Recipe not found.",
+  recipeFailureMessage: () => "Could not load the recipe.",
   dataVersionLabel: () => "Data version:",
   suggestionsListLabel: () => "Suggestions",
   selectedFoodLabel: () => "Selected food",
@@ -105,6 +130,15 @@ const pl = {
   navigationLabel: () => "Nawigacja",
   foodsHeading: () => "Składniki",
   recipesHeading: () => "Przepisy",
+  nutritionHeading: () => "Wartości odżywcze",
+  ingredientsHeading: () => "Składniki",
+  recipeHeading: () => "Przepis",
+  recipeSourceLabel: () => "Źródło",
+  scaledRecipeNote: () =>
+    "Ilości na liście składników zostały przeliczone. Ilości podane w instrukcjach dotyczą oryginalnego przepisu.",
+  loadingRecipeMessage: () => "Wczytywanie przepisu…",
+  recipeNotFoundMessage: () => "Nie znaleziono przepisu.",
+  recipeFailureMessage: () => "Nie udało się wczytać przepisu.",
   dataVersionLabel: () => "Wersja danych:",
   suggestionsListLabel: () => "Podpowiedzi",
   selectedFoodLabel: () => "Wybrany produkt",

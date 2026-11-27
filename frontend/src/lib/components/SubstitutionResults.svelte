@@ -6,6 +6,9 @@
     createSubstitutionSearchQuery,
     substitutionSearchLock,
   } from "../substitutionSearch";
+  import type { SearchReturn } from "../searchReturn";
+
+  let { restored }: { restored?: SearchReturn } = $props();
 
   const interaction = $derived($interactionState);
   const foodObjectId = $derived(
@@ -87,6 +90,9 @@
   {#key interaction.selected}
     <ResultsView
       {interaction}
+      restored={restored?.interaction.selected === interaction.selected
+        ? restored
+        : undefined}
       response={substitutionSearch.isPlaceholderData
         ? undefined
         : substitutionSearch.data}

@@ -39,7 +39,7 @@ export function resetSubstitutionSearch(
   pageIndex: number,
 ): void {
   queryClient.resetQueries({
-    queryKey: [...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX, foodObjectId, pageIndex],
+    queryKey: substitutionSearchKey(foodObjectId, pageIndex),
     exact: true,
   });
 }
@@ -53,14 +53,19 @@ export interface RetainedPageQueryInput extends SubstitutionSearchQueryInput {
 }
 
 function substitutionSearchKey(
-  committed: CommittedSubstitutionInput,
+  foodObjectId: number,
   pageIndex: number,
 ): readonly unknown[] {
-  return [
-    ...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX,
-    committed.foodObjectId,
-    pageIndex,
-  ] as const;
+  return [...SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX, foodObjectId, pageIndex];
+}
+
+/** Seed the active page before mounting a restored search. */
+export function restoreSubstitutionPage(page: SubstituteSearchResponse): void {
+  const key = substitutionSearchKey(
+    page.selectedFood.foodObjectId,
+    page.pageIndex,
+  );
+  queryClient.setQueryData(key, page);
 }
 
 export function createSubstitutionSearchQuery(
@@ -72,7 +77,7 @@ export function createSubstitutionSearchQuery(
       const queryKey =
         committed === undefined
           ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
-          : substitutionSearchKey(committed, committed.pageIndex);
+          : substitutionSearchKey(committed.foodObjectId, committed.pageIndex);
       return {
         queryKey,
         queryFn: async ({ signal }) => {
@@ -109,7 +114,7 @@ export function createRetainedPageQuery(input: RetainedPageQueryInput) {
       const queryKey =
         committed === undefined || displayed === undefined
           ? SUBSTITUTE_SEARCH_QUERY_KEY_PREFIX
-          : substitutionSearchKey(committed, displayed);
+          : substitutionSearchKey(committed.foodObjectId, displayed);
       return {
         queryKey,
 

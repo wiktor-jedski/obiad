@@ -9,14 +9,17 @@
     type InterfaceLanguage,
   } from "../i18n";
   import CardReveal from "./CardReveal.svelte";
+  import { hasMealRecipe } from "../recipes";
 
   let {
     food,
     language,
+    headingTag = "h3",
     rank,
     editor,
     nutritionEditor,
     titleControl,
+    onopenrecipe,
   }: {
     food: Omit<
       ProjectedSubstituteItem,
@@ -26,12 +29,14 @@
       similarityPercent?: number;
     };
     language: InterfaceLanguage;
+    headingTag?: "h1" | "h3";
     rank?: number;
     editor?: Snippet;
     nutritionEditor?: Snippet<
       ["calories" | "protein" | "carbohydrate" | "fat", number]
     >;
     titleControl?: Snippet;
+    onopenrecipe?: () => void;
   } = $props();
 
   const dictionary = $derived(getDictionary(language));
@@ -135,11 +140,21 @@
       class="flex min-w-0 flex-col justify-center p-5 sm:p-7 lg:self-stretch lg:justify-start"
     >
       <div class="mb-3 flex items-start justify-between gap-3">
-        <h3
+        <svelte:element
+          this={headingTag}
           class="min-w-0 text-lg leading-snug font-semibold tracking-tight lg:text-3xl"
         >
-          {food.names[language]}
-        </h3>
+          {#if onopenrecipe && hasMealRecipe(food.foodObjectId, food.names)}
+            <a
+              href={`/meals/${food.foodObjectId}`}
+              onclick={onopenrecipe}
+              class="rounded-sm underline decoration-dark-secondary underline-offset-4 hover:text-dark-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dark-primary"
+              >{food.names[language]}</a
+            >
+          {:else}
+            {food.names[language]}
+          {/if}
+        </svelte:element>
         {#if titleControl}
           <div class="shrink-0 font-nutrition text-lg lg:text-2xl">
             {@render titleControl()}

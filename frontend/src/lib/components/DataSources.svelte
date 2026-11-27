@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getDictionary } from "../i18n";
   import { interfaceLanguage } from "../interfaceLanguage";
+  import { recipeSources } from "../recipeSources";
 
   const foods = [
     ["USDA FoodData Central", "https://fdc.nal.usda.gov/"],
@@ -19,14 +20,6 @@
     ["Tracklements", "https://www.tracklements.co.uk/"],
     ["Wilton Wholefoods", "https://wiltonwholefoods.com/"],
     ["Zaffaran", "https://zaffaran.de/"],
-  ] as const;
-  const recipes = [
-    ["Kuchnia Domowa", "https://kuchnia-domowa.pl/"],
-    ["TheMealDB", "https://www.themealdb.com/"],
-    [
-      "Wikibooks Cookbook",
-      "https://en.wikibooks.org/wiki/Cookbook:Table_of_Contents",
-    ],
   ] as const;
 
   let { dataCommit }: { dataCommit?: string } = $props();
@@ -63,7 +56,7 @@
   </h1>
   <div class="space-y-10 sm:space-y-14">
     {@render section(dictionary.foodsHeading(), foods)}
-    {@render section(dictionary.recipesHeading(), recipes)}
+    {@render section(dictionary.recipesHeading(), recipeSources)}
     {#if dataCommit}
       <p class="text-sm text-dark-text-muted">
         {dictionary.dataVersionLabel()}

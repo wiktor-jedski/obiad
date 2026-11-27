@@ -36,10 +36,37 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def validate_recipes(directory: Path, objects: list[dict], checksum: str) -> None:
+    """Check each public recipe against the release index and its content hash."""
+    bundle = directory / "recipe-assets"
+    index_path = bundle / "index.json"
+    if digest(index_path) != checksum:
+        raise ValueError("recipe index checksum does not match the release")
+    index = json.loads(index_path.read_text(), object_pairs_hook=unique_object)
+    if not isinstance(index, list) or len(index) != len(objects):
+        raise ValueError("recipe index does not cover the released Meals")
+    public = bundle / "public"
+    expected = set()
+    for row, item in zip(index, objects, strict=True):
+        identifier = item["id"]
+        if not isinstance(row, list) or len(row) != 3 or row[:2] != [identifier, item["names"]]:
+            raise ValueError(f"recipe index does not match Meal {identifier}")
+        filename = row[2]
+        match = re.fullmatch(rf"{identifier}-([0-9a-f]{{64}})\.json", filename)
+        if match is None:
+            raise ValueError(f"invalid recipe filename for Meal {identifier}")
+        path = public / "recipes" / filename
+        if not path.resolve(strict=True).is_relative_to(directory.resolve()) or digest(path) != match[1]:
+            raise ValueError(f"recipe checksum does not match Meal {identifier}")
+        expected.add(path)
+    if expected != {path for path in public.rglob("*") if path.is_file()}:
+        raise ValueError("unlisted files in public recipe assets")
+
+
 def validate(directory: Path) -> None:
-    """Check acceptance, catalog validity, minimum size, and matching images."""
+    """Check acceptance, catalog validity, minimum size, and released assets."""
     manifest = load(directory / "release.json")
-    if manifest.get("schemaVersion") != 1:
+    if manifest.get("schemaVersion") != 2:
         raise ValueError("unsupported release schema")
     commit = manifest.get("dataCommit", "")
     if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
@@ -60,6 +87,7 @@ def validate(directory: Path) -> None:
     ids = sorted(item["id"] for item in objects)
     if ids != manifest.get("mealIds") or len(ids) != count:
         raise ValueError("catalog IDs do not match the release Meals")
+    validate_recipes(directory, objects, manifest["recipeIndexSha256"])
     images = manifest.get("images")
     keys = {item["imageKey"] for item in objects if "imageKey" in item}
     if not isinstance(images, dict) or set(images) != keys:

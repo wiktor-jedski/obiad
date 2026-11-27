@@ -19,6 +19,8 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import urlopen
 
+from prepare_release import prepare_preview_recipes
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
 FRONTEND_ROOT = REPO_ROOT / "frontend"
@@ -303,17 +305,29 @@ def run_stack(catalog_path: Path | None = None) -> None:
             )
             run_checked(["bash", str(DATABASE_SETUP)], env=setup_env)
 
+            frontend_env = os.environ.copy()
+            frontend_env.pop("OBIAD_RECIPE_ASSETS", None)
             if selected_catalog is None:
                 print("Migrations applied and application-owned dummy catalog loaded.")
             else:
+                # Load the same snapshot for both search and recipe selection.
+                snapshot = Path(temp_dir) / "selected-catalog.json"
+                shutil.copyfile(selected_catalog, snapshot)
                 catalog_env = os.environ.copy()
                 catalog_env["OBIAD_SCHEMA_OWNER_DATABASE_URL"] = owner_url
                 run_checked(
-                    ["go", "run", "./cmd/catalogload", str(selected_catalog)],
+                    ["go", "run", "./cmd/catalogload", str(snapshot)],
                     cwd=BACKEND_ROOT,
                     env=catalog_env,
                 )
                 print(f"Migrations applied and selected catalog loaded: {selected_catalog}")
+                try:
+                    assets = prepare_preview_recipes(snapshot, Path(temp_dir))
+                    if assets is not None:
+                        frontend_env["OBIAD_RECIPE_ASSETS"] = str(assets)
+                except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
+                    # Catalog search does not require the pinned authoring tools or data.
+                    print(f"Recipe details unavailable: {error}", file=sys.stderr)
             backend_env = os.environ.copy()
             backend_env["OBIAD_RUNTIME_DATABASE_URL"] = runtime_url
             backend = spawn(
@@ -339,6 +353,7 @@ def run_stack(catalog_path: Path | None = None) -> None:
                     "--strictPort",
                 ],
                 cwd=FRONTEND_ROOT,
+                env=frontend_env,
             )
             processes.append(("frontend", frontend))
             wait_for_http("Frontend", frontend, "http://127.0.0.1:5173/")

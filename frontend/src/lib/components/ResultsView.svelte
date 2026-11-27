@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import type { SubstituteSearchResponse } from "../../client/types.gen";
   import type {
     InteractionState,
@@ -18,24 +18,28 @@
   import CardReveal from "./CardReveal.svelte";
   import FoodCard from "./FoodCard.svelte";
   import NutritionValueEditor from "./NutritionValueEditor.svelte";
+  import type { SearchReturn } from "../searchReturn";
 
   let {
     interaction,
+    restored,
     response,
     locked,
     onmore,
     onretry,
   }: {
     interaction: Exclude<InteractionState, EmptyInteractionState>;
+    restored?: SearchReturn;
     response: SubstituteSearchResponse | undefined;
     locked: boolean;
     onmore: () => void;
     onretry: () => void;
   } = $props();
 
-  let pages = $state.raw<SubstituteSearchResponse[]>([]);
-  let enteredBaseQuantity: number | undefined = $state();
-  let chosenUnit: QuantityUnit | undefined = $state();
+  const initial = untrack(() => restored);
+  let pages = $state.raw<SubstituteSearchResponse[]>(initial?.pages ?? []);
+  let enteredBaseQuantity = $state(initial?.enteredBaseQuantity);
+  let chosenUnit: QuantityUnit | undefined = $state(initial?.chosenUnit);
   let editorError: NutritionEditError | undefined = $state();
   let pageSpinner = $state(false);
   let spinnerMinimumDone = $state(false);
@@ -141,6 +145,40 @@
     return () => observer.disconnect();
   });
 
+  onMount(() => {
+    if (!initial) return;
+    const frame = requestAnimationFrame(() =>
+      window.scrollTo(0, initial.scrollY),
+    );
+    return () => cancelAnimationFrame(frame);
+  });
+
+  function saveSearchReturn(): void {
+    const last = pages.at(-1);
+    if (!last) return;
+    const searchReturn: SearchReturn = {
+      interaction: {
+        ...interaction,
+        name:
+          interaction.name === "moreFailure"
+            ? "moreFailure"
+            : last.totalEligibleCount === 0
+              ? "zeroResults"
+              : "results",
+        pageIndex: last.pageIndex,
+        focused: false,
+      },
+      pages,
+      enteredBaseQuantity,
+      chosenUnit,
+      scrollY: window.scrollY,
+    };
+    history.replaceState(
+      { ...history.state, searchReturn: $state.snapshot(searchReturn) },
+      "",
+    );
+    history.scrollRestoration = "manual";
+  }
   onDestroy(() => {
     destroyed = true;
     cancelAnimationFrame(spinnerFrame);
@@ -278,6 +316,7 @@
     {#if selectedCard}
       <FoodCard
         food={selectedCard}
+        onopenrecipe={saveSearchReturn}
         language={$interfaceLanguage}
         editor={portionEditor}
         nutritionEditor={numberEditor}
@@ -320,6 +359,7 @@
           {#each projection.items as item, index (item.foodObjectId)}
             <FoodCard
               food={{ ...item, quantity: item.matchedQuantity }}
+              onopenrecipe={saveSearchReturn}
               language={$interfaceLanguage}
               rank={index}
             />
