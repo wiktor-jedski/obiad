@@ -70,12 +70,12 @@ The state names are `empty`, `loadingNew`, `results`, `loadingMore`, `zeroResult
 | --- | --- |
 | Type | Module |
 | Status | Active |
-| Requirements | REQ-002, REQ-005–REQ-008, REQ-012–REQ-017, REQ-022–REQ-024 |
+| Requirements | REQ-002, REQ-005–REQ-008, REQ-013–REQ-015, REQ-017, REQ-022–REQ-024, REQ-108 |
 | Dependencies | ARCH-006, ARCH-013, ARCH-017 |
 
-**Responsibility:** Return the five ranked Food Object suggestions for one Search Query.
+**Responsibility:** Return the highest-ranked Food Object suggestions for one Search Query.
 
-**Contract:** One concrete `Run` interface accepts a raw Search Query and an Interface Language. It returns exactly five distinct suggestions or one stable failure. Each suggestion contains the stable Food Object ID, English and Polish names, and a backend-derived default Food Quantity.
+**Contract:** One concrete `Run` interface accepts a raw Search Query and an Interface Language. It returns the first eight distinct Food Objects in rank order, or all of them if the runtime catalog contains fewer than eight. On failure it returns one stable error. Each suggestion contains the stable Food Object ID, English and Polish names, and a backend-derived default Food Quantity.
 
 The default is `1 serving` when the Food Object has a Serving. Otherwise, it is `100 g` for a solid or `100 ml` for a liquid. The Module exposes no Go interface, repository port, ranking policy, or test Adapter.
 
@@ -130,7 +130,7 @@ The Module reads no `data/` submodule file, production Ingredient, Meal authorin
 | --- | --- |
 | Type | Interface |
 | Status | Active |
-| Requirements | REQ-001, REQ-012, REQ-036, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074 |
+| Requirements | REQ-001, REQ-036, REQ-050–REQ-051, REQ-055, REQ-058, REQ-074, REQ-108 |
 | Dependencies | ARCH-004, ARCH-005, ARCH-019 |
 
 **Responsibility:** Define the browser-to-backend protocol.
@@ -144,7 +144,7 @@ The approved target interface provides these operations:
 
 In the approved target contract, the `POST /api/v1/substitutes/search` request body identifies only the selected Food Object and requested page. It contains `foodObjectId` (integer) and `pageIndex` (nonnegative integer). Food Quantity is removed from the request. The body limit is 4 KiB.
 
-A successful suggestion response contains exactly five items. Each item contains `foodObjectId`, `names.en`, `names.pl`, and `defaultQuantity`.
+A successful suggestion response contains eight items, or one per Food Object when the runtime catalog contains fewer than eight. Each item contains `foodObjectId`, `names.en`, `names.pl`, and `defaultQuantity`.
 
 A successful target Substitute response contains `pageIndex`, `totalEligibleCount`, `hasMore`, the selected Food Object calculation basis (`foodObjectId`, `names.en`, `names.pl`, `canonicalMacroProfile` with finite protein, carbohydrate, and fat per `100 g` or `100 ml`, `baseUnit`, and exact optional `servingBaseQuantity`), and zero to three candidate items. Each candidate item contains `foodObjectId`, `names.en`, `names.pl`, optional `imageKey`, `canonicalMacroProfile`, `baseUnit`, exact optional `servingBaseQuantity` where applicable, and backend-derived whole `similarityPercent`.
 
@@ -183,7 +183,7 @@ Target stable error codes:
 | --- | --- |
 | Type | Collaboration |
 | Status | Active |
-| Requirements | REQ-012–REQ-013, REQ-018–REQ-024, REQ-077 |
+| Requirements | REQ-013, REQ-018–REQ-024, REQ-077, REQ-108 |
 | Dependencies | ARCH-001, ARCH-002, ARCH-004, ARCH-006, ARCH-008, ARCH-017 |
 
 **Responsibility:** Resolve typed Search Queries into selectable Food Object suggestions.
@@ -319,14 +319,14 @@ The local Fiber process listens on loopback only. The local POC adds no CORS mec
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-012–REQ-015, REQ-017, REQ-076 |
+| Requirements | REQ-013–REQ-015, REQ-017, REQ-076, REQ-108 |
 | Dependencies | ARCH-004, ARCH-013 |
 
 **Responsibility:** Produce deterministic suggestion order from a Search Query.
 
 **Behavior:** Validate UTF-8. Normalize the Search Query and compared name to NFC. Trim and collapse Unicode whitespace to ASCII spaces. Apply Unicode lowercase mapping. Reject a normalized Search Query over 128 Unicode code points. Compute raw Levenshtein distance over Unicode code points.
 
-Assign each name to its first applicable exact-match, full-name-prefix, substring, or fallback tier. Sort in that tier order. Within each tier, sort by increasing raw distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. A valid runtime catalog with at least five Food Objects therefore returns five suggestions for any nonempty accepted Search Query.
+Assign each name to its first applicable exact-match, full-name-prefix, substring, or fallback tier. Sort in that tier order. Within each tier, sort by increasing raw distance, pinned Go collation for the active Interface Language, and stable Food Object ID. Apply no match threshold. After sorting all candidates, return the first eight, or all candidates if fewer than eight exist.
 
 **Quality constraints:** Polish diacritics remain distinct from their base letters. Canonically equivalent Unicode text compares equally. Each candidate receives one tier and one distance calculation. The implementation uses bounded Levenshtein working memory and does not allocate a full distance matrix.
 
@@ -376,7 +376,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 | --- | --- |
 | Type | Mechanism |
 | Status | Active |
-| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-061, REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080, REQ-084–REQ-085, REQ-092–REQ-105 |
+| Requirements | REQ-003, REQ-011, REQ-018–REQ-021, REQ-036–REQ-038, REQ-044, REQ-055, REQ-060–REQ-061, REQ-063, REQ-068–REQ-069, REQ-073, REQ-078, REQ-080, REQ-084–REQ-085, REQ-092–REQ-105, REQ-109 |
 | Dependencies | ARCH-001–ARCH-003, ARCH-015 |
 
 **Responsibility:** Present every browser state with the required layout, data, keyboard behavior, focus, and accessibility semantics.
@@ -385,7 +385,7 @@ Structured backend logs contain request ID, method, route template, status, dura
 
 On both pages, the wordmark summary is named `obiad — menu`. Its links read Search/Szukaj and Sources/Źródła. The Interface Language summary is named `Interface language` or `Język interfejsu`. Both disclosures support native Tab and Enter interaction, Escape, and outside dismissal. Sources stacks Foods/Składniki above Recipes/Przepisy with one linked source per list item.
 
-The suggestion control retains its combobox/listbox interface. Shared cards show localized names, quantity/unit and kcal summaries, scaled macros, and percentage-only substitute similarity with an accessible localized name. Only selected-food values are editable. NutritionValueEditor uses native text inputs, actual rendered-width sizing, underlined numbers, sage hover, and bold mint focus without boxes. The stable header unit control is one native whole-pill button with localized Servings/Porcje name and aria-pressed for ea. Pointer interaction keeps logical focus without a persistent outline; keyboard interaction shows an outline. Single-unit foods have no toggle.
+The suggestion control retains its combobox/listbox interface. Each option is 36 px high: a 24 px line with 6 px of padding above and below. Shared cards show localized names, quantity/unit and kcal summaries, scaled macros, and percentage-only substitute similarity with an accessible localized name. Only selected-food values are editable. NutritionValueEditor uses native text inputs, actual rendered-width sizing, underlined numbers, sage hover, and bold mint focus without boxes. The stable header unit control is one native whole-pill button with localized Servings/Porcje name and aria-pressed for ea. Pointer interaction keeps logical focus without a persistent outline; keyboard interaction shows an outline. Single-unit foods have no toggle.
 
 New successful Search focuses the selected-food heading; zero results focus their message. Pagination and failures do not move focus or scroll to a heading. Unrevealed fronts are inert. Empty Search Enter preserves raw text and focus without validation. Successful result states send no live announcement; loading, validation, and failure announcements remain.
 
@@ -502,7 +502,7 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-009 | ARCH-013 |
 | REQ-010 | ARCH-013 |
 | REQ-011 | ARCH-015, ARCH-020 |
-| REQ-012 | ARCH-004, ARCH-008, ARCH-010, ARCH-017 |
+| REQ-012 (Deprecated) | Superseded by REQ-108 |
 | REQ-013 | ARCH-003, ARCH-004, ARCH-010, ARCH-017 |
 | REQ-014 | ARCH-004, ARCH-017 |
 | REQ-015 | ARCH-004, ARCH-017 |
@@ -594,3 +594,5 @@ A dedicated serial GitHub Actions job starts the optimized real stack, warms it 
 | REQ-105 | ARCH-001, ARCH-020 |
 | REQ-106 | ARCH-001, ARCH-025 |
 | REQ-107 | ARCH-013, ARCH-025 |
+| REQ-108 | ARCH-004, ARCH-008, ARCH-010, ARCH-017 |
+| REQ-109 | ARCH-020 |

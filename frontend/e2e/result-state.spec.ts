@@ -33,7 +33,7 @@ async function selectPizzaMargherita(page: Page): Promise<void> {
   await search.fill("margherita");
   const panel = page.getByRole("listbox", { name: COPY.listbox });
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("option")).toHaveCount(5);
+  await expect(panel.getByRole("option")).toHaveCount(8);
   await page.locator(`#${PIZZA_MARGHERITA_OPTION_ID}`).click();
   await expect(panel).toHaveCount(0);
   await expect(page.locator("main")).toHaveAttribute(

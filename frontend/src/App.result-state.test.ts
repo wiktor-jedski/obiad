@@ -30,7 +30,7 @@ const EMPTY_RESPONSE_BODY = JSON.stringify({
   items: [],
 });
 
-const SUGGESTION_ITEMS = Array.from({ length: 5 }, (_, index) => ({
+const SUGGESTION_ITEMS = Array.from({ length: 8 }, (_, index) => ({
   foodObjectId: 6 + index,
   names: { en: `Food ${6 + index}`, pl: `Potrawa ${6 + index}` },
   defaultQuantity: { value: 100, unit: "g" },
@@ -244,7 +244,7 @@ describe("the root result-state composition", () => {
       await settle();
       const panel = view.getByRole("listbox");
       const options = panel.querySelectorAll('[role="option"]');
-      expect(options.length).toBe(5);
+      expect(options.length).toBe(8);
 
       const firstOption = options[0];
       expect(firstOption.getAttribute("aria-selected")).toBe("true");

@@ -53,10 +53,10 @@ func suggestionIDs(suggestions []Suggestion) []int32 {
 	return ids
 }
 
-func assertDistinctFive(t *testing.T, suggestions []Suggestion) {
+func assertDistinctEight(t *testing.T, suggestions []Suggestion) {
 	t.Helper()
-	if len(suggestions) != 5 {
-		t.Fatalf("got %d suggestions, want exactly five", len(suggestions))
+	if len(suggestions) != 8 {
+		t.Fatalf("got %d suggestions, want exactly eight", len(suggestions))
 	}
 	seen := make(map[int32]bool, len(suggestions))
 	for _, s := range suggestions {
@@ -127,36 +127,36 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(pizza margherita, English): %v", err)
 	}
-	assertDistinctFive(t, enPizza)
-	assertIDs(t, enPizza, 1, 2, 8, 12, 3)
+	assertDistinctEight(t, enPizza)
+	assertIDs(t, enPizza, 1, 2, 8, 12, 3, 29, 26, 35)
 	assertSuggestion(t, enPizza[0], "Pizza Margherita", "Pizza margherita", 1, UnitServing)
 
 	plPizza, err := run("pizza margherita", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(pizza margherita, Polish): %v", err)
 	}
-	assertDistinctFive(t, plPizza)
-	assertIDs(t, plPizza, 1, 2, 3, 29, 35)
+	assertDistinctEight(t, plPizza)
+	assertIDs(t, plPizza, 1, 2, 3, 29, 35, 4, 13, 23)
 
 	enPierogi, err := run("pierogi", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(pierogi, English): %v", err)
 	}
-	assertDistinctFive(t, enPierogi)
-	assertIDs(t, enPierogi, 4, 16, 29, 30, 13)
+	assertDistinctEight(t, enPierogi)
+	assertIDs(t, enPierogi, 4, 16, 29, 30, 13, 15, 10, 33)
 
 	plPierogi, err := run("pierogi", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(pierogi, Polish): %v", err)
 	}
-	assertDistinctFive(t, plPierogi)
-	assertIDs(t, plPierogi, 4, 16, 10, 29, 36)
+	assertDistinctEight(t, plPierogi)
+	assertIDs(t, plPierogi, 4, 16, 10, 29, 36, 15, 18, 25)
 
 	plOws, err := run("ows", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(ows, Polish): %v", err)
 	}
-	assertDistinctFive(t, plOws)
+	assertDistinctEight(t, plOws)
 	if plOws[0].FoodObjectID != 28 {
 		t.Fatalf("Run(ows, Polish) first ID = %d, want Owsianka ID 28 (full order %v)", plOws[0].FoodObjectID, suggestionIDs(plOws))
 	}
@@ -165,30 +165,30 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(zzzzzz, English): %v", err)
 	}
-	assertDistinctFive(t, enNone)
-	assertIDs(t, enNone, 13, 18, 16, 15, 10)
+	assertDistinctEight(t, enNone)
+	assertIDs(t, enNone, 13, 18, 16, 15, 10, 29, 30, 38)
 
 	plNone, err := run("zzzzzz", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(zzzzzz, Polish): %v", err)
 	}
-	assertDistinctFive(t, plNone)
-	assertIDs(t, plNone, 38, 16, 15, 3, 18)
+	assertDistinctEight(t, plNone)
+	assertIDs(t, plNone, 38, 16, 15, 3, 18, 10, 27, 29)
 
 	chicken, err := run("chicken breast", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(chicken breast, English): %v", err)
 	}
-	assertDistinctFive(t, chicken)
-	assertIDs(t, chicken, 5, 23, 7, 36, 15)
+	assertDistinctEight(t, chicken)
+	assertIDs(t, chicken, 5, 23, 7, 36, 15, 8, 32, 22)
 	assertSuggestion(t, chicken[0], "Chicken breast", "Pierś z kurczaka", 100, UnitGram)
 
 	milk, err := run("milk", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(milk, English): %v", err)
 	}
-	assertDistinctFive(t, milk)
-	assertIDs(t, milk, 10, 14, 30, 13, 16)
+	assertDistinctEight(t, milk)
+	assertIDs(t, milk, 10, 14, 30, 13, 16, 15, 29, 18)
 	assertSuggestion(t, milk[0], "Milk", "Mleko", 100, UnitMillilitre)
 
 	caseVariant, err := run("  PiZzA  MARGHERITA ", LanguageEnglish)
@@ -209,8 +209,8 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(NFC query, Polish): %v", err)
 	}
-	assertDistinctFive(t, nfc)
-	assertIDs(t, nfc, 5, 23, 13, 24, 19)
+	assertDistinctEight(t, nfc)
+	assertIDs(t, nfc, 5, 23, 13, 24, 19, 35, 4, 2)
 	nfd, err := run(nfdQuery, LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(NFD query, Polish): %v", err)
@@ -222,15 +222,15 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(pierozki gyoza, Polish): %v", err)
 	}
-	assertDistinctFive(t, zForm)
-	assertIDs(t, zForm, 13, 23, 4, 5, 25)
+	assertDistinctEight(t, zForm)
+	assertIDs(t, zForm, 13, 23, 4, 5, 25, 10, 24, 28)
 
 	accentedForm, err := run("pierożki gyoza", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(pierożki gyoza, Polish): %v", err)
 	}
-	assertDistinctFive(t, accentedForm)
-	assertIDs(t, accentedForm, 13, 4, 23, 5, 25)
+	assertDistinctEight(t, accentedForm)
+	assertIDs(t, accentedForm, 13, 4, 23, 5, 25, 10, 24, 28)
 	if suggestionIDs(zForm)[1] == suggestionIDs(accentedForm)[1] {
 		t.Fatalf("the z-form and ż-form queries must rank differently: both put %v at rank 2", suggestionIDs(zForm)[1])
 	}
@@ -258,23 +258,23 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(sernik duplikat, English): %v", err)
 	}
-	assertDistinctFive(t, dupEn)
-	assertIDs(t, dupEn, 39, 40, 34, 12, 37)
+	assertDistinctEight(t, dupEn)
+	assertIDs(t, dupEn, 39, 40, 34, 12, 37, 9, 7, 10)
 	assertSuggestion(t, dupEn[0], "Sernik duplikat", "Sernik duplikat", 100, UnitGram)
 
 	dupPl, err := run("sernik duplikat", LanguagePolish)
 	if err != nil {
 		t.Fatalf("Run(sernik duplikat, Polish): %v", err)
 	}
-	assertDistinctFive(t, dupPl)
-	assertIDs(t, dupPl, 39, 40, 36, 34, 23)
+	assertDistinctEight(t, dupPl)
+	assertIDs(t, dupPl, 39, 40, 36, 34, 23, 5, 32, 26)
 
 	acEn, err := run("ac", LanguageEnglish)
 	if err != nil {
 		t.Fatalf("Run(ac, English): %v", err)
 	}
-	assertDistinctFive(t, acEn)
-	assertIDs(t, acEn, 30, 42, 41, 15, 10)
+	assertDistinctEight(t, acEn)
+	assertIDs(t, acEn, 30, 42, 41, 15, 10, 13, 16, 29)
 	assertSuggestion(t, acEn[1], "żaba", "Żaba", 100, UnitGram)
 	assertSuggestion(t, acEn[2], "źle", "Źle", 100, UnitGram)
 
@@ -282,8 +282,8 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(ac, Polish): %v", err)
 	}
-	assertDistinctFive(t, acPl)
-	assertIDs(t, acPl, 41, 42, 15, 18, 38)
+	assertDistinctEight(t, acPl)
+	assertIDs(t, acPl, 41, 42, 15, 18, 38, 16, 10, 27)
 
 	if _, err := run("pizza\xff\xfe", LanguageEnglish); err == nil {
 		t.Fatal("Run with invalid UTF-8 succeeded, want INVALID_SEARCH_QUERY")
@@ -315,7 +315,7 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run with the 128-code-point boundary query: %v", err)
 	}
-	assertDistinctFive(t, boundary)
+	assertDistinctEight(t, boundary)
 
 	if _, err := owner.Exec(ctx, `UPDATE food_objects SET names = '{"en": "Pizza Margherita Fresca", "pl": "Pizza margherita"}'::jsonb WHERE id = 1`); err != nil {
 		t.Fatalf("owner fixture name update: %v", err)
@@ -324,11 +324,20 @@ func TestSuggestFoodObjectsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run after owner name update: %v", err)
 	}
-	assertDistinctFive(t, fresh)
-	assertIDs(t, fresh, 1, 2, 8, 12, 3)
+	assertDistinctEight(t, fresh)
+	assertIDs(t, fresh, 1, 2, 8, 12, 3, 29, 26, 35)
 	if fresh[0].Names.En != "Pizza Margherita Fresca" {
 		t.Fatalf("fresh Run did not observe the owner-updated name: got %+v", fresh[0].Names)
 	}
+
+	if _, err := owner.Exec(ctx, `DELETE FROM food_objects WHERE id > 7`); err != nil {
+		t.Fatalf("reduce fixture to seven Food Objects: %v", err)
+	}
+	short, err := run("chicken breast", LanguageEnglish)
+	if err != nil {
+		t.Fatalf("Run with a seven-item catalog: %v", err)
+	}
+	assertIDs(t, short, 5, 7, 4, 3, 6, 2, 1)
 
 	if _, err := owner.Exec(ctx, "REVOKE SELECT ON food_objects FROM "+db.RuntimeRole); err != nil {
 		t.Fatalf("revoke runtime catalog read: %v", err)
@@ -375,16 +384,7 @@ func TestSuggestionRankingMemoryBound(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run with the 128-code-point query and long name: %v", err)
 		}
-		if len(suggestions) != 5 {
-			t.Fatalf("Run returned %d suggestions, want exactly five", len(suggestions))
-		}
-		seen := make(map[int32]bool, len(suggestions))
-		for _, s := range suggestions {
-			if seen[s.FoodObjectID] {
-				t.Fatalf("Run returned duplicate suggestion ID %d", s.FoodObjectID)
-			}
-			seen[s.FoodObjectID] = true
-		}
+		assertDistinctEight(t, suggestions)
 	}
 
 	runOnce()

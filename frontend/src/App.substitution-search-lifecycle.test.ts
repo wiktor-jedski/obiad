@@ -453,7 +453,7 @@ describe("the Substitution Search lifecycle", () => {
                 : 1;
           return new Response(
             JSON.stringify({
-              items: Array.from({ length: 5 }, (_, index) => ({
+              items: Array.from({ length: 8 }, (_, index) => ({
                 foodObjectId: firstFoodObjectId + index,
                 names: {
                   en: `Food ${firstFoodObjectId + index}`,
@@ -553,7 +553,7 @@ describe("the Substitution Search lifecycle", () => {
       expect(
         view.getByRole("listbox").querySelectorAll('[role="option"]'),
         "typing after results opens fresh suggestions",
-      ).toHaveLength(5);
+      ).toHaveLength(8);
       expect(
         document.querySelector("main")?.getAttribute("data-interaction-state"),
         "typing keeps the committed result state",

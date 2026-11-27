@@ -1,6 +1,7 @@
 import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 
 const PREVIEW_ORIGIN = "http://127.0.0.1:4173";
 const FIBER_ORIGIN = "http://127.0.0.1:8080";
@@ -8,8 +9,8 @@ const FIBER_ORIGIN = "http://127.0.0.1:8080";
 const FIELD_HEIGHT_PX = 56;
 const FIELD_MAX_WIDTH_PX = 640;
 const OUTER_RADIUS_PX = FIELD_HEIGHT_PX / 2;
-const ROW_HEIGHT_PX = 48;
-const OPTION_COUNT = 5;
+const ROW_HEIGHT_PX = 36;
+const OPTION_COUNT = 8;
 
 const SURFACE_RGB = "rgb(22, 29, 22)";
 const SECONDARY_RGB = "rgb(134, 239, 172)";
@@ -27,48 +28,6 @@ const COPY = {
     search: "Szukaj",
     placeholder: "Szukaj potraw",
     listbox: "Podpowiedzi",
-  },
-} as const;
-
-const SEEDED_SUGGESTIONS = {
-  en: {
-    chicken: [
-      { foodObjectId: 5, name: "Chicken breast" },
-      { foodObjectId: 22, name: "Fried chicken wings" },
-      { foodObjectId: 17, name: "Polish chicken soup" },
-      { foodObjectId: 10, name: "Milk" },
-      { foodObjectId: 26, name: "Pancakes" },
-    ],
-    zzzzzz: [
-      { foodObjectId: 13, name: "Gyoza" },
-      { foodObjectId: 18, name: "Butter" },
-      { foodObjectId: 16, name: "Gyros" },
-      { foodObjectId: 15, name: "Kebab" },
-      { foodObjectId: 10, name: "Milk" },
-    ],
-    pizza: [
-      { foodObjectId: 1, name: "Pizza Margherita" },
-      { foodObjectId: 2, name: "Pizza Capricciosa" },
-      { foodObjectId: 13, name: "Gyoza" },
-      { foodObjectId: 10, name: "Milk" },
-      { foodObjectId: 29, name: "Paella" },
-    ],
-  },
-  pl: {
-    kurczak: [
-      { foodObjectId: 5, name: "Pierś z kurczaka" },
-      { foodObjectId: 22, name: "Smażone skrzydełka z kurczaka" },
-      { foodObjectId: 15, name: "Kebab" },
-      { foodObjectId: 36, name: "Sernik" },
-      { foodObjectId: 38, name: "Gulasz" },
-    ],
-    zzzzzz: [
-      { foodObjectId: 38, name: "Gulasz" },
-      { foodObjectId: 16, name: "Gyros" },
-      { foodObjectId: 15, name: "Kebab" },
-      { foodObjectId: 3, name: "Lazania" },
-      { foodObjectId: 18, name: "Masło" },
-    ],
   },
 } as const;
 
@@ -122,9 +81,7 @@ async function expectSuggestionPanel(
     if (rowBox === null) {
       throw new Error(`Suggestion option ${index + 1} has no bounding box`);
     }
-    expect(rowBox.height, `option ${index + 1} is 48px tall`).toBe(
-      ROW_HEIGHT_PX,
-    );
+    expect(rowBox.height, `height of option ${index + 1}`).toBe(ROW_HEIGHT_PX);
 
     expect(rowBox.width).toBe(FIELD_MAX_WIDTH_PX - 2);
   }
@@ -214,14 +171,22 @@ test.describe("live Food Object suggestions", () => {
     await search.fill("p");
     await expect(search).toBeFocused();
     await expect.poll(top).toBeLessThan(idleTop);
-    await expect(page.getByRole("option").last()).toBeInViewport({ ratio: 1 });
+    const options = page.getByRole("option");
+    await expect(options).toHaveCount(OPTION_COUNT);
+    await expect(page.getByRole("listbox")).toBeInViewport({ ratio: 1 });
+    for (let index = 1; index < OPTION_COUNT; index++) {
+      await search.press("ArrowDown");
+    }
+    await expect(options.last()).toHaveAttribute("aria-selected", "true");
+    await expect(options.last()).toBeInViewport({ ratio: 1 });
+    await expect(search).toBeInViewport({ ratio: 1 });
 
     await search.fill("");
     await page.setViewportSize({ width: 360, height: 740 });
     await expect.poll(top).toBe(idleTop);
   });
 
-  test("a fresh unauthenticated context starts with no user request and shows five seeded English suggestions for a normal query and zzzzzz", async ({
+  test("a fresh unauthenticated context starts with no user request and shows eight seeded English suggestions for a normal query and zzzzzz", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
@@ -264,7 +229,7 @@ test.describe("live Food Object suggestions", () => {
     expect(requestUrls.some((url) => url.startsWith(FIBER_ORIGIN))).toBe(false);
   });
 
-  test("Polish mode shows five seeded Polish suggestions for a normal query and zzzzzz", async ({
+  test("Polish mode shows eight seeded Polish suggestions for a normal query and zzzzzz", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);

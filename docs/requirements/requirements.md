@@ -134,8 +134,10 @@ This document is the source of truth for the active product requirements of the 
 | Attribute | Value |
 | --- | --- |
 | Type | Behavior |
-| Status | Active |
-| Verification | Playwright: A normal query and zzzzzz each show five suggestions. |
+| Status | Deprecated |
+| Verification | Historical Playwright check: A normal query and zzzzzz each show five suggestions. |
+
+**Notes:** REQ-108 replaces the five-suggestion limit with an eight-suggestion limit.
 
 ## REQ-013 — Interface-language search
 
@@ -1142,3 +1144,23 @@ This document is the source of truth for the active product requirements of the 
 | Type | Constraint |
 | Status | Active |
 | Verification | Release inspection: The public `/catalog.json` returns 404. Neither page requests the catalog. Catalog-schema validation rejects aggregate attribution and license fields; public source credits live on `/sources`, not in the aggregate. |
+
+## REQ-108 — Ranked suggestion count
+
+**Statement:** WHEN a focused search field contains an accepted, nonempty Search Query, the system shall show the first eight ranked Food Objects, or all ranked Food Objects if the catalog contains fewer than eight.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Behavior |
+| Status | Active |
+| Verification | With more than eight Food Objects, Playwright shows eight distinct suggestions for both a matching query and `zzzzzz`. With fewer than eight, an API integration test returns every available Food Object once in rank order. |
+
+## REQ-109 — Suggestion row height
+
+**Statement:** Each Food Object suggestion row shall be 36 px high, with a 24 px line and 6 px of padding above and below it.
+
+| Attribute | Value |
+| --- | --- |
+| Type | Constraint |
+| Status | Active |
+| Verification | Browser inspection: Each visible listbox option measures 36 CSS px high. Its computed line height is 24 px and its top and bottom padding are each 6 px. |

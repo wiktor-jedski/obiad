@@ -232,7 +232,7 @@ type ranked struct {
 	normName string
 }
 
-// rank returns up to five candidates in stable order.
+// rank returns up to eight candidates in stable order.
 func rank(objects []foodObject, query string, lang Language) []Suggestion {
 	collator := collate.New(language.English)
 	if lang == LanguagePolish {
@@ -266,18 +266,15 @@ func rank(objects []foodObject, query string, lang Language) []Suggestion {
 		}
 		return a.object.id < b.object.id
 	})
-	count := 5
-	if len(rankedList) < count {
-		count = len(rankedList)
-	}
-	suggestions := make([]Suggestion, 0, 5)
-	for _, r := range rankedList[:count] {
-		suggestions = append(suggestions, Suggestion{
+	count := min(8, len(rankedList))
+	suggestions := make([]Suggestion, count)
+	for i, r := range rankedList[:count] {
+		suggestions[i] = Suggestion{
 			FoodObjectID:      r.object.id,
 			Names:             r.object.names,
 			DefaultQuantity:   defaultQuantity(r.object),
 			AllowedQuantities: allowedQuantities(r.object),
-		})
+		}
 	}
 	return suggestions
 }

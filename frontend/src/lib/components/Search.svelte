@@ -123,6 +123,11 @@
       } else {
         activeIndex = Math.max(activeIndex - 1, 0);
       }
+      if (activeOptionId) {
+        document
+          .getElementById(activeOptionId)
+          ?.scrollIntoView({ block: "nearest" });
+      }
       return;
     }
     if (key === "Enter") {

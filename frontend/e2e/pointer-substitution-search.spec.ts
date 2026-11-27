@@ -1,9 +1,8 @@
 import { chooseLanguage } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
-
-const OPTION_COUNT = 5;
 
 const COPY = {
   en: {
@@ -15,41 +14,6 @@ const COPY = {
     search: "Szukaj",
     listbox: "Podpowiedzi",
     selectedFood: "Wybrany produkt",
-  },
-} as const;
-
-const SEEDED_SUGGESTIONS = {
-  en: {
-    chicken: [
-      { foodObjectId: 5, name: "Chicken breast" },
-      { foodObjectId: 22, name: "Fried chicken wings" },
-      { foodObjectId: 17, name: "Polish chicken soup" },
-      { foodObjectId: 10, name: "Milk" },
-      { foodObjectId: 26, name: "Pancakes" },
-    ],
-    margherita: [
-      { foodObjectId: 1, name: "Pizza Margherita" },
-      { foodObjectId: 29, name: "Paella" },
-      { foodObjectId: 18, name: "Butter" },
-      { foodObjectId: 13, name: "Gyoza" },
-      { foodObjectId: 16, name: "Gyros" },
-    ],
-    "chicken breast": [
-      { foodObjectId: 5, name: "Chicken breast" },
-      { foodObjectId: 23, name: "Turkey breast" },
-      { foodObjectId: 7, name: "Beef steak" },
-      { foodObjectId: 36, name: "Cheesecake" },
-      { foodObjectId: 15, name: "Kebab" },
-    ],
-  },
-  pl: {
-    mleko: [
-      { foodObjectId: 10, name: "Mleko" },
-      { foodObjectId: 18, name: "Masło" },
-      { foodObjectId: 27, name: "Omlet" },
-      { foodObjectId: 38, name: "Gulasz" },
-      { foodObjectId: 16, name: "Gyros" },
-    ],
   },
 } as const;
 
@@ -150,8 +114,8 @@ async function expectSuggestionPanel(
   const options = panel.getByRole("option");
 
   await expect(panel).toBeVisible();
-  await expect(options).toHaveCount(OPTION_COUNT);
-  for (let index = 0; index < OPTION_COUNT; index += 1) {
+  await expect(options).toHaveCount(expected.length);
+  for (let index = 0; index < expected.length; index += 1) {
     await expect(options.nth(index)).toHaveText(expected[index].name);
     await expect(options.nth(index)).toHaveAttribute(
       "id",

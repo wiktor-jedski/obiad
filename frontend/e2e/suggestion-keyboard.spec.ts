@@ -1,9 +1,11 @@
 import { languageSummary } from "./header";
 import { expect, test, type Page } from "@playwright/test";
 import { isLandingDialogueRequest } from "./request-purpose";
+import { SEEDED_SUGGESTIONS } from "./seeded-suggestions";
 import type { SubstituteSearchRequest } from "../src/client/types.gen";
 
-const OPTION_COUNT = 5;
+const CHICKEN_SUGGESTIONS = SEEDED_SUGGESTIONS.en.chicken;
+const OPTION_COUNT = CHICKEN_SUGGESTIONS.length;
 
 const PRIMARY_RGB = "rgb(74, 222, 128)";
 const TEXT_ON_BRIGHT_RGB = "rgb(10, 15, 10)";
@@ -17,14 +19,6 @@ const COPY = {
     languageControl: "Interface language",
   },
 } as const;
-
-const CHICKEN_SUGGESTIONS = [
-  { foodObjectId: 5, name: "Chicken breast" },
-  { foodObjectId: 22, name: "Fried chicken wings" },
-  { foodObjectId: 17, name: "Polish chicken soup" },
-  { foodObjectId: 10, name: "Milk" },
-  { foodObjectId: 26, name: "Pancakes" },
-] as const;
 
 const CHICKEN_SOUP_DEFAULT = { value: 1, unit: "serving" } as const;
 
@@ -164,6 +158,28 @@ function selectedInput(page: Page) {
 }
 
 test.describe("suggestion keyboard control", () => {
+  test("arrow keys reach every suggestion and stop at both ends", async ({
+    page,
+  }) => {
+    await useBrowserLanguages(page, ["en-US"]);
+    await page.goto("/");
+    const search = page.getByRole("combobox", { name: COPY.en.search });
+    await search.fill("chicken");
+    await expectOpenPanel(page);
+    await search.press("ArrowUp");
+    await expectActiveOption(page, 0);
+    for (let index = 1; index < OPTION_COUNT; index++) {
+      await search.press("ArrowDown");
+      await expectActiveOption(page, index);
+    }
+    await search.press("ArrowDown");
+    await expectActiveOption(page, OPTION_COUNT - 1);
+    for (let index = OPTION_COUNT - 2; index >= 0; index--) {
+      await search.press("ArrowUp");
+      await expectActiveOption(page, index);
+    }
+  });
+
   test("keyboard selection loads results, then draft typing keeps those results and overlays fresh suggestions without moving Search or starting another POST", async ({
     page,
   }) => {
@@ -179,25 +195,8 @@ test.describe("suggestion keyboard control", () => {
     await expectActiveOption(page, 0);
     await expect(search).toBeFocused();
 
-    await search.press("ArrowUp");
-    await expectActiveOption(page, 0);
-
     await search.press("ArrowDown");
-    await expectActiveOption(page, 1);
     await search.press("ArrowDown");
-    await expectActiveOption(page, 2);
-    await search.press("ArrowDown");
-    await expectActiveOption(page, 3);
-    await search.press("ArrowDown");
-    await expectActiveOption(page, 4);
-
-    await search.press("ArrowDown");
-    await expectActiveOption(page, 4);
-    await expect(page.getByRole("listbox")).toHaveCount(1);
-
-    await search.press("ArrowUp");
-    await expectActiveOption(page, 3);
-    await search.press("ArrowUp");
     await expectActiveOption(page, 2);
 
     await search.press("Enter");
@@ -275,7 +274,7 @@ test.describe("suggestion keyboard control", () => {
     ).toHaveLength(1);
   });
 
-  test("Escape closes the list while retaining the Search Query text and Search focus, starts zero Substitution Searches, and typing reopens exactly five options", async ({
+  test("Escape closes the list while retaining the Search Query text and Search focus, starts zero Substitution Searches, and typing reopens all eight options", async ({
     page,
   }) => {
     await useBrowserLanguages(page, ["en-US"]);
