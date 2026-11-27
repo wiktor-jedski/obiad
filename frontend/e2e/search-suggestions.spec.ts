@@ -200,6 +200,27 @@ function trackRequests(page: Page, urls: string[]): RequestTracker {
 }
 
 test.describe("live Food Object suggestions", () => {
+  test("mobile typing makes room for suggestions above the keyboard", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/");
+    const search = page.getByRole("combobox");
+    const top = () => search.evaluate((el) => el.getBoundingClientRect().top);
+    const idleTop = await top();
+
+    // Use the space left by an open keyboard.
+    await page.setViewportSize({ width: 360, height: 380 });
+    await search.fill("p");
+    await expect(search).toBeFocused();
+    await expect.poll(top).toBeLessThan(idleTop);
+    await expect(page.getByRole("option").last()).toBeInViewport({ ratio: 1 });
+
+    await search.fill("");
+    await page.setViewportSize({ width: 360, height: 740 });
+    await expect.poll(top).toBe(idleTop);
+  });
+
   test("a fresh unauthenticated context starts with no user request and shows five seeded English suggestions for a normal query and zzzzzz", async ({
     page,
   }) => {

@@ -64,6 +64,7 @@ On `/sources`, stack Foods/Składniki above Recipes/Przepisy at every viewport w
 - **Results list:** Centered, maximum `920px`; selected food and substitutes share `28px` rounded cards. Center section headings. Use no per-card rank labels or decorative slogans.
 - **Results type:** Inter names and Source Serif 4 nutrition. Names and summaries use `18px` below desktop. Desktop names use `30px`, summaries `24px`, and bottom-aligned macros `18px`. Show quantity/unit, a separator, and kcal; place the substitute similarity percentage at the right with a localized accessible name.
 - **Empty state:** the search control uses the prominent center position.
+- **Mobile search:** While the focused field contains a nonblank draft, place it below the header and hide the landing dialogue. Clearing the field or leaving it restores the empty-state layout.
 - **Result state:** the search control is near the top, with result cards below it.
 
 #### 5. Component Standards (Svelte)
